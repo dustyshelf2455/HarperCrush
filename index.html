@@ -2,31 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#070a16" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%27-1.2 -1.2 2.4 2.4%27%3E%3Ccircle r=%271.15%27 fill=%27%23ffc84a%27 opacity=%27.25%27/%3E%3Cpath d=%27M0,-1 L.29,-.4 L.95,-.31 L.47,.15 L.59,.81 L0,.5 L-.59,.81 L-.47,.15 L-.95,-.31 L-.29,-.4 Z%27 fill=%27%23ffc84a%27 stroke=%27%23ffe9a8%27 stroke-width=%27.06%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Glimmerfall" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+    <link rel="icon" href="./icons/icon-192.png" />
     <title>Glimmerfall</title>
     <style>
-      html, body { margin: 0; background: #070a16; color: #e9ecff; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
-      main { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 48px) 20px calc(env(safe-area-inset-bottom, 0px) + 40px); }
-      h1 { font-size: 32px; letter-spacing: 0.01em; margin: 0 0 8px; }
-      p { line-height: 1.5; color: #b9c0e6; }
-      a.cta { display: block; margin-top: 28px; padding: 18px 20px; border-radius: 16px; background: #ffd27a; color: #2a1a05; text-decoration: none; font-weight: 600; font-size: 18px; text-align: center; }
-      .gem { width: 72px; height: 72px; margin-bottom: 20px; }
+      html, body { margin: 0; height: 100%; background: #070a16; overflow: hidden; }
     </style>
   </head>
   <body>
-    <main>
-      <svg class="gem" viewBox="-1.2 -1.2 2.4 2.4" aria-hidden="true">
-        <defs>
-          <radialGradient id="g" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#ffe9a8"/><stop offset="0.45" stop-color="#ffc84a"/><stop offset="1" stop-color="#8a5a10"/></radialGradient>
-        </defs>
-        <circle cx="0" cy="0" r="1.15" fill="#ffc84a" opacity="0.18"/>
-        <path d="M0,-1 L0.29,-0.4 L0.95,-0.31 L0.47,0.15 L0.59,0.81 L0,0.5 L-0.59,0.81 L-0.47,0.15 L-0.95,-0.31 L-0.29,-0.4 Z" fill="url(#g)" stroke="#ffe9a8" stroke-width="0.06" stroke-linejoin="round"/>
-      </svg>
-      <h1>Glimmerfall</h1>
-      <p>A calm, wonder-filled match-3 game for Harper. The game itself will live at this address. For now, this site carries the Stage 1 mockups: three visual directions and three music sketches to choose from.</p>
-      <a class="cta" href="./mockups/">Open the mockups</a>
-    </main>
+    <div id="stage"><canvas id="game" aria-label="Glimmerfall"></canvas></div>
+    <script type="module" src="./src/game/main.ts"></script>
   </body>
 </html>

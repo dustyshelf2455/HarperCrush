@@ -43,15 +43,15 @@ export const nightGarden: GemStyle = {
   name: 'Deep Night Garden',
   tagline: 'Warm jewels lit from within, in a firefly night.',
   description:
-    'A deep indigo-to-midnight sky with a soft vignette and drifting fireflies. Gems are translucent and lit from inside, with a soft bloom halo, a gentle highlight and a rim of light, in rich jewel tones. Lanterns glow warm gold. Cells are barely-there glass. The warmest and most comfortable of the three in a dark car.',
+    'A deep indigo-to-midnight sky with a soft vignette and drifting fireflies. Gems are translucent and lit from inside, with a restrained halo, a crisp rim of light and a clean highlight, in rich jewel tones. Lanterns glow warm gold. Cells are barely-there glass. The warmest and most comfortable of the three in a dark car.',
   palette,
-  haloPad: 0.6,
+  haloPad: 0.45,
   gemColor: color,
 
   drawGem(ctx, type, r) {
     const c = color(type);
     const path = shapePath(type, r);
-    glowDisc(ctx, 0, 0, r * 1.55, c.glow, 0.55);
+    glowDisc(ctx, 0, 0, r * 1.3, c.glow, 0.3);
 
     const body = ctx.createRadialGradient(-0.32 * r, -0.38 * r, r * 0.05, 0, 0, r * 1.15);
     body.addColorStop(0, c.light);
@@ -62,7 +62,7 @@ export const nightGarden: GemStyle = {
 
     ctx.save();
     ctx.clip(path);
-    glowDisc(ctx, 0, r * 0.28, r * 0.95, c.light, 0.42);
+    glowDisc(ctx, 0, r * 0.28, r * 0.9, c.light, 0.36);
     if (type === 'leaf') {
       const a = -0.38;
       const tx = Math.sin(a) * 0.82 * r * gemShape('leaf').scale;
@@ -77,18 +77,18 @@ export const nightGarden: GemStyle = {
     }
     ctx.restore();
 
-    ctx.lineWidth = r * 0.075;
+    ctx.lineWidth = r * 0.06;
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = rgba(c.light, 0.62);
+    ctx.strokeStyle = rgba(c.light, 0.82);
     ctx.stroke(path);
 
-    highlight(ctx, -0.33 * r, -0.4 * r, r * 0.3, r * 0.17, -0.65, 0.8);
-    highlight(ctx, 0.28 * r, 0.32 * r, r * 0.14, r * 0.08, 0.8, 0.3);
+    highlight(ctx, -0.33 * r, -0.4 * r, r * 0.26, r * 0.14, -0.65, 0.9);
+    highlight(ctx, 0.28 * r, 0.32 * r, r * 0.12, r * 0.07, 0.8, 0.35);
   },
 
   createAmbient(w, h, seed): Ambient {
     const count = Math.max(8, Math.round((w * h) / 13000));
-    return new Layers([new Motes(w, h, seed, count, '#ffd27a', [1.1, 2.1], 0.8, 0.55)]);
+    return new Layers([new Motes(w, h, seed, count, '#ffd27a', [0.9, 1.7], 0.75, 0.5)]);
   },
 
   drawBackground(ctx, w, h, t, ambient) {
@@ -97,8 +97,8 @@ export const nightGarden: GemStyle = {
     g.addColorStop(1, palette.bgBottom);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    glowDisc(ctx, w * 0.5, h * 0.9, w * 0.95, '#0e3a48', 0.55);
-    glowDisc(ctx, w * 0.5, h * 0.05, w * 0.85, '#2c2c72', 0.4);
+    glowDisc(ctx, w * 0.5, h * 0.92, w * 0.9, '#0e3a48', 0.38);
+    glowDisc(ctx, w * 0.5, h * 0.04, w * 0.8, '#2c2c72', 0.28);
     ambient.draw(ctx, w, h, t);
   },
 

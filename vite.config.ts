@@ -1,4 +1,55 @@
-import { defineConfig } from 'vitest/config';
+import { createHash } from 'node:crypto';
+import { defineConfig, type Plugin } from 'vitest/config';
+
+/**
+ * Emits a hand-written service worker that pre-caches every built file.
+ * The worker never calls skipWaiting, so a new build installs in the
+ * background and takes over on the next launch, never during play.
+ */
+function serviceWorker(): Plugin {
+  return {
+    name: 'glimmerfall-service-worker',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const files = Object.keys(bundle).filter((f) => f !== 'sw.js');
+      // HTML entries are written after this hook runs, so they are listed by hand.
+      const assets = new Set<string>([
+        './',
+        './index.html',
+        './mockups/',
+        './mockups/index.html',
+        './manifest.webmanifest',
+        './icons/icon-180.png',
+        './icons/icon-192.png',
+        './icons/icon-512.png',
+      ]);
+      for (const f of files) assets.add('./' + f);
+      const list = [...assets].sort();
+      const version = createHash('sha1').update(list.join('\n')).update(buildDate).digest('hex').slice(0, 12);
+      const source = `// Glimmerfall service worker, build ${version}
+const CACHE = 'glimmerfall-${version}';
+const ASSETS = ${JSON.stringify(list)};
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS.map((a) => new Request(a, { cache: 'reload' })))));
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('glimmerfall-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+  );
+});
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== location.origin) return;
+  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then((hit) => hit || fetch(event.request)));
+});
+`;
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source });
+    },
+  };
+}
+
+const buildDate = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 
 // `base: './'` makes every asset reference relative, so the built site works
 // at any path: dustyshelf2455.github.io/HarperCrush/ today and
@@ -6,8 +57,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   base: './',
   define: {
-    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'),
+    __BUILD_DATE__: JSON.stringify(buildDate),
   },
+  plugins: [serviceWorker()],
   build: {
     target: 'es2022',
     rollupOptions: {

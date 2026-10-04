@@ -630,7 +630,7 @@ export class BoardMock {
 
   private drawVignette(t: number): void {
     const { ctx, w, h } = this;
-    const a = 0.07 + 0.09 * breath(t);
+    const a = 0.05 + 0.07 * breath(t);
     const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
     g.addColorStop(0, rgba(this.style.palette.lanternGlow, 0));
     g.addColorStop(1, rgba(this.style.palette.lanternGlow, a));

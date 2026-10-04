@@ -5,14 +5,28 @@ A calm, wonder-filled match-3 game for Harper: a purpose-made regulation aid tha
 - **BRIEF.md** is the brief this project answers.
 - **DESIGN.md** is the agreed design and the staged build plan.
 
-## Status: Stage 1, look, sound and pipeline
+## Status: Stage 2, the feel prototype
 
 The site is live from the `main` branch via GitHub Pages:
 
-- `https://dustyshelf2455.github.io/HarperCrush/` until the repository is renamed, then `https://dustyshelf2455.github.io/glimmerfall/`.
-- The Stage 1 mockups are under `/mockups/`: three visual directions, each with a real-size animated board, the six gems, and a glimpse of the map, plus three generated music sketches with wind-down forms.
+- `https://dustyshelf2455.github.io/HarperCrush/` is the game: a playable Calm-mode board (6 by 7, four gem types) with swipe and tap-tap swaps, cascades, the Comet and the Prism Orb, a lantern goal that lights after about ten matches, hints after a pause, reshuffles on dead ends, the music-box lullaby with chimes drawn from its chords, continuous saving and exact resume, and offline support. Installable to the Home Screen.
+- `https://dustyshelf2455.github.io/HarperCrush/mockups/` keeps the Stage 1 mockups.
 
-The site is built with relative paths, so it works at either address. Rename the repository **before** the game is installed on a phone: GitHub does not redirect the Pages address after a rename, and an installed web app keeps its saved progress inside itself.
+After the repository is renamed the addresses move to `.../glimmerfall/`. The site is built with relative paths, so it works at either address. Rename the repository **before** the game is installed on a phone: GitHub does not redirect the Pages address after a rename, and an installed web app keeps its saved progress inside itself.
+
+### Testing switches (Stage 2 only)
+
+There is no parent panel yet, so a few things are settable from the address bar when you open the game in Safari (an installed Home Screen app keeps the address it was added with):
+
+| Address | Effect |
+|---------|--------|
+| `.../?types=5` | five gem types instead of four (starts a fresh board) |
+| `.../?music=0` | no music |
+| `.../?chimes=0` | no chimes or ticks |
+| `.../?reset=1` | throw away the saved board and start fresh |
+| `.../?seed=123` | a particular fresh board, for reproducing something |
+
+Sound starts on the first touch. Silent mode on the phone mutes the speaker; headphones and car audio play regardless.
 
 ## Working on it
 

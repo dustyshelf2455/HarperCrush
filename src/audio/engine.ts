@@ -244,6 +244,26 @@ export class AudioEngine {
     return new PadVoice(this.ctx, midis, t, level, dest?.dry ?? this.bus, dest?.wet ?? this.reverbIn);
   }
 
+  /** A tiny, soft click for a swap. */
+  tick(t: number, vel = 0.15, dest?: Channel | null): void {
+    this.tone(91, t, vel, [{ ratio: 1, gain: 1, decay: 0.05, attack: 0.002 }], 0.1, dest);
+  }
+
+  /** A quiet low thump when a piece lands. */
+  thud(t: number, vel = 0.1, dest?: Channel | null): void {
+    this.tone(
+      38,
+      t,
+      vel,
+      [
+        { ratio: 1, gain: 1, decay: 0.14, attack: 0.004 },
+        { ratio: 0.5, gain: 0.5, decay: 0.1, attack: 0.004, type: 'triangle' },
+      ],
+      0.08,
+      dest,
+    );
+  }
+
   /** A short rising run of chord tones, used when a power goes off. */
   arpeggio(midis: readonly number[], t: number, vel: number, spacing = 0.07, instrument: MelodyInstrument = 'celesta'): void {
     midis.forEach((midi, i) => this.note(instrument, midi, t + i * spacing, vel * (0.75 + 0.25 * (i / Math.max(1, midis.length - 1)))));
