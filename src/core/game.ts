@@ -94,8 +94,8 @@ export interface GameState {
   /** Probability that a refill is steered toward setting up a four or five. */
   readonly bias: number;
   /**
-   * Powers whose shapes count as matches. Comets and orbs are always on. Before
-   * 'bloom' an L or T clears plainly; before 'sprite' a 2 by 2 is not a match
+   * Powers whose shapes count as matches. Comets are always on; before 'orb' a
+   * five in a line makes a Comet. Before 'bloom' an L or T clears plainly; before 'sprite' a 2 by 2 is not a match
    * at all; before 'moonrise' a 2 by 3 clears as two lines; before 'starburst'
    * a plus makes a Bloom; before 'aurora' six in a line makes an Orb.
    */
@@ -326,7 +326,7 @@ function colourRanking(board: Board, types: readonly GemType[], exclude: readonl
 
 // ------------------------------------------------------------------ creation
 
-/** The two powers every path starts with. */
+/** The default for boards made outside the journey, and for saves from before unlocks existed. */
 export const BASE_UNLOCKED: readonly PowerFamily[] = ['comet', 'orb'];
 
 export function newGame(rows: number, cols: number, types: readonly GemType[], seed: number, bias = 0.3, unlocked: readonly PowerFamily[] = BASE_UNLOCKED): GameState {
@@ -619,14 +619,14 @@ export function powerFor(group: MatchGroup, unlocked: readonly PowerFamily[]): P
   if (group.square) return has(unlocked, 'sprite') ? 'sprite' : null;
   const { longest, horizontal } = group;
   if (longest >= 6 && has(unlocked, 'aurora')) return 'aurora';
-  if (longest >= 5) return 'orb';
+  if (longest >= 5 && has(unlocked, 'orb')) return 'orb';
   if (group.block && has(unlocked, 'moonrise')) return 'moonrise';
   const comet: PowerKind = horizontal ? 'cometRow' : 'cometCol';
   if (group.crossings.length > 0) {
     if (group.plus && has(unlocked, 'starburst')) return 'starburst';
     if (has(unlocked, 'bloom')) return 'bloom';
   }
-  return longest === 4 ? comet : null;
+  return longest >= 4 ? comet : null;
 }
 
 /** The piece a group's power becomes: colourless for an Orb or Aurora, the group's colour otherwise. */
@@ -674,7 +674,7 @@ export function isValidSwap(state: GameState, a: Cell, b: Cell): boolean {
 export interface SwapOption {
   a: Cell;
   b: Cell;
-  /** 6: sets off a power already on the board; 5: makes an Orb or Aurora; 4: makes any other power; 3: a plain match (DESIGN.md 3.3, hints). */
+  /** 7: combines two powers; 6: sets off a power already on the board; 5: makes an Orb or Aurora; 4: makes any other power; 3: a plain match (DESIGN.md 3.3, hints). */
   strength: number;
 }
 
@@ -697,8 +697,9 @@ export function findValidSwaps(state: GameState): SwapOption[] {
 function swapStrength(state: GameState, a: Cell, b: Cell): number {
   const pa = at(state.board, a.row, a.col);
   const pb = at(state.board, b.row, b.col);
+  // Two powers together outrank a power set off alone, so a combination gift's hint always shows the combination.
+  if (pa?.power && pb?.power) return 7;
   if (isColourless(pa?.power ?? null) || isColourless(pb?.power ?? null)) return 6;
-  if (pa?.power && pb?.power) return 6;
   const board = cloneBoard(state.board);
   set(board, a, pb);
   set(board, b, pa);
@@ -853,7 +854,7 @@ function fireBloom(ctx: Ctx, cell: Cell, piece: Piece, extra: Extra = {}): void 
 function fireSprite(ctx: Ctx, cell: Cell, piece: Piece, extra: Extra = {}): void {
   ctx.round.set(key(cell), cell);
   const target = chooseTarget(ctx, (c) => [c, ...neighbourCells(ctx.board, c)]);
-  const cells = target ? [cell, target, ...neighbourCells(ctx.board, target)] : [cell];
+  const cells = target ? unique([cell, target, ...neighbourCells(ctx.board, target)]) : [cell];
   emit(ctx, { kind: 'fire', power: 'sprite', at: cell, cells, color: piece.type, ...(target ? { target } : {}), ...extra });
 }
 
@@ -1390,7 +1391,7 @@ export function placeGift(state: GameState, gift: Gift, rng: Rng): { state: Game
       set(board, c1, giftPiece(gift.a, (at(board, c1.row, c1.col) as Piece).type as GemType, rng));
       set(board, c2, giftPiece(gift.b, (at(board, c2.row, c2.col) as Piece).type as GemType, rng));
       const next = { ...state, board };
-      if (!hasAnyMatch(board, state.unlocked) && findValidSwaps(next).some((s) => s.strength === 6)) return { state: next, cells: [c1, c2] };
+      if (!hasAnyMatch(board, state.unlocked) && findValidSwaps(next).some((s) => s.strength >= 6)) return { state: next, cells: [c1, c2] };
     }
     return { state, cells: [] };
   }
@@ -1430,7 +1431,7 @@ export function placeGift(state: GameState, gift: Gift, rng: Rng): { state: Game
     const board = cloneBoard(state.board);
     set(board, pre, giftPiece(gift.family, piece.type, rng));
     const next = { ...state, board };
-    if (!hasAnyMatch(board, state.unlocked) && findValidSwaps(next).some((s) => s.strength === 6)) return { state: next, cells: [pre] };
+    if (!hasAnyMatch(board, state.unlocked) && findValidSwaps(next).some((s) => s.strength >= 6)) return { state: next, cells: [pre] };
   }
   return { state, cells: [] };
 }

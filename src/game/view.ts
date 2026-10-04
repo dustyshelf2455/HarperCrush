@@ -363,11 +363,34 @@ export class GameView {
   setState(state: GameState): void {
     const resized = state.rows !== this.state.rows || state.cols !== this.state.cols;
     this.state = state;
+    this.cancelResolution();
     this.rebuild(state.board);
     // A board of another size (Play mode's 7 by 8) needs its own cell size and position.
     if (resized) this.resize();
     this.fadeIn = 1;
     this.wake();
+  }
+
+  /**
+   * Drop whatever resolution is still playing: a mode switch or a map jump
+   * replaces the board outright, and the old steps must not keep clearing and
+   * spawning pieces on it or snap it back to the old level's final board.
+   */
+  private cancelResolution(): void {
+    this.queue = [];
+    this.current = null;
+    this.fires = [];
+    this.transform = null;
+    this.flowers = [];
+    this.floating = [];
+    this.hidden.clear();
+    this.finalBoard = null;
+    this.onDone = null;
+    this.onStep = null;
+    this.lastSwap = null;
+    this.shortShower = false;
+    this.celebrating = null;
+    this.timeScale = 1;
   }
 
   /**
@@ -505,7 +528,8 @@ export class GameView {
   }
 
   private readonly frame = (now: number): void => {
-    const dt = Math.min(50, now - this.lastNow);
+    // Full rate caps a hitch at 50 ms; the idle tick (12 fps) needs its whole interval, or the breathing and halos would run slow.
+    const dt = Math.min(this.active ? 50 : 1000 / IDLE_FPS + 40, now - this.lastNow);
     this.lastNow = now;
     this.time += dt;
     const moving = this.update(dt);
@@ -1131,7 +1155,10 @@ export class GameView {
           this.spawnSparkles(x, y, color, p.piece.power ? 9 : 5);
         }
       }
-      if (p.clearing >= CLEAR_MS * this.motionScale) this.pieces.delete(k);
+      if (p.clearing >= CLEAR_MS * this.motionScale) {
+        this.pieces.delete(k);
+        this.hidden.delete(k); // a carried power's old cell is free again once its piece has gone
+      }
     }
     return any;
   }

@@ -72,9 +72,9 @@ export const MILESTONES: ReadonlyArray<{ level: number; gift: Gift }> = [
   { level: 61, gift: combo('moonrise', 'comet') },
 ];
 
-/** Every power whose milestone is at or before this lantern. Comets and orbs are never locked out of a board. */
+/** Every power whose milestone is at or before this lantern. The Comet is there from lantern 1; the Orb arrives at lantern 5 (DESIGN.md 3.4). */
 export function unlockedAt(level: number): PowerFamily[] {
-  const out: PowerFamily[] = ['comet', 'orb'];
+  const out: PowerFamily[] = ['comet'];
   for (const m of MILESTONES) {
     if (m.level <= level && m.gift.kind === 'power' && !out.includes(m.gift.family)) out.push(m.gift.family);
   }

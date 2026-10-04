@@ -163,7 +163,7 @@ export class App {
     this.engine.setSilentMode(settings.playOnSilent ? 'ignore' : 'follow');
     const stage = canvas.parentElement ?? document.body;
 
-    const loaded = opts.reset ? null : this.load();
+    const loaded = opts.reset || opts.level !== null ? null : this.load();
     if (opts.level !== null) {
       this.level = opts.level;
       this.mode = 'calm';
@@ -299,7 +299,7 @@ export class App {
     const area = areaForLevel(this.level);
     this.musicArea = area;
     if (!this.settings.get().music || !this.engine.isRunning) return;
-    void this.player.start(sketchForArea(area), 4242 + this.level, false, null);
+    void this.player.start(sketchForArea(area), 4242 + this.level, this.phase === 'resting', null);
     this.player.setLevel(this.settings.get().musicLevel);
   }
 
@@ -440,9 +440,12 @@ export class App {
     this.clearHint();
     this.select(null);
     if (this.gift) {
-      const cell = this.giftCells()[0];
-      if (cell) {
-        const result = firePowerAt(this.state, cell);
+      const cells = this.giftCells();
+      const [first, second] = cells;
+      if (first) {
+        // A combination gift still sitting as a pair is swapped by the light, so the combination itself is what she sees.
+        const pair = second && Math.abs(first.row - second.row) + Math.abs(first.col - second.col) === 1;
+        const result = pair ? applySwap(this.state, first, second) : firePowerAt(this.state, first);
         this.state = result.state;
         this.playSteps(result.steps);
         return;
@@ -475,10 +478,10 @@ export class App {
       this.state = this.freshState(this.level, this.mode);
     }
     this.placeLevelGift();
-    this.save();
-    this.view.stop();
     const offer = (!this.companionOffered && this.level === 2) || isFirstLanternOfArea(this.level);
     if (offer) this.companionOffered = true;
+    this.save();
+    this.view.stop();
     this.map.show({
       from,
       to: this.level,
@@ -696,7 +699,7 @@ export class App {
       if (!save || save.v !== 2) return null;
       const now = Date.now();
       const gap = now - save.savedAt;
-      this.level = Math.max(1, save.level);
+      this.level = Number.isFinite(save.level) ? Math.max(1, Math.floor(save.level)) : 1;
       this.companion = save.companion ?? 'firefly';
       this.companionOffered = !!save.companionOffered;
       this.seen = new Set(save.seen ?? []);

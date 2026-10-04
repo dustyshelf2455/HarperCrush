@@ -64,9 +64,9 @@ describe('areas along the path', () => {
 });
 
 describe('unlocks', () => {
-  it('follows the milestone table: comet and orb from the start, then each power at its lantern', () => {
-    expect(unlockedAt(1)).toEqual(['comet', 'orb']);
-    expect(unlockedAt(4)).toEqual(['comet', 'orb']);
+  it('follows the milestone table: the comet from the start, the orb at lantern 5, then each power at its lantern', () => {
+    expect(unlockedAt(1)).toEqual(['comet']);
+    expect(unlockedAt(4)).toEqual(['comet']);
     expect(unlockedAt(5)).toEqual(['comet', 'orb']);
     expect(unlockedAt(7)).toEqual(['comet', 'orb']);
     expect(unlockedAt(8)).toEqual(['comet', 'orb', 'bloom']);

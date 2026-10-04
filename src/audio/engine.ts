@@ -318,6 +318,9 @@ export class AudioEngine {
   setSilentMode(mode: SilentMode): void {
     this.silentMode = mode;
     this.applySession();
+    // The keep-alive clip is what claims the playback session, so the switch must start or stop it at once.
+    if (mode === 'follow') this.stopKeepAlive();
+    else if (this.unlocked && !this.keepAliveActive) this.startKeepAlive();
   }
 
   private applySession(): void {

@@ -414,7 +414,7 @@ describe('valid swaps and hint strength', () => {
     expect(isValidSwap(sameType, cell(0, 0), cell(0, 1))).toBe(false);
   });
 
-  it('ranks swaps: set off an existing power (6) > make an orb or aurora (5) > any other power (4) > plain (3)', () => {
+  it('ranks swaps: combine two powers (7) > set off an existing power (6) > make an orb or aurora (5) > any other power (4) > plain (3)', () => {
     expect(strengthOf(state(build(['AA.A..', '..A...', '......', '......'])), cell(0, 2), cell(1, 2))).toBe(4);
     expect(strengthOf(state(build(['AA.AA.', '..A...', '......', '......'])), cell(0, 2), cell(1, 2))).toBe(5);
     expect(strengthOf(state(build(['AA.AAA', '..A...', '......', '......']), ALL), cell(0, 2), cell(1, 2))).toBe(5);
@@ -422,7 +422,7 @@ describe('valid swaps and hint strength', () => {
     expect(strengthOf(state(build(['A-.A..', '..A...', '......', '......'])), cell(0, 2), cell(1, 2))).toBe(6);
     expect(strengthOf(state(build(['AA....', '..A...', '......', '......'])), cell(0, 2), cell(1, 2))).toBe(3);
     expect(strengthOf(state(build(['O.....', '......', '......', '......'])), cell(0, 0), cell(0, 1))).toBe(6);
-    expect(strengthOf(state(build(['-|....', '......', '......', '......'])), cell(0, 0), cell(0, 1))).toBe(6);
+    expect(strengthOf(state(build(['-|....', '......', '......', '......'])), cell(0, 0), cell(0, 1))).toBe(7);
     // A square-making swap: a power (4) once the Sprite is unlocked, not a move before.
     const square = ['A.....', '.A....', 'AA....', '......'];
     expect(strengthOf(state(build(square), SPRITE_ONLY), cell(0, 0), cell(1, 0))).toBe(4);
@@ -909,7 +909,7 @@ describe('two powers swapped onto each other', () => {
         (board[4] as (Piece | null)[])[3] = pieceOf(right, 'diamond');
         const s = state(board, ALL);
         expect(isValidSwap(s, A, X)).toBe(true);
-        expect(findValidSwaps(s).some((o) => o.strength === 6)).toBe(true);
+        expect(findValidSwaps(s).some((o) => o.strength === 7)).toBe(true);
         const r = applySwap(s, A, X);
         const fs = fires(r.steps.slice(0, indexOf(r.steps, 'clear')));
         expect(fs.length).toBeGreaterThan(0);
@@ -1046,7 +1046,8 @@ describe('gifts and the finishing light', () => {
     const label = gift.kind === 'power' ? gift.family : `${gift.a} + ${gift.b}`;
     it(`places ${label} so one swap sets it off, without touching any gem type`, { timeout: 30000 }, () => {
       for (let seed = 1; seed <= 40; seed++) {
-        const fresh = newGame(9, 6, seed % 2 ? FOUR : FIVE, seed, 0.3, ALL);
+        // Both boards: Calm's 9 by 6 and Play's 8 by 7, whose even row count once hid a bad hint on a vertical pair.
+        const fresh = seed % 3 === 0 ? newGame(8, 7, FIVE, seed, 0.12, ALL) : newGame(9, 6, seed % 2 ? FOUR : FIVE, seed, 0.3, ALL);
         const { state: gifted, cells } = placeGift(fresh, gift, createRng(seed));
         expect(cells.length).toBe(gift.kind === 'power' ? 1 : 2);
         const giftKeys = new Set(cells.map(key));
@@ -1069,7 +1070,7 @@ describe('gifts and the finishing light', () => {
         }
         expect(findPowers(gifted.board)).toHaveLength(cells.length);
         const hint = bestHint(gifted);
-        expect(hint?.strength).toBe(6);
+        expect(hint?.strength).toBe(gift.kind === 'power' ? 6 : 7);
         // Taking the hint fires the gift (every power on the board goes off) and leaves a playable board.
         const r = applySwap(gifted, (hint as { a: Cell }).a, (hint as { b: Cell }).b);
         const fired = fires(r.steps.slice(0, indexOf(r.steps, 'clear')));

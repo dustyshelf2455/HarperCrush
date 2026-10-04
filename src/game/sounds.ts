@@ -408,7 +408,8 @@ export function levelDonePhrase(chord: Chord, instrument: MelodyInstrument, arri
 const LEAD = 0.1;
 
 /** A once-only combination phrase is not repeated for another piece of the same swap within this many seconds. */
-const ONCE_WINDOW = 4;
+/** A shower of eight comets takes about five seconds in slow motion; a repeat of the same combination inside this window is the same moment. */
+const ONCE_WINDOW = 10;
 
 /** A bare PowerKind from the view, before it passes whole fire steps: treat it as a plain firing. */
 function plainStep(power: PowerKind): FireStep {

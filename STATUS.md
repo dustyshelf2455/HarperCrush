@@ -38,6 +38,8 @@ Second play-test still had no sound and no haptic tick in the installed app, whi
 - Reshuffles now deal the pieces back cell by cell avoiding matches, instead of trying random permutations; on a four-type board the old way failed about one time in eight.
 - Calm mode now uses four gem types in Twinkle Meadow and five from Crystal Cave, as DESIGN.md 3.2 says. The Stage 2 prototype used five from the start; one line in `src/core/journey.ts` changes it back.
 - The whole audio side was built without being heard (no speakers here); levels were reasoned against the Stage 2 orb phrases. Listen to the new voices and the big combinations on the phone.
+- An independent review of the Stage 3 code found seven real defects, all fixed before the deploy: a combination gift's hint could point at one power alone (and the finishing light fired the pair one at a time); the Orb could be made from lantern 1; replacing the board mid-animation (a mode switch) kept playing the old steps; a gem landing where a carried power had been stayed invisible; the comet shower's phrase replayed mid-shower; and switching "play even when on Silent" off did nothing until the app was hidden once.
+- Verified in Chromium at phone size: every gift and its firing, the map hop and the Meadow-to-Cave crossing, the companion offer, the resting scene, the gate and panel, the launch rule in all five cases (exact resume, fresh after ten minutes, resting under and over thirty minutes, a Stage 2 save), a corrupt save, and the mode switches including the parked Play board.
 
 ## Next
 
