@@ -361,8 +361,11 @@ export class GameView {
 
   /** Replace the board outright (new level, resume) with a soft fade-in. */
   setState(state: GameState): void {
+    const resized = state.rows !== this.state.rows || state.cols !== this.state.cols;
     this.state = state;
     this.rebuild(state.board);
+    // A board of another size (Play mode's 7 by 8) needs its own cell size and position.
+    if (resized) this.resize();
     this.fadeIn = 1;
     this.wake();
   }
