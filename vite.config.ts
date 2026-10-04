@@ -3,8 +3,9 @@ import { defineConfig, type Plugin } from 'vitest/config';
 
 /**
  * Emits a hand-written service worker that pre-caches every built file.
- * The worker never calls skipWaiting, so a new build installs in the
- * background and takes over on the next launch, never during play.
+ * The worker only calls skipWaiting when the page asks it to, which the page
+ * does at launch (see src/game/main.ts), so a new build installs in the
+ * background and takes over at a launch, never during play.
  */
 function serviceWorker(): Plugin {
   return {
@@ -37,11 +38,17 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('glimmerfall-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
   );
 });
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'skipWaiting') self.skipWaiting();
+});
+// Same-origin GET only, cache first. ignoreVary: static hosts send
+// "Vary: Origin", and module-script requests carry an Origin header, which
+// would otherwise make every script miss the cache.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) return;
-  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then((hit) => hit || fetch(event.request)));
+  event.respondWith(caches.match(event.request, { ignoreSearch: true, ignoreVary: true }).then((hit) => hit || fetch(event.request)));
 });
 `;
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });

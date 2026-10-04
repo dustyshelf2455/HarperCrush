@@ -50,7 +50,7 @@ export function optionsFromUrl(): AppOptions {
     chimes: q.get('chimes') !== '0',
     haptics: q.get('haptics') !== '0',
     silent: q.get('silent') === 'follow' ? 'follow' : 'ignore',
-    debug: q.get('debug') === '1',
+    debug: q.get('debug') === '1' || location.hash === '#debug',
     seed: q.get('seed') ? Number(q.get('seed')) : null,
     reset: q.get('reset') === '1',
   };
@@ -283,7 +283,7 @@ export class App {
         `audio ${s.state} unlocked ${s.unlocked} session ${s.session} keepalive ${s.keepAlive}`,
         `music ${this.player.current?.id ?? 'off'} sr ${s.sampleRate}`,
         `level ${this.level} matches ${this.matches}/${GOAL_MATCHES} moves ${this.state.moves}`,
-        `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'}`,
+        `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'} update ${document.documentElement.dataset.update ?? '-'}`,
         this.engine.lastError ? `err ${this.engine.lastError}` : '',
       ].join('\n');
     }, 500);
