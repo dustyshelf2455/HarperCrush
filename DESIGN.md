@@ -54,6 +54,21 @@ After seeing the mockups on the phone you chose:
 - **Music: music-box lullaby**, as the default soundtrack.
 - **Art note:** the companion creatures and the path art are basic and need real taste and polish. They stay placeholders through Stage 2 (the feel prototype shows only the goal lantern and companion) and get a proper art pass in Stage 3, when the map is built.
 
+## 2c. Stage 3 decisions (4 October 2026)
+
+Made while building Stage 3, where the design above left room. Say if any of these feels wrong; each is a small change.
+
+- **The remaining combinations** (Moonrise, Starburst and Aurora with the others) are now in the table in 3.4. The rule of thumb: Moonrise pairings widen the beam, Starburst pairings add rays, Aurora pairings add a colour wave, the Orb turns every gem of a colour into the other power, and the Sprite carries the other power to the best spot. Two-power effects fire from the cell her finger ended on.
+- **The Lantern Sprite pops the gem it flies to and the gems touching it**, up to five cells, rather than one gem. One gem alone was too small a moment for a power. Until Play mode brings goal pieces, "something useful" is the gem whose popping starts the biggest cascade, chosen deterministically, so the flight always leads somewhere.
+- **The Bloom's second opening** is a rounded flower of thirteen cells (every cell within two steps), visibly bigger than the first 3 by 3.
+- **Gifts** are placed without changing a single gem's colour, so a gift board obeys the same no-match and has-a-move rules as any other, and always sits one swap from going off. Level 1 gifts the Comet, as the unlock list says.
+- **Calm mode gem types follow 3.2**: four in Twinkle Meadow, five from Crystal Cave on. The Stage 2 prototype you played used five from the start; the first area is now a little more generous with natural matches. Easy to change back (one line in `journey.ts`).
+- **Play mode is provisional in Stage 3** so the mode switch is real and testable before Stage 4: a wider 7 by 8 board, five gem types (six from Cloud Castle), a thinner power bias, hints after about 10 seconds, and a longer lantern of sixteen matches. Stage 4 replaces the goal with the picture, seed, creature and gather goals in 3.7. The two switching rules in 3.6 are built as designed: Calm to Play takes effect at the next lantern, Play to Calm is immediate and keeps the half-done Play board for later.
+- **The Finish buttons are provisional**: after the lantern lights and the companion hops, it curls up and falls asleep on the new lantern and the map rests there, responding to taps with a twinkle, until a grown-up opens the gate and taps "New session", or until 30 minutes have passed (the rest-until default), after which the launch rule applies. The softening, dimming and timing of 3.8 arrive in Stage 5.
+- **Companion choice** is offered on the first visit to the map (after level 1) and at the first lantern of every area; the map lingers about eight seconds on those visits and does not move on while a finger is down.
+- **Area voices** (3.11): celesta in Twinkle Meadow, a struck-crystal "glass" voice in Crystal Cave, a softened under-water tone in Mermaid Lagoon, a gentle horn in Cloud Castle, a harp in Star Garden, a shimmering bell on Aurora Peak, a warm kalimba in Dragon Hollow. The tune stays the music-box lullaby in every area with small variations.
+- **The grown-up gate** opens from the dim moon in the top-left corner exactly as 3.9 describes: a 1.5-second hold, then "Tap STAR, then MOON" style word tiles. Wrong taps make the gate quiet for 20 seconds, twice for a minute.
+
 ---
 
 ## 3. The game
@@ -121,8 +136,8 @@ Powers are the heart of the wonder, so they are a rich set, each with a distinct
 |-------|---------|---------------------------|
 | **Comet** | four in a line | A comet with a trailing streak. Set off, it sweeps along its whole row or column as a wave of light, clearing gems one after another with a rising run of notes. The streak shows which way it will fly. |
 | **Prism Orb** | five in a line | A slowly swirling orb of every colour (the "chocolate ball" she loves). Swap it with any gem and every gem of that colour across the board lights up and dissolves in a ripple spreading out from the orb, with a sparkling two-octave run. |
-| **Bloom** | an L or a T | A closed flower bud. Set off, it blooms into a soft ring of light clearing the 3 by 3 around it, drifts down with the falling gems, then blooms once more, bigger. |
-| **Lantern Sprite** | a 2 by 2 square | A tiny glowing creature. Set off, it flits in a curving path with a sparkle trail to something useful (a goal piece, a frost tile, or a gem that will start a cascade) and pops it. |
+| **Bloom** | an L or a T | A closed flower bud. Set off, it blooms into a soft ring of light clearing the 3 by 3 around it, drifts down with the falling gems, then blooms once more, bigger (a rounded flower of thirteen cells). |
+| **Lantern Sprite** | a 2 by 2 square | A tiny glowing creature. Set off, it flits in a curving path with a sparkle trail to something useful (a goal piece, a frost tile, or the gem whose popping starts the biggest cascade) and pops it together with the gems touching it. |
 | **Starburst** | a plus shape | A radiant star. Set off, light sweeps outward along both diagonals, an X of light: the one power that moves diagonally. (Later area; optional, see Section 7.) |
 | **Moonrise** | a 2 by 3 block | A pearl like a small moon. Set off, a wide moonbeam sweeps slowly down the board, clearing a three-wide band and any frost in its path. (A later discovery.) |
 | **Aurora** | six or more in a line | A late milestone discovery (Aurora Peak). The whole sky shimmers, and every gem of two colours dissolves in slow waves: the colour it was swapped with and the board's most common other colour. |
@@ -142,9 +157,18 @@ Powers are the heart of the wonder, so they are a rich set, each with a distinct
 | Lantern Sprite + Comet or Bloom | The sprite carries the other power to the best spot on the board and sets it off there. |
 | Lantern Sprite + Prism Orb | The sprite carries the orb to a gem of the board's most common colour and sets it off on that colour. |
 | Lantern Sprite + Lantern Sprite | Both fly, to two different useful spots. |
-| Starburst + Comet | An eight-pointed star: row, column and both diagonals sweep outward from the centre. |
+| Starburst + Comet, Starburst + Starburst | An eight-pointed star: row, column and both diagonals sweep outward from the centre (two Starbursts also open the 3 by 3 around it). |
+| Prism Orb + Starburst | Every gem of that colour becomes a starburst and their X's of light open together. |
+| Moonrise + Comet | A wide moon: the beam grows to five columns and the comet's row sweeps across it, a wide T of light. |
+| Moonrise + Bloom | A moonflower: the five-wide beam sweeps down and a 5 by 5 flower opens where they met. |
+| Moonrise + Starburst | The beam sweeps down and both diagonals open from the centre. |
+| Prism Orb + Moonrise | A moon tide: a beam falls from every gem of that colour, so most of the board turns to light, top to bottom. |
+| Moonrise + Moonrise | A full moon: the whole board sweeps down as one slow beam, top to bottom. |
+| Aurora + Prism Orb | Dawn: the three most common colours dissolve in three slow waves. |
+| Aurora + Aurora | The whole sky: every gem on the board dissolves, colour by colour, in slow waves. |
+| Lantern Sprite + Starburst, Moonrise or Aurora | The sprite carries it to the best spot (for Aurora, to a gem of the most common colour) and sets it off there. |
 
-Any pairing not listed sets both powers off from the swap cell, one after the other with each one's own effect, so no swap of two powers is ever a dud. The remaining named pairings (Moonrise, Starburst and Aurora with the others) are designed in Stage 3.
+Any pairing not listed (Aurora with a Comet, Bloom or Moonrise; Starburst with a Bloom) sets both powers off from the swap cell, one after the other with each one's own effect, so no swap of two powers is ever a dud. Two-power effects fire from the cell the moved piece lands on, which is where her finger ended up.
 
 **How she discovers them.** Powers unlock at milestone lanterns. Before its milestone, a line shape (four or five in a line, an L, a T) clears as a plain match; a plus makes a Bloom until Starburst unlocks, and six in a line makes a Prism Orb until Aurora unlocks. A 2 by 2 square is not a match at all until the Lantern Sprite unlocks, and a 2 by 3 block clears as its two lines of three until Moonrise unlocks, so the loop stays Candy Crush's loop and the Sprite's shape is a true discovery. From a milestone on, the fresh-board, bias, hint and dead-end rules treat that shape as a match.
 
