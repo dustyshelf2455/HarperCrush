@@ -825,6 +825,11 @@ export class App {
       finishNow: () => this.finishNow(),
       finishAfterLevel: () => this.finishAfterLevel(true),
       openPanel: () => this.openPanel(),
+      completeLevel: () => {
+        this.matches = boardFor(this.mode).goal;
+        if (!this.view.busy) this.levelComplete();
+      },
+      pendingMode: () => this.pendingMode,
       goTo: (n: number) => this.goToLantern(n),
       continueMap: () => (this.phase === 'map' ? this.leaveMap() : undefined),
     };
