@@ -46,6 +46,16 @@ Asked and answered on 4 October 2026. Each answer is now folded into the section
 
 ---
 
+## 2b. Stage 1 decisions (4 October 2026)
+
+After seeing the mockups on the phone you chose:
+
+- **Look: Deep Night Garden.** Your note: the soft, gauzy glow can read as fuzzy rather than dreamy and serene, so the Stage 2 build sharpens it: smaller and fainter halos, crisper rims and highlights, and less diffuse background glow, keeping the warmth.
+- **Music: music-box lullaby**, as the default soundtrack.
+- **Art note:** the companion creatures and the path art are basic and need real taste and polish. They stay placeholders through Stage 2 (the feel prototype shows only the goal lantern and companion) and get a proper art pass in Stage 3, when the map is built.
+
+---
+
 ## 3. The game
 
 ### 3.1 Name and world
