@@ -4,7 +4,7 @@
  * them fall with weight, and refill. Rendering is the same approach the game
  * will use: baked sprites, additive light, capped particles, one canvas.
  */
-import { type Cell, type GemType, type Grid, findValidSwaps, generateGrid, hasLineAt, makeGrid, typeCounts } from '../core/grid';
+import { type Cell, type GemType, type Grid, findLineMatches, findValidSwaps, generateGrid, hasLineAt, makeGrid, typeCounts } from '../core/grid';
 import { type Rng, createRng } from '../shared/rng';
 import { lighten, rgba } from './color';
 import { type CompanionId, drawCompanion, drawLantern } from './creatures';
@@ -25,6 +25,8 @@ export interface BoardMockOptions {
   companion: CompanionId;
   autoPlay?: boolean;
   onPower?: (kind: PowerKind, viaTap: boolean) => void;
+  /** A cascade step: lines formed by falling gems being cleared. step starts at 1. */
+  onCascade?: (step: number) => void;
 }
 
 interface Gem {
@@ -83,10 +85,18 @@ interface BloomFx {
   col: number;
   t: number;
   second: boolean;
+  /** The bud gem: it survives its first opening, falls, and opens again. */
+  budId: number | null;
   cleared: Set<number>;
 }
 
-type Effect = CometFx | OrbFx | BloomFx;
+interface CascadeFx {
+  kind: 'cascade';
+  t: number;
+  step: number;
+}
+
+type Effect = CometFx | OrbFx | BloomFx | CascadeFx;
 
 const HUD_HEIGHT = 74;
 const PAD = 16;
@@ -104,6 +114,7 @@ const SETTLE_MS = 150;
 const HINT_AFTER_MS = 4000;
 const AUTO_AFTER_MS = 7500;
 const MAX_PARTICLES = 90;
+const MAX_CASCADE_STEPS = 8;
 
 export class BoardMock {
   private readonly ctx: CanvasRenderingContext2D;
@@ -117,7 +128,8 @@ export class BoardMock {
   private ripples: Ripple[] = [];
   private effect: Effect | null = null;
   private phase: 'idle' | 'power' | 'falling' = 'idle';
-  private pendingSecondBloom: Cell | null = null;
+  private pendingSecondBloom: number | null = null;
+  private cascadeStep = 0;
   private powerIndex = 0;
   private hint: { a: Cell; b: Cell } | null = null;
   private idleMs = 0;
@@ -128,7 +140,7 @@ export class BoardMock {
   private w = 360;
   private h = 500;
   private cell = 54;
-  private lanternLit = 0.56;
+  private lanternFill = 0.56;
   private companion: CompanionId;
   private autoPlay: boolean;
   private readonly onClick = (e: MouseEvent): void => this.handleClick(e);
@@ -156,6 +168,7 @@ export class BoardMock {
 
   setStyle(style: GemStyle): void {
     this.style = style;
+    this.moon = null;
     this.sprites.setStyle(style);
     this.ambient = style.createAmbient(this.w, this.h, this.opts.seed);
     this.draw();
@@ -239,10 +252,11 @@ export class BoardMock {
         break;
       }
       case 'bloom':
-        this.effect = { kind: 'bloom', row, col, t: 0, second: false, cleared: new Set() };
+        this.effect = { kind: 'bloom', row, col, t: 0, second: false, budId: this.gemAt(row, col)?.id ?? null, cleared: new Set() };
         break;
     }
     this.phase = 'power';
+    this.cascadeStep = 0;
     this.hint = null;
     this.idleMs = 0;
     this.opts.onPower?.(k, viaTap);
@@ -302,7 +316,8 @@ export class BoardMock {
       }
       if (this.autoPlay && this.idleMs > AUTO_AFTER_MS) this.fire(undefined, undefined, false);
     }
-    this.lanternLit = 0.55 + 0.03 * Math.sin(this.time / 1900);
+    // Clears pour light into the lantern; it eases back toward its resting level so a looping mockup never pins.
+    this.lanternFill += (0.55 - this.lanternFill) * Math.min(1, dt / 6000);
   }
 
   private updateClearing(dt: number): void {
@@ -321,18 +336,26 @@ export class BoardMock {
   private clearGem(g: Gem | undefined): void {
     if (g && g.clearing === null) {
       g.clearing = 0;
-      this.lanternLit = Math.min(0.75, this.lanternLit + 0.01);
+      this.lanternFill = Math.min(0.78, this.lanternFill + 0.012);
     }
+  }
+
+  /** Comet head distance from its origin, in cells. Shared by clearing, trail and drawing so they cannot drift apart. */
+  private cometReach(p: number): number {
+    return easeInOutSine(p) * (this.opts.cols + 0.5);
   }
 
   private updateEffect(fx: Effect, dt: number): void {
     fx.t += dt;
     const anyClearing = (): boolean => this.gems.some((g) => g.clearing !== null);
     switch (fx.kind) {
+      case 'cascade':
+        if (!anyClearing()) this.finishEffect();
+        return;
       case 'comet': {
         if (fx.t < COMET_ARM_MS) return;
         const p = clamp01((fx.t - COMET_ARM_MS) / COMET_FLY_MS);
-        const reach = easeInOutSine(p) * (this.opts.cols + 0.5);
+        const reach = this.cometReach(p);
         for (let c = 0; c < this.opts.cols; c++) {
           if (!fx.cleared[c] && Math.abs(c - fx.col) <= reach) {
             fx.cleared[c] = true;
@@ -370,6 +393,7 @@ export class BoardMock {
         const radius = easeOutCubic(p) * (fx.second ? 2.3 : 1.8);
         for (const g of this.gems) {
           if (g.clearing !== null || fx.cleared.has(g.id)) continue;
+          if (!fx.second && g.id === fx.budId) continue; // the bud survives its first opening
           if (Math.abs(g.col - fx.col) <= 1 && Math.abs(g.row - fx.row) <= 1) {
             const d = Math.hypot(g.col - fx.col, g.row - fx.row);
             if (d <= radius) {
@@ -387,17 +411,19 @@ export class BoardMock {
   private finishEffect(): void {
     const fx = this.effect;
     this.effect = null;
-    if (fx?.kind === 'bloom' && !fx.second) this.pendingSecondBloom = { row: fx.row, col: fx.col };
+    if (fx?.kind === 'bloom' && !fx.second) this.pendingSecondBloom = fx.budId;
     this.collapse();
   }
 
   private collapse(): void {
     const { rows, cols } = this.opts;
     const target = makeGrid(rows, cols);
-    const newGems: Gem[] = [];
+    const missingPer: number[] = [];
+    // Pass 1: settle every survivor, so refills can see the whole final layout.
     for (let c = 0; c < cols; c++) {
       const survivors = this.gems.filter((g) => g.col === c && g.clearing === null).sort((a, b) => a.row - b.row);
       const missing = rows - survivors.length;
+      missingPer[c] = missing;
       survivors.forEach((g, i) => {
         g.row = missing + i;
         if (g.y !== g.row) {
@@ -408,12 +434,16 @@ export class BoardMock {
         const tr = target[g.row];
         if (tr) tr[g.col] = g.type;
       });
+    }
+    // Pass 2: refills, each avoiding a line in the final layout when any type can.
+    const newGems: Gem[] = [];
+    for (let c = 0; c < cols; c++) {
+      const missing = missingPer[c] ?? 0;
       for (let k = 0; k < missing; k++) {
-        const row = k;
-        const type = this.pickRefill(target, row, c);
-        const tr = target[row];
+        const type = this.pickRefill(target, k, c);
+        const tr = target[k];
         if (tr) tr[c] = type;
-        const gem = this.makeGem(type, row, c, -(missing - k) - 0.4);
+        const gem = this.makeGem(type, k, c, -(missing - k) - 0.4);
         gem.delay = c * 28;
         newGems.push(gem);
       }
@@ -464,25 +494,37 @@ export class BoardMock {
       anyMoving = true;
     }
     if (!anyMoving) {
-      if (this.pendingSecondBloom) {
-        const c = this.pendingSecondBloom;
-        this.pendingSecondBloom = null;
-        this.effect = { kind: 'bloom', row: c.row, col: c.col, t: 0, second: true, cleared: new Set() };
+      const bud = this.pendingSecondBloom !== null ? this.gems.find((g) => g.id === this.pendingSecondBloom) : undefined;
+      this.pendingSecondBloom = null;
+      if (bud) {
+        this.effect = { kind: 'bloom', row: bud.row, col: bud.col, t: 0, second: true, budId: bud.id, cleared: new Set() };
         this.phase = 'power';
-      } else {
-        this.phase = 'idle';
-        this.idleMs = 0;
+        return;
       }
+      // Lines formed by the fall clear as a cascade, each step a note higher.
+      const matches = findLineMatches(this.grid());
+      if (matches.length > 0 && this.cascadeStep < MAX_CASCADE_STEPS) {
+        this.cascadeStep++;
+        for (const match of matches) for (const cell of match) this.clearGem(this.gemAt(cell.row, cell.col));
+        this.effect = { kind: 'cascade', t: 0, step: this.cascadeStep };
+        this.phase = 'power';
+        this.opts.onCascade?.(this.cascadeStep);
+        return;
+      }
+      this.phase = 'idle';
+      this.idleMs = 0;
+      this.cascadeStep = 0;
     }
   }
 
   private updateParticles(seconds: number): void {
+    const damp = Math.exp(-0.9 * seconds); // 0.985 per frame at 60 Hz, frame-rate independent
     for (const p of this.particles) {
       p.life += seconds * 1000;
       p.x += p.vx * seconds;
       p.y += p.vy * seconds;
-      p.vx *= 0.985;
-      p.vy = p.vy * 0.985 - this.cell * 0.25 * seconds;
+      p.vx *= damp;
+      p.vy = p.vy * damp - this.cell * 0.25 * seconds;
     }
     this.particles = this.particles.filter((p) => p.life < p.maxLife);
   }
@@ -492,8 +534,8 @@ export class BoardMock {
       const a = this.rng.range(0, Math.PI * 2);
       const v = this.rng.range(0.25, 0.9) * this.cell * speed;
       this.particles.push({
-        x,
-        y,
+        x: x + this.rng.range(-0.15, 0.15) * this.cell,
+        y: y + this.rng.range(-0.15, 0.15) * this.cell,
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v - this.cell * 0.3,
         life: 0,
@@ -535,9 +577,11 @@ export class BoardMock {
     ctx.clip();
     const radius = this.cell * 0.41;
     const hidden = this.hiddenCell();
+    const budId = this.effect?.kind === 'bloom' ? this.effect.budId : this.pendingSecondBloom;
     const ordered = this.gems.slice().sort((a, b) => Number(a.clearing !== null) - Number(b.clearing !== null));
     for (const g of ordered) {
       if (hidden && g.row === hidden.row && g.col === hidden.col && g.clearing === null && !g.falling) continue;
+      if (budId !== null && g.id === budId) continue;
       const { x, y } = this.gemCentre(g);
       let alpha = 1;
       let scale = 1;
@@ -563,6 +607,14 @@ export class BoardMock {
       }
       this.sprites.draw(ctx, g.type, x, y + (scaleY < 1 ? radius * (1 - scaleY) : 0), radius, { alpha, scaleX: scale * scaleX, scaleY: scale * scaleY, brighten });
     }
+    // The bud rides the fall between its two openings.
+    if (budId !== null && this.phase === 'falling') {
+      const bud = this.gems.find((g) => g.id === budId);
+      if (bud) {
+        const { x, y } = this.gemCentre(bud);
+        drawBud(ctx, x, y, this.cell * 0.4, t, 0.3);
+      }
+    }
     ctx.restore();
 
     if (this.effect) this.drawEffect(this.effect, t);
@@ -572,7 +624,7 @@ export class BoardMock {
 
   private hiddenCell(): Cell | null {
     const fx = this.effect;
-    if (!fx || fx.kind === 'comet') return null;
+    if (!fx || fx.kind !== 'orb') return null;
     return { row: fx.row, col: fx.col };
   }
 
@@ -589,21 +641,38 @@ export class BoardMock {
   private drawHud(t: number): void {
     const { ctx, w } = this;
     const cx = w / 2;
-    drawLantern(ctx, cx - 30, HUD_HEIGHT / 2 + 4, 44, this.lanternLit, this.style.palette, t);
+    drawLantern(ctx, cx - 30, HUD_HEIGHT / 2 + 4, 44, this.lanternFill + 0.02 * Math.sin(t * 0.55), this.style.palette, t);
     const bob = Math.sin(t * 1.3) * 1.5;
     drawCompanion(ctx, this.companion, cx + 36, HUD_HEIGHT / 2 + 2 + bob, 40, t);
-    // Moon (the grown-up gate), dim, top-left.
+    // Moon (the grown-up gate), dim, top-left. Baked once so the cut-out never erases the canvas beneath.
     ctx.save();
     ctx.globalAlpha = 0.35;
-    ctx.fillStyle = this.style.palette.text;
-    ctx.beginPath();
-    ctx.arc(PAD + 14, 22, 9, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.beginPath();
-    ctx.arc(PAD + 19, 19, 8, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.drawImage(this.moonSprite(), PAD + 2, 10, 24, 24);
     ctx.restore();
+  }
+
+  private moon: HTMLCanvasElement | null = null;
+
+  private moonSprite(): HTMLCanvasElement {
+    if (this.moon) return this.moon;
+    const size = 24;
+    const canvas = document.createElement('canvas');
+    canvas.width = size * this.dpr;
+    canvas.height = size * this.dpr;
+    const c = canvas.getContext('2d');
+    if (c) {
+      c.scale(this.dpr, this.dpr);
+      c.fillStyle = this.style.palette.text;
+      c.beginPath();
+      c.arc(12, 12, 9, 0, Math.PI * 2);
+      c.fill();
+      c.globalCompositeOperation = 'destination-out';
+      c.beginPath();
+      c.arc(17, 9, 8, 0, Math.PI * 2);
+      c.fill();
+    }
+    this.moon = canvas;
+    return canvas;
   }
 
   private drawHint(t: number): void {
@@ -619,6 +688,8 @@ export class BoardMock {
   private drawEffect(fx: Effect, t: number): void {
     const { ctx } = this;
     switch (fx.kind) {
+      case 'cascade':
+        return;
       case 'comet':
         this.drawComet(fx, t);
         return;
@@ -650,10 +721,13 @@ export class BoardMock {
         const { x, y } = this.cellCentre(fx.row, fx.col);
         if (fx.t < BUD_MS) {
           const p = clamp01(fx.t / BUD_MS);
-          drawBud(ctx, x, y, this.cell * 0.4 * (1 + 0.08 * Math.sin(p * Math.PI * 3)), t, p);
+          drawBud(ctx, x, y, this.cell * 0.4 * (1 + 0.08 * Math.sin(p * Math.PI * 2)), t, p);
         } else {
           const p = clamp01((fx.t - BUD_MS) / RING_MS);
-          if (p < 0.45) {
+          if (!fx.second) {
+            // First opening: the bud stays, glowing, and will ride the fall.
+            drawBud(ctx, x, y, this.cell * 0.4 * (1 + 0.1 * (1 - p)), t, 1);
+          } else if (p < 0.45) {
             ctx.save();
             ctx.globalAlpha = 1 - p / 0.45;
             drawBud(ctx, x, y, this.cell * 0.4 * (1 + p * 1.5), t, 1);
@@ -696,7 +770,7 @@ export class BoardMock {
       return;
     }
     const p = clamp01((fx.t - COMET_ARM_MS) / COMET_FLY_MS);
-    const reach = easeOutCubic(p) * (this.opts.cols + 0.5) * cell;
+    const reach = this.cometReach(p) * cell;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const dir of [-1, 1]) {
@@ -705,8 +779,8 @@ export class BoardMock {
       const fade = 1 - p * 0.45;
       // Tail: a soft, tapering streak (wide faint layer plus a narrow bright core).
       for (const [height, alpha] of [
-        [cell * 0.5, 0.35],
-        [cell * 0.22, 0.75],
+        [cell * 0.5, 0.22],
+        [cell * 0.22, 0.5],
       ] as Array<[number, number]>) {
         const g = ctx.createLinearGradient(hx - dir * tailLen, y, hx, y);
         g.addColorStop(0, 'rgba(255,240,200,0)');
@@ -725,8 +799,8 @@ export class BoardMock {
         ctx.fill();
         ctx.restore();
       }
-      glowDisc(ctx, hx, y, cell * 0.5, '#ffffff', 0.85 * fade);
-      glowDisc(ctx, hx, y, cell * 0.95, '#ffd27a', 0.45 * fade);
+      glowDisc(ctx, hx, y, cell * 0.5, '#ffffff', 0.5 * fade);
+      glowDisc(ctx, hx, y, cell * 0.95, '#ffd27a', 0.35 * fade);
     }
     ctx.restore();
     void t;
@@ -739,7 +813,7 @@ export class BoardMock {
     ctx.globalCompositeOperation = 'lighter';
     for (const p of this.particles) {
       const a = 1 - p.life / p.maxLife;
-      glowDisc(ctx, p.x, p.y, p.size * 3.2, p.color, a * 0.6);
+      glowDisc(ctx, p.x, p.y, p.size * 3.2, p.color, a * 0.4);
       ctx.fillStyle = rgba(lighten(p.color, 0.5), a);
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * (0.6 + 0.4 * a), 0, Math.PI * 2);
@@ -800,10 +874,15 @@ export function drawOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: 
 }
 
 /** The Bloom's closed bud, before it opens. */
-export function drawBud(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, t: number, p: number): void {
+const BUD_REF = 32;
+
+export function drawBud(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, t: number, p: number): void {
   ctx.save();
-  ctx.translate(x, y + r * 0.1);
-  glowDisc(ctx, 0, 0, r * 1.7, '#ff9fcf', 0.3 + 0.35 * p);
+  ctx.translate(x, y + radius * 0.1);
+  glowDisc(ctx, 0, 0, radius * 1.7, '#ff9fcf', 0.3 + 0.35 * p);
+  // Draw at one reference radius and scale, so the animated size never grows the path cache.
+  ctx.scale(radius / BUD_REF, radius / BUD_REF);
+  const r = BUD_REF;
   const path = shapePath('drop', r);
   const g = ctx.createRadialGradient(-0.2 * r, -0.1 * r, 0, 0, 0.2 * r, r * 1.1);
   g.addColorStop(0, '#ffd0e4');

@@ -75,7 +75,8 @@ function leaf(): GemShape {
     const a = -theta + (2 * theta * i) / steps;
     points.push({ x: -c + R * Math.cos(a), y: R * Math.sin(a) });
   }
-  for (let i = 0; i <= steps; i++) {
+  // The second arc shares both tip points with the first; skip them so the outline stays simple.
+  for (let i = 1; i < steps; i++) {
     const a = Math.PI - theta + (2 * theta * i) / steps;
     points.push({ x: c + R * Math.cos(a), y: R * Math.sin(a) });
   }
@@ -83,7 +84,7 @@ function leaf(): GemShape {
   const cos = Math.cos(tilt);
   const sin = Math.sin(tilt);
   const rotated = points.map((p) => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }));
-  return { points: rotated, corner: 0.09, scale: 0.98 };
+  return { points: rotated, corner: 0.06, scale: 0.98 };
 }
 
 function diamond(): GemShape {

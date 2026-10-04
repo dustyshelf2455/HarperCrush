@@ -4,14 +4,36 @@ import { rgba } from '../color';
 import type { Pt } from '../shapes';
 import type { Ambient } from './types';
 
+const GLOW_SIZE = 256;
+const glowCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * A soft radial glow. The gradient is baked once per colour into a sprite and
+ * stamped with globalAlpha, which is pixel-equivalent to the gradient (every
+ * stop scales linearly with alpha) and avoids a gradient allocation per call.
+ */
 export function glowDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, alpha: number): void {
   if (r <= 0 || alpha <= 0) return;
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, rgba(color, alpha));
-  g.addColorStop(0.5, rgba(color, alpha * 0.35));
-  g.addColorStop(1, rgba(color, 0));
-  ctx.fillStyle = g;
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  let sprite = glowCache.get(color);
+  if (!sprite) {
+    sprite = document.createElement('canvas');
+    sprite.width = GLOW_SIZE;
+    sprite.height = GLOW_SIZE;
+    const c = sprite.getContext('2d');
+    if (!c) return;
+    const half = GLOW_SIZE / 2;
+    const g = c.createRadialGradient(half, half, 0, half, half, half);
+    g.addColorStop(0, rgba(color, 1));
+    g.addColorStop(0.5, rgba(color, 0.35));
+    g.addColorStop(1, rgba(color, 0));
+    c.fillStyle = g;
+    c.fillRect(0, 0, GLOW_SIZE, GLOW_SIZE);
+    glowCache.set(color, sprite);
+  }
+  const previous = ctx.globalAlpha;
+  ctx.globalAlpha = previous * Math.min(1, alpha);
+  ctx.drawImage(sprite, x - r, y - r, r * 2, r * 2);
+  ctx.globalAlpha = previous;
 }
 
 export function softRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, width: number, color: string, alpha: number): void {

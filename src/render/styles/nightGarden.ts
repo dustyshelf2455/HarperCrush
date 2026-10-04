@@ -78,6 +78,7 @@ export const nightGarden: GemStyle = {
     ctx.restore();
 
     ctx.lineWidth = r * 0.075;
+    ctx.lineJoin = 'round';
     ctx.strokeStyle = rgba(c.light, 0.62);
     ctx.stroke(path);
 

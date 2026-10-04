@@ -6,7 +6,7 @@
 import { createRng } from '../shared/rng';
 import { CHORDS, chordTones } from '../shared/scale';
 import { Composer, type SketchSpec } from './composer';
-import type { AudioEngine, PadVoice } from './engine';
+import type { AudioEngine, Channel, PadVoice } from './engine';
 
 const LOOKAHEAD_SECONDS = 0.5;
 const TICK_MS = 100;
@@ -14,7 +14,8 @@ const TICK_MS = 100;
 export class MusicPlayer {
   private composer: Composer | null = null;
   private spec: SketchSpec | null = null;
-  private channel: GainNode | null = null;
+  private channel: Channel | null = null;
+  private generation = 0;
   private pad: PadVoice | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private anchorBeat = 0;
@@ -41,12 +42,15 @@ export class MusicPlayer {
 
   async start(spec: SketchSpec, seed: number, windDown: boolean, autoStopSeconds: number | null = 60): Promise<void> {
     this.stop(1.2);
+    const generation = ++this.generation;
+    // Announce the sketch at once so a second tap on its button stops it, even while unlocking.
+    this.spec = spec;
+    this.emit();
     const ctx = await this.engine.unlock();
-    if (!ctx) return;
+    if (!ctx || generation !== this.generation) return;
     this.channel = this.engine.createChannel();
     this.composer = new Composer(spec, createRng(seed));
     this.composer.setWindDown(windDown);
-    this.spec = spec;
     this.bpm = this.composer.bpm;
     this.anchorBeat = 0;
     this.anchorTime = ctx.currentTime + 0.15;
@@ -67,6 +71,7 @@ export class MusicPlayer {
   }
 
   stop(fadeSeconds = 1.5): void {
+    this.generation++;
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
@@ -76,10 +81,15 @@ export class MusicPlayer {
     const pad = this.pad;
     if (ctx && channel) {
       const t = ctx.currentTime;
-      channel.gain.setValueAtTime(channel.gain.value, t);
-      channel.gain.linearRampToValueAtTime(0, t + fadeSeconds);
+      for (const g of [channel.dry, channel.wet]) {
+        g.gain.setValueAtTime(g.gain.value, t);
+        g.gain.linearRampToValueAtTime(0, t + fadeSeconds);
+      }
       pad?.release(t, fadeSeconds);
-      setTimeout(() => channel.disconnect(), (fadeSeconds + 4) * 1000);
+      setTimeout(() => {
+        channel.dry.disconnect();
+        channel.wet.disconnect();
+      }, (fadeSeconds + 4) * 1000);
     }
     const wasPlaying = this.spec !== null;
     this.channel = null;
@@ -121,7 +131,8 @@ export class MusicPlayer {
         case 'chord': {
           const previous = this.pad;
           this.pad = this.engine.pad(ev.midis, t, ev.level, channel);
-          previous?.release(t + 0.6);
+          // Release at the same moment the new pad starts: a linear crossfade with no dip.
+          previous?.release(t);
           break;
         }
         case 'note':

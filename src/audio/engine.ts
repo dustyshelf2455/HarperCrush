@@ -65,20 +65,31 @@ const PING: Partial[] = [
   { ratio: 2, gain: 0.18, decay: 0.7 },
 ];
 
+/** A fader pair for one music sketch: dry into the bus, wet into the reverb, so a whole sketch fades together. */
+export interface Channel {
+  readonly dry: GainNode;
+  readonly wet: GainNode;
+}
+
 function envelope(param: AudioParam, t: number, peak: number, attack: number, decay: number): void {
   param.setValueAtTime(SILENT, t);
   param.exponentialRampToValueAtTime(Math.max(peak, SILENT * 2), t + attack);
   param.exponentialRampToValueAtTime(SILENT, t + attack + decay);
 }
 
+/** Pad attack and release length in seconds; equal so a crossfade sums to a steady level. */
+const PAD_ATTACK = 2.6;
+
 /** A sustained chord voice with a slow filter sweep; released on the next chord. */
 export class PadVoice {
   private readonly oscillators: OscillatorNode[] = [];
   private readonly gain: GainNode;
   private readonly nodes: AudioNode[] = [];
+  private readonly level: number;
   private released = false;
 
   constructor(ctx: AudioContext, midis: readonly number[], t: number, level: number, dest: AudioNode, reverbIn: AudioNode) {
+    this.level = Math.max(level, SILENT * 2);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 640;
@@ -91,7 +102,7 @@ export class PadVoice {
     lfoGain.connect(filter.frequency);
     lfo.start(t);
 
-    const perOsc = 0.34 / Math.max(1, midis.length);
+    const perOsc = 0.4 / Math.max(1, midis.length);
     for (const midi of midis) {
       const f = midiToHz(midi);
       const voices: Array<[OscillatorType, number, number, number]> = [
@@ -115,8 +126,12 @@ export class PadVoice {
     }
 
     this.gain = ctx.createGain();
-    this.gain.gain.setValueAtTime(SILENT, t);
-    this.gain.gain.exponentialRampToValueAtTime(Math.max(level, SILENT * 2), t + 2.8);
+    // Silence before the first event, so an early release can never jump to the default gain of 1.
+    // Linear ramps, not exponential: two pads crossfading linearly keep a steady bed through a chord
+    // change, where exponential ramps would leave a near-silent gap in the middle.
+    this.gain.gain.value = 0;
+    this.gain.gain.setValueAtTime(0, t);
+    this.gain.gain.linearRampToValueAtTime(this.level, t + PAD_ATTACK);
     filter.connect(this.gain);
     this.gain.connect(dest);
     const wet = ctx.createGain();
@@ -127,12 +142,18 @@ export class PadVoice {
     this.nodes.push(filter, lfoGain, this.gain, wet);
   }
 
-  release(t: number, seconds = 3.2): void {
+  release(t: number, seconds = PAD_ATTACK): void {
     if (this.released) return;
     this.released = true;
-    this.gain.gain.cancelScheduledValues(t);
-    this.gain.gain.setValueAtTime(Math.max(this.gain.gain.value, SILENT), t);
-    this.gain.gain.exponentialRampToValueAtTime(SILENT, t + seconds);
+    const g = this.gain.gain;
+    if (typeof g.cancelAndHoldAtTime === 'function') {
+      // Freeze the attack wherever it is and fade from there; never a jump.
+      g.cancelAndHoldAtTime(t);
+    } else {
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.min(this.level, Math.max(g.value, 0)), t);
+    }
+    g.linearRampToValueAtTime(0, t + seconds);
     const end = t + seconds + 0.1;
     this.oscillators.forEach((o) => o.stop(end));
     const last = this.oscillators[0];
@@ -193,31 +214,34 @@ export class AudioEngine {
     if (this.ctx && this.unlocked && this.ctx.state !== 'running') void this.ctx.resume();
   }
 
-  /** A fader into the main bus. Each music sketch gets one so it can be faded as a whole. */
-  createChannel(): GainNode | null {
-    if (!this.ctx || !this.bus) return null;
-    const g = this.ctx.createGain();
-    g.gain.value = 1;
-    g.connect(this.bus);
-    return g;
+  /** A fader pair into the bus and the reverb. Each music sketch gets one so it can be faded as a whole. */
+  createChannel(): Channel | null {
+    if (!this.ctx || !this.bus || !this.reverbIn) return null;
+    const dry = this.ctx.createGain();
+    const wet = this.ctx.createGain();
+    dry.gain.value = 1;
+    wet.gain.value = 1;
+    dry.connect(this.bus);
+    wet.connect(this.reverbIn);
+    return { dry, wet };
   }
 
-  note(instrument: MelodyInstrument, midi: number, t: number, vel: number, dest?: AudioNode | null): void {
+  note(instrument: MelodyInstrument, midi: number, t: number, vel: number, dest?: Channel | null): void {
     const def = INSTRUMENTS[instrument];
     this.tone(midi, t, vel, def.partials, def.wet, dest);
   }
 
-  bass(midi: number, t: number, vel: number, dest?: AudioNode | null): void {
+  bass(midi: number, t: number, vel: number, dest?: Channel | null): void {
     this.tone(midi, t, vel, BASS, 0.12, dest);
   }
 
-  ping(midi: number, t: number, vel: number, dest?: AudioNode | null): void {
+  ping(midi: number, t: number, vel: number, dest?: Channel | null): void {
     this.tone(midi, t, vel, PING, 0.75, dest);
   }
 
-  pad(midis: readonly number[], t: number, level: number, dest?: AudioNode | null): PadVoice | null {
+  pad(midis: readonly number[], t: number, level: number, dest?: Channel | null): PadVoice | null {
     if (!this.ctx || !this.bus || !this.reverbIn) return null;
-    return new PadVoice(this.ctx, midis, t, level, dest ?? this.bus, this.reverbIn);
+    return new PadVoice(this.ctx, midis, t, level, dest?.dry ?? this.bus, dest?.wet ?? this.reverbIn);
   }
 
   /** A short rising run of chord tones, used when a power goes off. */
@@ -225,10 +249,11 @@ export class AudioEngine {
     midis.forEach((midi, i) => this.note(instrument, midi, t + i * spacing, vel * (0.75 + 0.25 * (i / Math.max(1, midis.length - 1)))));
   }
 
-  private tone(midi: number, t: number, vel: number, partials: Partial[], wet: number, dest?: AudioNode | null): void {
+  private tone(midi: number, t: number, vel: number, partials: Partial[], wet: number, dest?: Channel | null): void {
     const ctx = this.ctx;
     if (!ctx || !this.bus || !this.reverbIn || vel <= 0) return;
-    const out = dest ?? this.bus;
+    const out = dest?.dry ?? this.bus;
+    const wetOut = dest?.wet ?? this.reverbIn;
     const f = midiToHz(midi);
     const noteGain = ctx.createGain();
     noteGain.gain.value = 1;
@@ -238,7 +263,7 @@ export class AudioEngine {
       wetGain = ctx.createGain();
       wetGain.gain.value = wet;
       noteGain.connect(wetGain);
-      wetGain.connect(this.reverbIn);
+      wetGain.connect(wetOut);
     }
     let longestEnd = 0;
     let longest: OscillatorNode | null = null;

@@ -39,7 +39,8 @@ function chime(kind: PowerKind): void {
   const tones = player.chordNow(7, 17);
   switch (kind) {
     case 'comet':
-      engine.arpeggio(tones.slice(0, 6), t + 0.38, 0.5, 0.07);
+      // Timed to the sweep: the first gems clear about 0.63 s after the tap, the last about 1.05 s.
+      engine.arpeggio(tones.slice(0, 6), t + 0.62, 0.5, 0.08);
       break;
     case 'orb': {
       engine.arpeggio(tones.slice(0, 9), t + 0.52, 0.5, 0.06);
@@ -53,6 +54,8 @@ function chime(kind: PowerKind): void {
   }
 }
 
+let soundArmed = false;
+
 const board = new BoardMock(boardCanvas, style, {
   cols: 6,
   rows: 7,
@@ -60,8 +63,17 @@ const board = new BoardMock(boardCanvas, style, {
   seed: BOARD_SEED,
   companion,
   onPower: (kind, viaTap) => {
+    soundArmed = viaTap || player.current !== null;
     if (viaTap) void engine.unlock().then(() => chime(kind));
     else if (player.current) chime(kind);
+  },
+  onCascade: (step) => {
+    const ctx = engine.context;
+    if (!soundArmed || !ctx || !engine.isRunning) return;
+    // Each cascade step is the next chord tone up.
+    const tones = player.chordNow(8, 20);
+    const midi = tones[Math.min(step - 1, tones.length - 1)];
+    if (midi !== undefined) engine.note('celesta', midi, ctx.currentTime + 0.05, 0.5);
   },
 });
 
@@ -183,16 +195,20 @@ player.onChange(() => {
 });
 
 // Lifecycle
+let boardOnScreen = true;
+let mapOnScreen = false;
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    player.stop(0.4);
+    // Cut rather than fade: the context is about to be suspended, and a frozen fade would replay on return.
+    player.stop(0.05);
     engine.suspend();
     board.stop();
     map.stop();
   } else {
     engine.resume();
-    board.start();
-    map.start();
+    if (boardOnScreen) board.start();
+    if (mapOnScreen) map.start();
   }
 });
 document.addEventListener('pointerdown', () => engine.resume(), { passive: true });
@@ -200,8 +216,16 @@ document.addEventListener('pointerdown', () => engine.resume(), { passive: true 
 const observer = new IntersectionObserver(
   (entries) => {
     for (const e of entries) {
-      if (e.target === boardCanvas) e.isIntersecting ? board.start() : board.stop();
-      if (e.target === mapCanvas) e.isIntersecting ? map.start() : map.stop();
+      if (e.target === boardCanvas) {
+        boardOnScreen = e.isIntersecting;
+        if (e.isIntersecting && !document.hidden) board.start();
+        else board.stop();
+      }
+      if (e.target === mapCanvas) {
+        mapOnScreen = e.isIntersecting;
+        if (e.isIntersecting && !document.hidden) map.start();
+        else map.stop();
+      }
     }
   },
   { threshold: 0.05 },
@@ -222,5 +246,4 @@ window.addEventListener('resize', () => {
 $('#companionName').textContent = COMPANION_NAMES[companion];
 $('#buildDate').textContent = __BUILD_DATE__;
 applyStyle(style);
-board.start();
-map.start();
+// The observer's initial notification starts whichever canvases are on screen.
