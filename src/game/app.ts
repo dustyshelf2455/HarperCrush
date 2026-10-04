@@ -801,6 +801,7 @@ export class App {
     const w = window as Window & { glimmerfall?: unknown };
     w.glimmerfall = {
       hint: () => bestHint(this.state),
+      layout: () => this.view.currentLayout,
       swap: (a: Cell, b: Cell) => this.trySwap(a, b),
       busy: () => this.view.busy,
       phase: () => this.phase,
