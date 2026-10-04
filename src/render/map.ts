@@ -1,13 +1,220 @@
 /**
- * A glimpse of the map: a winding path of lanterns, her companion on the
- * current one, and the two other creatures waiting by the path. Tapping a
- * waiting creature makes it the companion, exactly as the game will.
+ * The lantern path (DESIGN.md 3.5): where every lantern stands, as a pure
+ * function of its number so the same path is drawn on every visit; the
+ * drawing pieces shared by the map scene and the Stage 1 mockup (the winding
+ * ribbon, stepping lights, lantern posts); and the mockup glimpse itself.
  */
-import { createRng } from '../shared/rng';
-import { rgba } from './color';
+import { createRng, deriveSeed } from '../shared/rng';
+import { lighten, rgba } from './color';
 import { COMPANIONS, type CompanionId, drawCompanion, drawLantern } from './creatures';
+import type { Pt } from './shapes';
 import { breath, glowDisc } from './styles/common';
-import type { Ambient, GemStyle } from './styles/types';
+import type { Ambient, GemStyle, Palette } from './styles/types';
+
+// ------------------------------------------------------------ pure geometry
+
+/** Where lantern `n` stands: x in [-1, 1] across the path's width, y in lantern units rising with n. */
+export interface LanternPos {
+  x: number;
+  y: number;
+}
+
+const PATH_SEED = 0x6c616e74;
+
+/** The horizontal reach of the path, as a fraction of its half width, before the jitter. */
+const WIND = 0.72;
+const WIND_JITTER = 0.16;
+const RISE_JITTER = 0.07;
+
+/**
+ * Lantern `n` (1-based). The path winds left and right about every three
+ * lanterns with a little seeded jitter, so it reads as a path and not a wave,
+ * and no lantern ever lands outside [-0.92, 0.92].
+ */
+export function lanternPoint(n: number): LanternPos {
+  const rng = createRng(deriveSeed(PATH_SEED, n));
+  const raw = WIND * Math.sin(n * 1.95 + 0.6) + rng.range(-WIND_JITTER, WIND_JITTER);
+  const x = Math.max(-0.92, Math.min(0.92, raw));
+  const y = n + rng.range(-RISE_JITTER, RISE_JITTER);
+  return { x, y };
+}
+
+/** A point on the Catmull-Rom curve through p0..p3, between p1 (f = 0) and p2 (f = 1). */
+export function catmullRom(p0: Pt, p1: Pt, p2: Pt, p3: Pt, f: number): Pt {
+  const f2 = f * f;
+  const f3 = f2 * f;
+  const x = 0.5 * (2 * p1.x + (-p0.x + p2.x) * f + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * f2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * f3);
+  const y = 0.5 * (2 * p1.y + (-p0.y + p2.y) * f + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * f2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * f3);
+  return { x, y };
+}
+
+/** The path between lantern `n` and `n + 1`, at fraction `f` of the way, in lantern units. */
+export function pathPoint(n: number, f: number): LanternPos {
+  const k = Math.max(0, Math.min(1, f));
+  return catmullRom(lanternPoint(Math.max(1, n - 1)), lanternPoint(n), lanternPoint(n + 1), lanternPoint(n + 2), k);
+}
+
+/** A smooth polyline through the given points (Catmull-Rom, `per` segments between neighbours). */
+export function smoothPolyline(points: readonly Pt[], per: number): Pt[] {
+  const out: Pt[] = [];
+  if (points.length === 0) return out;
+  if (points.length === 1) return [points[0] as Pt];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)] as Pt;
+    const p1 = points[i] as Pt;
+    const p2 = points[i + 1] as Pt;
+    const p3 = points[Math.min(points.length - 1, i + 2)] as Pt;
+    for (let k = 0; k < per; k++) out.push(catmullRom(p0, p1, p2, p3, k / per));
+  }
+  out.push(points[points.length - 1] as Pt);
+  return out;
+}
+
+// ------------------------------------------------------------ drawing pieces
+
+export interface PathColors {
+  path: string;
+  pathLit: string;
+}
+
+/**
+ * The outline of a ribbon along `pts` whose half width at each point is
+ * `halfAt(i)`: the left offsets forward, then the right offsets back.
+ */
+export function ribbonOutline(pts: readonly Pt[], halfAt: (i: number) => number): Pt[] {
+  const n = pts.length;
+  if (n < 2) return [];
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)] as Pt;
+    const b = pts[Math.min(n - 1, i + 1)] as Pt;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const hw = halfAt(i);
+    const p = pts[i] as Pt;
+    left.push({ x: p.x + nx * hw, y: p.y + ny * hw });
+    right.push({ x: p.x - nx * hw, y: p.y - ny * hw });
+  }
+  return left.concat(right.reverse());
+}
+
+function fillOutline(ctx: CanvasRenderingContext2D, outline: readonly Pt[], style: string | CanvasGradient): void {
+  if (outline.length < 3) return;
+  ctx.beginPath();
+  outline.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.fillStyle = style;
+  ctx.fill();
+}
+
+/** How the far end of the ribbon melts into the horizon: fully clear at `clearY`, solid from `solidY` down. */
+export interface RibbonFade {
+  clearY: number;
+  solidY: number;
+}
+
+/**
+ * The path as a soft ribbon: a dark edge, the ribbon itself, a lighter crown
+ * and a warm centre line along the part she has walked. `widthAt(i)` is the
+ * full width at `pts[i]`, so the ribbon can narrow toward the horizon.
+ * `litUntil` is the index in `pts` up to which she has walked. Each pass is
+ * one filled outline, so nothing overlaps and no beads show through the alpha;
+ * with `fade`, each fill is a vertical gradient that thins out toward the horizon.
+ */
+export function drawPathRibbon(ctx: CanvasRenderingContext2D, pts: readonly Pt[], colors: PathColors, widthAt: (i: number) => number, litUntil: number, fade?: RibbonFade): void {
+  if (pts.length < 2) return;
+  ctx.save();
+  const paint = (color: string, alpha: number): string | CanvasGradient => {
+    if (!fade) return rgba(color, alpha);
+    const g = ctx.createLinearGradient(0, fade.clearY, 0, fade.solidY);
+    g.addColorStop(0, rgba(color, 0));
+    g.addColorStop(1, rgba(color, alpha));
+    return g;
+  };
+  const passes: Array<[number, string, number]> = [
+    [0.7, '#000000', 0.14],
+    [0.5, colors.path, 0.62],
+    [0.3, lighten(colors.path, 0.18), 0.2],
+    [0.14, colors.pathLit, 0.07],
+  ];
+  for (const [k, color, alpha] of passes) fillOutline(ctx, ribbonOutline(pts, (i) => widthAt(i) * k), paint(color, alpha));
+  const walked = Math.min(pts.length, Math.max(0, litUntil) + 1);
+  if (walked >= 2) fillOutline(ctx, ribbonOutline(pts.slice(0, walked), (i) => widthAt(i) * 0.13), paint(colors.pathLit, 0.16));
+  ctx.restore();
+}
+
+/** Three small stepping lights between two lanterns she has passed, each on a slow pulse. */
+export function drawSteppingLights(ctx: CanvasRenderingContext2D, segment: readonly Pt[], color: string, t: number, phase: number, alpha = 1): void {
+  if (segment.length < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = 1; k <= 3; k++) {
+    const i = Math.round(((segment.length - 1) * k) / 4);
+    const p = segment[i];
+    if (!p) continue;
+    const a = (0.32 + 0.14 * Math.sin(t * 0.9 + phase + k * 1.7)) * alpha;
+    glowDisc(ctx, p.x, p.y, 9, color, a);
+    ctx.fillStyle = rgba('#fff4d6', a * 0.9);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Where a post lantern's parts land, for perching a companion and aiming the light. */
+export interface PostLayout {
+  /** Centre of the glass. */
+  lantern: Pt;
+  /** Where a companion sits: on the lantern's cap. */
+  perch: Pt;
+}
+
+export function postLayout(x: number, groundY: number, s: number): PostLayout {
+  const lanternY = groundY - s * 1.32;
+  return { lantern: { x, y: lanternY }, perch: { x, y: lanternY - s * 0.37 - s * 0.46 } };
+}
+
+/**
+ * A lantern on a slim post, standing on the path at (x, groundY), its light
+ * spilling onto the ground around it. `lit` is 0..1; an unlit lantern keeps a
+ * faint cool tint so it reads as waiting, never as locked (DESIGN.md 3.5).
+ */
+export function drawLanternPost(ctx: CanvasRenderingContext2D, x: number, groundY: number, s: number, lit: number, palette: Palette, t: number, coolTint: string, alpha = 1): PostLayout {
+  const layout = postLayout(x, groundY, s);
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  if (lit > 0.05) {
+    // Light pooling on the ground: a flattened glow at the foot of the post.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(x, groundY + s * 0.05);
+    ctx.scale(1, 0.38);
+    glowDisc(ctx, 0, 0, s * 1.9, palette.lanternGlow, 0.3 * lit * (0.85 + 0.15 * breath(t)));
+    ctx.restore();
+  }
+  // Post: a slim rounded stem with a small foot.
+  ctx.strokeStyle = '#3b3350';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = s * 0.11;
+  ctx.beginPath();
+  ctx.moveTo(x, groundY);
+  ctx.lineTo(x, layout.lantern.y + s * 0.35);
+  ctx.stroke();
+  ctx.fillStyle = '#352e48';
+  ctx.beginPath();
+  ctx.ellipse(x, groundY, s * 0.22, s * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+  drawLantern(ctx, layout.lantern.x, layout.lantern.y, s, lit, palette, t, { ring: false, coolTint });
+  ctx.restore();
+  return layout;
+}
+
+// ------------------------------------------------------------------ mockup
 
 export interface MapMockOptions {
   companion: CompanionId;
@@ -15,14 +222,14 @@ export interface MapMockOptions {
   onPickCompanion?: (id: CompanionId) => void;
 }
 
-interface Pt {
-  x: number;
-  y: number;
-}
+const LANTERNS = 6;
+const CURRENT = 2;
 
-const LANTERNS = 7;
-const CURRENT = 3;
-
+/**
+ * The Stage 1 glimpse: a short run of the path across a small canvas, her
+ * companion on the current lantern, and the two other creatures waiting by
+ * the path. Tapping a waiting creature makes it the companion, as the game does.
+ */
 export class MapMock {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -72,13 +279,12 @@ export class MapMock {
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ambient = this.style.createAmbient(this.w, this.h, this.opts.seed + 7);
-    const rng = createRng(this.opts.seed);
+    // The real path turned on its side: lantern n's sideways wander becomes height.
     this.points = [];
     for (let i = 0; i < LANTERNS; i++) {
+      const p = lanternPoint(i + 1);
       const f = i / (LANTERNS - 1);
-      const x = this.w * (0.13 + 0.74 * f) + Math.sin(i * 2.3 + rng.range(-0.2, 0.2)) * this.w * 0.06;
-      const y = this.h * (0.82 - 0.6 * f) + Math.cos(i * 1.9) * this.h * 0.07;
-      this.points.push({ x, y });
+      this.points.push({ x: this.w * (0.1 + 0.8 * f), y: this.h * (0.72 - 0.13 * p.x) });
     }
     this.layoutWaiting();
     this.draw();
@@ -88,35 +294,7 @@ export class MapMock {
     const cur = this.points[CURRENT];
     if (!cur) return;
     const others = COMPANIONS.filter((c) => c !== this.companion);
-    const margin = 30;
-    const obstacles: Pt[] = [];
-    this.points.forEach((p, i) => {
-      obstacles.push({ x: p.x, y: p.y - 20 });
-      const next = this.points[i + 1];
-      if (next) obstacles.push({ x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 - 10 });
-    });
-    obstacles.push({ x: cur.x, y: cur.y - 50 });
-    const chosen: Pt[] = [];
-    for (let k = 0; k < others.length; k++) {
-      let best: { p: Pt; score: number } | null = null;
-      for (const radius of [58, 76, 96, 118, 140]) {
-        for (let a = 0; a < 36; a++) {
-          const angle = (a / 36) * Math.PI * 2;
-          const p = { x: cur.x + Math.cos(angle) * radius, y: cur.y - 20 + Math.sin(angle) * radius };
-          if (p.x < margin || p.x > this.w - margin || p.y < margin || p.y > this.h - margin) continue;
-          let clearance = Infinity;
-          for (const o of obstacles) clearance = Math.min(clearance, Math.hypot(o.x - p.x, o.y - p.y));
-          for (const c of chosen) clearance = Math.min(clearance, Math.hypot(c.x - p.x, c.y - p.y));
-          if (clearance < 44) continue;
-          // Prefer standing in front of the path (lower on the hill), and a little clearance.
-          const score = Math.min(clearance, 70) + (p.y > cur.y - 10 ? 30 : 0);
-          if (!best || score > best.score) best = { p, score };
-        }
-        if (best) break;
-      }
-      chosen.push(best ? best.p : { x: cur.x + 70 * (k + 1), y: cur.y + 40 });
-    }
-    this.waiting = others.map((id, i) => ({ id, x: (chosen[i] as Pt).x, y: (chosen[i] as Pt).y }));
+    this.waiting = others.map((id, i) => ({ id, x: cur.x + (i === 0 ? -1 : 1) * this.w * 0.2, y: cur.y + this.h * 0.06 + (i === 0 ? 0 : this.h * 0.08) }));
   }
 
   start(): void {
@@ -140,16 +318,16 @@ export class MapMock {
     const rect = this.canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * this.w;
     const y = ((e.clientY - rect.top) / rect.height) * this.h;
-    let best: { id: CompanionId; d: number; x: number; y: number } | null = null;
+    let best: { id: CompanionId; d: number } | null = null;
     for (const c of this.waiting) {
       const d = Math.hypot(c.x - x, c.y - y);
-      if (d < 34 && (!best || d < best.d)) best = { id: c.id, d, x: c.x, y: c.y };
+      if (d < 34 && (!best || d < best.d)) best = { id: c.id, d };
     }
     if (!best) return;
     this.companion = best.id;
     this.layoutWaiting();
     const cur = this.points[CURRENT];
-    if (cur) this.sparkle = { x: cur.x, y: cur.y - 24, t: 0 };
+    if (cur) this.sparkle = { x: cur.x, y: postLayout(cur.x, cur.y, 26).perch.y, t: 0 };
     this.opts.onPickCompanion?.(best.id);
   }
 
@@ -176,64 +354,41 @@ export class MapMock {
     ctx.fillStyle = rgba(pal.groundFar, 0.9);
     ctx.beginPath();
     ctx.moveTo(0, h);
-    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, h * 0.62 + Math.sin(x / 70 + 1) * h * 0.05 + Math.sin(x / 31) * h * 0.02);
+    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, h * 0.5 + Math.sin(x / 70 + 1) * h * 0.05 + Math.sin(x / 31) * h * 0.02);
     ctx.lineTo(w, h);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = pal.ground;
     ctx.beginPath();
     ctx.moveTo(0, h);
-    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, h * 0.8 + Math.sin(x / 55 + 3) * h * 0.04);
+    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, h * 0.66 + Math.sin(x / 55 + 3) * h * 0.04);
     ctx.lineTo(w, h);
     ctx.closePath();
     ctx.fill();
 
-    // Path
     const pts = this.points;
     if (pts.length < 2) return;
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = rgba(pal.path, 0.75);
-    ctx.lineWidth = 11;
-    this.tracePath(pts);
-    ctx.stroke();
-    ctx.strokeStyle = rgba(pal.pathLit, 0.12);
-    ctx.lineWidth = 4;
-    this.tracePath(pts);
-    ctx.stroke();
-    // Little lights along the walked part of the path.
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < CURRENT; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      if (!a || !b) continue;
-      for (let k = 1; k < 4; k++) {
-        const f = k / 4;
-        const x = a.x + (b.x - a.x) * f;
-        const y = a.y + (b.y - a.y) * f + Math.sin(f * Math.PI) * -10;
-        glowDisc(ctx, x, y, 7, pal.pathLit, 0.35 + 0.15 * Math.sin(t * 1.3 + i + k));
-      }
-    }
-    ctx.restore();
+    const per = 10;
+    const smooth = smoothPolyline(pts, per);
+    drawPathRibbon(ctx, smooth, { path: pal.path, pathLit: pal.pathLit }, () => 14, CURRENT * per);
+    for (let i = 0; i < CURRENT; i++) drawSteppingLights(ctx, smooth.slice(i * per, (i + 1) * per + 1), pal.pathLit, t, i);
 
-    // Lanterns
+    const lanternSize = 26;
+    let perch: Pt | null = null;
     pts.forEach((p, i) => {
-      const lit = i < CURRENT ? 1 : i === CURRENT ? 1 : 0.12;
-      drawLantern(ctx, p.x, p.y - 20, 30, lit, pal, t + i);
+      const layout = drawLanternPost(ctx, p.x, p.y, lanternSize, i <= CURRENT ? 1 : 0.1, pal, t + i, pal.path);
+      if (i === CURRENT) perch = layout.perch;
     });
 
-    // Companion on the current lantern.
-    const cur = pts[CURRENT];
-    if (cur) {
-      const bob = Math.sin(t * 1.4) * 2;
-      glowDisc(ctx, cur.x, cur.y - 48, 34, pal.lantern, 0.15 + 0.1 * breath(t));
-      drawCompanion(ctx, this.companion, cur.x, cur.y - 50 + bob, 36, t, { glow: 1.1 });
+    if (perch) {
+      const { x, y } = perch as Pt;
+      glowDisc(ctx, x, y, 30, pal.lantern, 0.12 + 0.08 * breath(t));
+      drawCompanion(ctx, this.companion, x, y, 38, t, { glow: 1.1 });
     }
-    // Waiting friends
+    const perchX = perch ? (perch as Pt).x : w / 2;
     this.waiting.forEach((c, i) => {
-      const bob = Math.sin(t * 1.1 + i * 2) * 2.5;
-      drawCompanion(ctx, c.id, c.x, c.y + bob, 30, t + i, { glow: 0.8 });
+      // Friends turn to look at her.
+      drawCompanion(ctx, c.id, c.x, c.y, 32, t + i, { glow: 0.8, facing: c.x < perchX ? 1 : -1 });
     });
     if (this.sparkle) {
       const p = this.sparkle.t / 700;
@@ -241,22 +396,6 @@ export class MapMock {
       ctx.globalCompositeOperation = 'lighter';
       glowDisc(ctx, this.sparkle.x, this.sparkle.y, 20 + p * 40, '#ffffff', 0.5 * (1 - p));
       ctx.restore();
-    }
-  }
-
-  private tracePath(pts: Pt[]): void {
-    const { ctx } = this;
-    ctx.beginPath();
-    const first = pts[0] as Pt;
-    ctx.moveTo(first.x, first.y);
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[Math.max(0, i - 1)] as Pt;
-      const p1 = pts[i] as Pt;
-      const p2 = pts[i + 1] as Pt;
-      const p3 = pts[Math.min(pts.length - 1, i + 2)] as Pt;
-      const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
-      const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
-      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
     }
   }
 }
