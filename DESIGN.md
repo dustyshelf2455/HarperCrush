@@ -1,8 +1,8 @@
 # Glimmerfall: design proposal
 
-*Proposal v0.1, 3 October 2026. Written in response to BRIEF.md. Nothing has been built yet; this is the "settle the design first" step.*
+*Proposal v0.2. Written 3 October 2026 in response to BRIEF.md; updated 4 October with your answers to the seven questions (Section 2). Nothing has been built yet; this is the "settle the design first" step.*
 
-How to read this: Section 1 is my understanding of the goal, so you can correct me. Section 2 has the few questions whose answers would change the design, each with the default I will use if you just say "go with your defaults". Sections 3 to 5 are the design itself and the practical setup. Section 6 is the build plan, and Section 7 lists the judgment calls I would like you to weigh in on. Everything in here is a proposal, not a commitment to a specific detail, and I have tried to say "recommendation" wherever I am choosing between real options.
+How to read this: Section 1 is my understanding of the goal, so you can correct me. Section 2 records the seven questions that would change the design and the answers you gave, with what each changed. Sections 3 to 5 are the design itself and the practical setup. Section 6 is the build plan, and Section 7 lists the judgment calls I would like you to weigh in on. Everything in here is a proposal, not a commitment to a specific detail, and I have tried to say "recommendation" wherever I am choosing between real options.
 
 ---
 
@@ -26,23 +26,23 @@ If any of that is off, tell me before I build on it.
 
 ---
 
-## 2. Questions that would change the design
+## 2. Decisions: the seven questions and your answers
 
-I have kept this to the ones that matter. Each has a default.
+Asked and answered on 4 October 2026. Each answer is now folded into the sections it affects.
 
-1. **Does Harper recognise numerals or letters yet?** The parent gate (Section 3.9) relies on reading a short word. If she knows letters well enough to match a word by shape, I will switch to a 4-digit PIN instead. *Default: she cannot yet match written words, so the word gate is safe.*
+1. **Can Harper match written words or digit sequences yet?** *Not yet.* The grown-up gate stays as hold-the-moon then tap-the-named-word (3.9). When she starts matching words, it switches to a 4-digit PIN with one setting.
 
-2. **Is the phone usually connected to the car over Bluetooth or CarPlay while she plays?** If so, game sound will come out of the car speakers like any app, and Silent mode will not mute it there. That changes how I set up the sound controls (Section 3.11). *Default: sometimes connected, so I will make muting in the parent panel a one-tap affair and default sound to follow Silent mode.*
+2. **Is the phone connected to the car while she plays?** *Sound over the car speakers is fine, and can be very calming for her. And the game needs music.* Two changes: sound defaults on, with Silent mode on the phone still acting as the mute on the phone's own speaker; and the game gets a real, generated soundtrack rather than an optional ambient bed (3.11). You asked to hear options before choosing a musical feel, so Stage 1 adds music sketches to the mockup page (Section 6).
 
-3. **Do you want the game's name in the install URL?** The site will live at `https://dustyshelf2455.github.io/HarperCrush/` unless the repository is renamed. Renaming later changes the URL and means re-installing the app and losing local progress, so this is best decided before Harper's first install. *Default: rename the repo to `glimmerfall` (or whatever name you pick) before the first real install, and keep `HarperCrush` until then.*
+3. **Rename the repository so the URL carries the game's name?** *Yes, to `glimmerfall`.* You rename it in the repo's GitHub Settings before Harper's first real install; I build for the `/glimmerfall/` path from Stage 1 (4.6).
 
-4. **Session length and wind-down.** What feels right for a typical use: a 10-minute session with the last 2 minutes softening, or longer? Both will be adjustable. *Default: 10 minutes total, with a "Finish after this level" button for arrivals.*
+4. **Default session length and wind-down?** *10 minutes, with the last 2 softening.* Adjustable in the panel (3.8).
 
-5. **Should Play mode survive a relaunch?** My recommendation is that a fresh launch (after 10 or more minutes away) always starts in Calm mode, since that is what she needs when the phone is handed over mid-meltdown, while a quick relaunch (a swipe-away or a phone call) resumes exactly where she was. *Default: that rule, with a parent setting to remember the last mode instead.*
+5. **Should Play mode survive a relaunch?** *Calm after 10 minutes away.* A relaunch within 10 minutes resumes the exact board and mode; a longer gap starts in Calm mode on a fresh board at her current lantern, and a half-done Play board is kept for when you switch back (3.6).
 
-6. **One companion creature or a choice?** Her marker on the map is a small glowing creature. A choice of two or three (a firefly sprite, a tiny mermaid-like glow fish, a small caped hero sprite) is more to love but more art. *Default: one companion for the prototype, a choice later if it earns its place.*
+6. **One companion creature or a choice?** *Harper picks on the map.* Three creatures wait by the path on her first visit to the map, and she chooses by tapping one, with no reading. She can change her mind later at the start of each new area (3.5).
 
-7. **Any other devices?** Jane's phone, an iPad? The layout will be tuned for the iPhone 16 Pro first and should adapt, but I will test for what you actually use. *Default: your iPhone only.*
+7. **Which devices?** *Your iPhone 16 Pro only.* Layout, safe areas and performance are tuned for it. The game will still adapt to other screens, but I will not spend time testing them.
 
 ---
 
@@ -50,7 +50,7 @@ I have kept this to the ones that matter. Each has a default.
 
 ### 3.1 Name and world
 
-**Working name: Glimmerfall.** Gems fall and glimmer; the word is soft to say and reads well under a home-screen icon. Harper will know it by its icon (a glowing gem), not its name. Alternatives if you dislike it: *Lanternlight*, *Starseed*, *Twinklefall*. I have not found an existing game called Glimmerfall, but I will do a proper trademark check before you install it anywhere permanent.
+**Name: Glimmerfall** (decided; the repository will be renamed to match). Gems fall and glimmer; the word is soft to say and reads well under a home-screen icon. Harper will know it by its icon (a glowing gem), not its name. I have not found an existing game called Glimmerfall, but I will do a proper trademark check before you install it anywhere permanent.
 
 **The world:** a night-time world of light. The map is a winding path of lanterns through a sequence of magical places. Each level is a lantern on the path. Finishing a level lights the lantern, and Harper's companion, a small glowing creature, hops forward to the next one. The world is original and leans on what carries over from her favourites without using any of them: gems, sparkle, fairies and mermaids and castles as *places* rather than characters, cute creatures, and "powers" with spectacular effects.
 
@@ -149,6 +149,7 @@ Proposed unlock order along the first areas:
 
 - A winding vertical path of lanterns through the areas above. Lit lanterns behind her, unlit ones ahead (dimmer, never locked or padlocked, nothing greyed out as "not allowed").
 - Her **companion** sits on the current lantern. After a level, the view eases out to the map, the companion hops forward along the path, the new lantern lights with a small bloom and a warm chord, the camera lingers about four seconds, then eases into the next level. She can tap to continue sooner.
+- **She picks her companion herself, on the map, with no reading.** The app still opens straight into level 1 with a default firefly sprite, so nothing blocks the instant start. On her first visit to the map, after level 1, three creatures wait by the path, glowing softly: the firefly sprite, a small glowing fish, and a small caped hero sprite. Tapping one makes it hop to her lantern and become her marker; the others stay in the scene as friends. The three friends reappear at the first lantern of each new area, so she can change her mind, and the creature she is not using waves as she passes. Nothing about the choice is required or timed; if she never taps, the firefly stays.
 - Crossing into a new area is a bigger moment: the scenery changes as she walks, the ambient sound shifts, and a small creature of that area appears to greet her (a firefly, a glowing fish, a sleepy dragon).
 - The app never opens onto the map. The map is the transition between levels. *Recommendation:* she can also peek at the map by tapping her companion, which sits at the top of the board next to the goal lantern, and return by tapping anywhere. Easy to drop if it proves distracting (Section 7).
 - The path is generated procedurally and is infinite. Areas cycle after the seventh with palette variations and new creature cameos, so the sense of "somewhere new" continues.
@@ -174,7 +175,7 @@ I agree Calm mode should be the default every time the app opens cold. The phone
 
 **Switching modes, one-handed, in a car.** Through the parent gate (Section 3.9), the mode switch is the first and biggest control on the panel: two large tiles, Calm and Play, with the active one lit. Gate plus switch is about three seconds with a thumb. Below it sits the "Finish after this level" button, because those two are what you will reach for in a car.
 
-**Launch rule** (Question 5): a relaunch within 10 minutes resumes the exact board, mode and position. A launch after a longer gap starts in Calm mode at her current lantern on a fresh board. A parent setting can change this to "remember the last mode".
+**Launch rule** (decided): a relaunch within 10 minutes resumes the exact board, mode and position. A launch after a longer gap starts in Calm mode at her current lantern on a fresh board. A parent setting can change this to "remember the last mode".
 
 ### 3.7 Play mode: how it stays engaging with no way to lose
 
@@ -230,7 +231,7 @@ The design goal is that stopping feels like the end of a story, and that you are
 1. **Hold the moon.** A small, dim moon sits in a corner (top-left, clear of the Dynamic Island). Hold it for 1.5 seconds and a thin ring fills around it. Letting go early, or a second finger landing, cancels quietly. A child will sometimes do this, which is why there is a second step.
 2. **Tap the word.** A small panel shows six word tiles (for example MOON, STAR, LEAF, FISH, SNOW, GEM, shuffled every time) and the instruction "Tap the word: STAR". You read and tap. A pre-reader cannot. A wrong tap simply fades the panel out with no sound and the gate stays quiet for 20 seconds. Two wrong taps and it stays quiet for a minute.
 
-Both steps together take a grown-up about 2.5 seconds with one thumb. If Harper starts matching written words (Question 1), the second step becomes a 4-digit PIN with the same quiet failure behaviour. I considered a plain long-press plus a swipe, and rejected it: an upset child holds and swipes.
+Both steps together take a grown-up about 2.5 seconds with one thumb. You confirmed she cannot yet match written words. When she starts to, the second step becomes a 4-digit PIN with the same quiet failure behaviour, switched on from the panel. I considered a plain long-press plus a swipe, and rejected it: an upset child holds and swipes.
 
 The panel closes itself after 30 seconds of inactivity, and closing it never disturbs the board.
 
@@ -267,7 +268,16 @@ All three share the same shapes, the same motion and the same rules, so choosing
 - **Power set off:** a quick rising arpeggio of five to eight notes. Prism Orb: a sparkling two-octave run plus a soft pad swell. Orb + Orb: a slow swelling chord over 2.5 seconds with twinkles. Richer, never louder.
 - **Swap:** a soft, tiny tick. **Invalid swap:** one quiet low note. **Landing:** a very quiet low thud, with at most a few per settle so nothing becomes mush.
 - **Level complete:** a short, warm resolving phrase. **New area:** the same phrase in that area's instrument colour (celesta-like in Crystal Cave, watery and softened in the Lagoon, and so on).
-- **Ambient bed (optional):** a very quiet, slowly moving pad in G, with its swell tied to the breathing glow. Off by default during play (it is the thing most likely to bother strangers in public), on very quietly during wind-down and rest. Both are parent toggles.
+- **Music:** a generated soundtrack, described below, which replaces the optional ambient bed in the first draft.
+
+**Music.** You said the game needs music, and I agree: a warm soundtrack is a large part of what makes the game she knows feel finished, and a steady musical bed is itself settling. It is composed live, in code, with the same synthesiser as the chimes. No audio files.
+
+- **How it is made.** A small set of hand-written motifs (short phrases of four to eight notes) in G major pentatonic, a chord cycle under them, and a generator that walks between motifs with gentle variation: ornament a note, hold one longer, answer a phrase an octave down. The result is recognisably "the Glimmerfall tune" but never loops exactly, so it does not wear thin on a long drive. Tempo is slow, around 60 beats per minute, with the pad's swell tied to the breathing rhythm.
+- **Layers.** A soft sustained pad; a music-box or celesta melody; a sparse low pulse for warmth; and twinkling high ornaments that appear only now and then. Each area swaps the melody instrument and the motif set (celesta in Crystal Cave, a softened, watery tone in the Lagoon, a gentle horn-like voice in Cloud Castle), so the music changes as she travels.
+- **Chimes and music agree.** Every match chime is drawn from the chord the music is playing at that moment, so cascades always harmonise with the tune instead of clashing with it. Powers and level completions are short phrases in the same key that sit on top of the music; during a big effect the music dips slightly to make room, then returns.
+- **Wind-down and rest.** Over the final two minutes the melody thins to its simplest form, the tempo eases, the ornaments stop, and the pad takes over. At the resting scene the music becomes a lullaby version of the area's motif, then fades to silence over about 30 seconds. Taps in the rest scene twinkle in the same key.
+- **Controls and defaults.** Music is on by default at a low level in both modes. The parent panel has music on/off, music level (soft / normal), and chimes on/off separately, so "music but no chimes" and "chimes but no music" both work. The game is fully playable with everything off.
+- **Choosing the feel.** You asked to hear options first. The Stage 1 mockup page will carry three short music sketches, each about 40 seconds and generated live in the browser, with a tap-to-listen button (the browser needs a tap before it may play sound): **music-box lullaby** (gentle melody over pads, slow and dreamy), **playful and light** (brighter and a little bouncier, still soft and never fast), and **dreamy ambient** (mostly pads and shimmer with only occasional melody). Each will also show its settled wind-down form. Pick one, or ask for a blend.
 
 **Loudness.** A master limiter caps output; the first sound after launch fades in over about 1.5 seconds so there is never a sudden first note; a parent "soft / normal" level sits below the iPhone's volume. It is mixed to sound good at low volume, and the game is fully playable with sound off: every sound has a visual twin.
 
@@ -276,7 +286,7 @@ All three share the same shapes, the same motion and the same rules, so choosing
 - By default, web audio runs in iOS's "ambient" audio session. On the iPhone's own speaker it **follows Silent mode**: toggle Silent on (Action Button or Control Center) and the game is silent. I recommend keeping this default, because it gives you a physical, zero-UI mute in a quiet cabin, and it means the game cannot surprise anyone.
 - With **headphones or AirPods**, ambient audio plays even in Silent mode (iOS treats headphones as private), at the iPhone's volume. If AirPods disconnect mid-session, iOS interrupts the audio session; the game detects this and resumes sound on her next touch.
 - Ambient audio **mixes** with other audio, so if you are playing a podcast in the car the game chimes over it rather than stopping it.
-- **Car Bluetooth / CarPlay:** if the phone is connected to the car, iOS routes the game's sound to the car speakers like any app, and treats it like headphones, so Silent mode will not mute it there. The game cannot choose an output device. The in-panel sound switch is the control for this, which is why it is one tap behind the gate. (Question 2.)
+- **Car Bluetooth / CarPlay:** if the phone is connected to the car, iOS routes the game's sound to the car speakers like any app, and treats it like headphones, so Silent mode will not mute it there. You said that is welcome, and that the music can be calming for her, so this is the intended behaviour. The game cannot choose an output device; the in-panel music and chime switches are the controls for the rare time you want it quiet in the car, which is why they sit one tap behind the gate.
 - **Optional "play even when on Silent":** Safari 17 and later let a page ask for the "playback" session type, which ignores Silent mode. I will offer this as a parent setting, off by default. It may pause other audio playing on the phone, which is why it is not the default.
 - Phone calls interrupt the audio; the game pauses its animation while hidden and resumes everything when it comes back.
 
@@ -358,14 +368,15 @@ I will add a Playwright smoke test later (the environment has Chromium) that loa
 
 **Recommendation: GitHub Pages, deployed by GitHub Actions on every push to `main`.** It is free, it is HTTPS (which a PWA needs), and it is the least work for you: one setting to flip once, then every build is live about a minute after I push.
 
-The URL will be `https://dustyshelf2455.github.io/HarperCrush/` (or the new name if the repo is renamed; see Question 3).
+The URL will be `https://dustyshelf2455.github.io/glimmerfall/` once you rename the repository (decided in Section 2). Until the rename it answers at `.../HarperCrush/`; the app is built for the `/glimmerfall/` path, so please rename before installing it on your phone.
 
 **What you need to do, once:**
 
 1. Open the repository on github.com, then **Settings** (the repo's settings tab, not your account's).
-2. In the left sidebar choose **Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**. There is nothing else to pick.
-4. The repository currently has no `main` branch (only the two `claude/...` branches). Once you approve this design, I will create `main` from the approved branch and push it. Then in **Settings → General → Default branch**, switch the default to `main`. That is the branch the deployment watches.
+2. Under **General**, in **Repository name**, change `HarperCrush` to `glimmerfall` and tap **Rename**. GitHub redirects the old name, and I will update the remote on my side.
+3. In the left sidebar choose **Pages**.
+4. Under **Build and deployment**, set **Source** to **GitHub Actions**. There is nothing else to pick.
+5. The repository currently has no `main` branch (only the two `claude/...` branches). Once you approve this design, I will create `main` from the approved branch and push it. Then in **Settings → General → Default branch**, switch the default to `main`. That is the branch the deployment watches.
 
 **Then, each time I push a build:**
 
@@ -439,17 +450,17 @@ Each stage ends with something you can open on your phone and react to. I will n
 
 **Stage 0: design (this document).** You confirm the understanding, answer the questions, pick a direction or ask for changes.
 
-**Stage 1: look and pipeline.** Repo skeleton (TypeScript, Vite, Vitest), the GitHub Pages deployment, and the three visual mockups under `/mockups/`, each a full board at real size with one power animating and a glimpse of the map. You pick a direction. *You do: the one-time Pages setting and default branch.*
+**Stage 1: look, sound and pipeline.** Repo skeleton (TypeScript, Vite, Vitest), the GitHub Pages deployment, and a mockup page under `/mockups/` with: the three visual directions, each a full board at real size with one power animating and a glimpse of the map including the three companion creatures; and the three music sketches from 3.11 with tap-to-listen buttons and their wind-down forms. You pick a look and a musical feel. *You do: the repository rename, the one-time Pages setting and the default branch.*
 
-**Stage 2: the feel prototype.** A playable Calm-mode board with the chosen look: 6 by 7, five gem types, swipe and tap-tap, gravity, cascades, hints, reshuffle, the full sound set for matches and cascades, and two powers (Comet and Prism Orb) with their effects and sounds. Installable, offline, saves and resumes. The core tests for matching, cascades, generation and reshuffle. This is where we tune weight, timing and sound on your phone until it feels right. *You do: install it, play it yourself first, then let Harper try it in a calm moment.*
+**Stage 2: the feel prototype.** A playable Calm-mode board with the chosen look: 6 by 7, five gem types, swipe and tap-tap, gravity, cascades, hints, reshuffle, the full sound set for matches and cascades, the chosen music playing under it with chimes drawn from its chords, and two powers (Comet and Prism Orb) with their effects and sounds. Installable, offline, saves and resumes. The core tests for matching, cascades, generation and reshuffle. This is where we tune weight, timing and sound on your phone until it feels right. *You do: install it, play it yourself first, then let Harper try it in a calm moment.*
 
-**Stage 3: powers, journey and the gate.** The remaining powers and all combinations, discovery gifts and slow-motion first-firings, Calm-mode lantern goals and level completion, the map with areas and the companion, the parent gate and panel with mode, sound, hints and the Finish buttons. The launch rule.
+**Stage 3: powers, journey and the gate.** The remaining powers and all combinations, discovery gifts and slow-motion first-firings, Calm-mode lantern goals and level completion, the map with areas, the three companion creatures and her choice of them, per-area music voices, the parent gate and panel with mode, sound, hints and the Finish buttons. The launch rule.
 
 **Stage 4: Play mode.** The level generator with shaped boards, frost, vines, cloud puffs and moonstone, the four goal types, the difficulty ramp and setting, and the completability tests.
 
 **Stage 5: endings.** The session timer, wind-down softening, the resting scene, the breathing glow, the rest-until rule, the night dimmer, and the battery behaviour that goes with them.
 
-**Stage 6: polish and hardening.** Performance profiling on your phone during the biggest effects, Reduce Motion, the haptics experiment, the ambient bed, area creatures and cameos, the optional discoveries book, launch background and icons, a Playwright smoke test, and a README with the iPhone setup from Section 5 kept up to date.
+**Stage 6: polish and hardening.** Performance profiling on your phone during the biggest effects, Reduce Motion, the haptics experiment, area creatures and cameos, the optional discoveries book, launch background and icons, a Playwright smoke test, and a README with the iPhone setup from Section 5 kept up to date.
 
 Throughout: tests run on every push, and every push to `main` deploys.
 
@@ -459,21 +470,18 @@ Throughout: tests run on every push, and every push to `main` deploys.
 
 Things where I have a recommendation but you may feel differently:
 
-1. **Calm on every cold launch, Play only until you have been away 10 minutes** (3.6). The alternative is to remember the last mode.
-2. **Cell size versus board size.** 6 wide in Calm mode (60-point cells) and 7 wide in Play. If you would rather one consistent board, 7 wide works for both.
-3. **Peeking at the map by tapping the companion** (3.5). Nice for anticipation; drop it if she gets lost there.
-4. **The rest scene responds to taps with twinkles** (3.8) rather than being completely still. I think a gently responsive sky is a better bridge to handing the phone back than a dead screen, but a still scene is a one-line change.
-5. **Rest lasts 30 minutes, then a cold launch starts fresh** (3.8). The strict alternative is "only a grown-up can restart", which protects the ending but costs you the gate every time.
-6. **Sound follows Silent mode by default** (3.11), with "play even on Silent" as an option.
-7. **Ambient bed off during play, on quietly during wind-down** (3.11).
-8. **Word gate versus PIN** (3.9), depending on Question 1.
-9. **Starburst** (the plus shape) is the one power whose shape is close to Bloom's T. It adds a discovery; it also adds a subtle rule. I lean toward keeping it as a later-area discovery, but it is the first thing I would cut.
-10. **The discoveries book** (3.7): additive and gentle, but it is a screen that is not the board. I have placed it last and would only add it if Play mode wants more sense of accumulation.
-11. **Haptics experiment** (3.12): off by default; worth ten minutes to try.
-12. **Repository rename** before the first install (Question 3).
+1. **Cell size versus board size.** 6 wide in Calm mode (60-point cells) and 7 wide in Play. If you would rather one consistent board, 7 wide works for both.
+2. **Peeking at the map by tapping the companion** (3.5). Nice for anticipation; drop it if she gets lost there.
+3. **The rest scene responds to taps with twinkles** (3.8) rather than being completely still. I think a gently responsive sky is a better bridge to handing the phone back than a dead screen, but a still scene is a one-line change.
+4. **Rest lasts 30 minutes, then a cold launch starts fresh** (3.8). The strict alternative is "only a grown-up can restart", which protects the ending but costs you the gate every time.
+5. **Sound follows Silent mode on the phone speaker by default** (3.11), with "play even on Silent" as an option. Over car speakers or headphones it plays regardless, as you asked.
+6. **Music on by default at a low level in both modes** (3.11), with separate music and chime switches.
+7. **Starburst** (the plus shape) is the one power whose shape is close to Bloom's T. It adds a discovery; it also adds a subtle rule. I lean toward keeping it as a later-area discovery, but it is the first thing I would cut.
+8. **The discoveries book** (3.7): additive and gentle, but it is a screen that is not the board. I have placed it last and would only add it if Play mode wants more sense of accumulation.
+9. **Haptics experiment** (3.12): off by default; worth ten minutes to try.
 
 ---
 
 ## 8. What happens next
 
-Reply with corrections to Section 1, answers to Section 2 (or "defaults"), and any changes you want to Sections 3 to 5. Then I will start Stage 1: the repo skeleton, the deployment, and the three mockups for your phone. The one-time Pages setting (Section 4.6) can be done any time before then.
+The seven questions are answered. What remains before Stage 1 starts: any corrections to Section 1, any objections to the judgment calls in Section 7, and your go-ahead for me to create the `main` branch for deployment. On your side, the repository rename and the one-time Pages setting (4.6) can be done any time before the mockups go up. Stage 1 then delivers the repo skeleton, the deployment, the three visual directions and the three music sketches for your phone.
