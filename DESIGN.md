@@ -1,8 +1,8 @@
 # Glimmerfall: design proposal
 
-*Proposal v0.2. Written 3 October 2026 in response to BRIEF.md; updated 4 October with your answers to the seven questions (Section 2). Nothing has been built yet; this is the "settle the design first" step.*
+*Proposal v0.3. Written 3 October 2026 in response to BRIEF.md; updated 4 October with your answers to the seven questions (Section 2) and again after an independent review pass against the brief. Nothing has been built yet; this is the "settle the design first" step.*
 
-How to read this: Section 1 is my understanding of the goal, so you can correct me. Section 2 records the seven questions that would change the design and the answers you gave, with what each changed. Sections 3 to 5 are the design itself and the practical setup. Section 6 is the build plan, and Section 7 lists the judgment calls I would like you to weigh in on. Everything in here is a proposal, not a commitment to a specific detail, and I have tried to say "recommendation" wherever I am choosing between real options.
+How to read this: Section 1 is my understanding of the goal, so you can correct me. Section 2 records the seven questions that would change the design and the answers you gave, with what each changed. Sections 3 to 5 are the design itself and the practical setup. Section 6 is the build plan, Section 7 lists the judgment calls I would like you to weigh in on, and Section 8 says what I need from you before Stage 1 starts. Everything in here is a proposal, not a commitment to a specific detail, and I have tried to say "recommendation" wherever I am choosing between real options.
 
 ---
 
@@ -34,9 +34,9 @@ Asked and answered on 4 October 2026. Each answer is now folded into the section
 
 2. **Is the phone connected to the car while she plays?** *Sound over the car speakers is fine, and can be very calming for her. And the game needs music.* Two changes: sound defaults on, with Silent mode on the phone still acting as the mute on the phone's own speaker; and the game gets a real, generated soundtrack rather than an optional ambient bed (3.11). You asked to hear options before choosing a musical feel, so Stage 1 adds music sketches to the mockup page (Section 6).
 
-3. **Rename the repository so the URL carries the game's name?** *Yes, to `glimmerfall`.* You rename it in the repo's GitHub Settings before Harper's first real install; I build for the `/glimmerfall/` path from Stage 1 (4.6).
+3. **Rename the repository so the URL carries the game's name?** *Yes, to `glimmerfall`.* You rename it in the repo's GitHub Settings before anything is installed on your phone, because GitHub does not redirect the old site address after a rename (4.6). The site itself is built with relative paths, so the mockups work at either address and nothing waits on the rename except installing.
 
-4. **Default session length and wind-down?** *10 minutes, with the last 2 softening.* Adjustable in the panel (3.8).
+4. **Default session length and wind-down?** *10 minutes, with the last 2 softening.* Session length is adjustable in the panel and wind-down can be switched off; the softening is always the last 2 minutes (3.8, 3.9).
 
 5. **Should Play mode survive a relaunch?** *Calm after 10 minutes away.* A relaunch within 10 minutes resumes the exact board and mode; a longer gap starts in Calm mode on a fresh board at her current lantern, and a half-done Play board is kept for when you switch back (3.6).
 
@@ -85,9 +85,9 @@ Each area changes the background, the ambient details, the sound colour (a sligh
 
 Fewer piece types means more natural matches, more cascades, and more four- and five-matches. Calm mode uses four types in the first area and five afterwards. Play mode uses five, then six later. All of this is tunable and I expect to adjust it after watching her play.
 
-**Board size and touch targets.** On the iPhone 16 Pro (393 points wide), a 7-wide board gives cells of about 51 points, comfortably above Apple's 44-point minimum. A 6-wide board gives 60-point cells. *Recommendation:* Calm mode uses a 6 by 7 board with the biggest, friendliest cells; Play mode uses 7 by 8, sometimes shaped. Both fill the width of the screen with the board centred vertically in the safe area below the Dynamic Island.
+**Board size and touch targets.** On the iPhone 16 Pro (402 by 874 points), with a 16-point gutter each side, a 7-wide board gives cells of about 53 points, comfortably above Apple's 44-point minimum. A 6-wide board gives cells of about 61 points. *Recommendation:* Calm mode uses a 6 by 7 board with the biggest, friendliest cells; Play mode uses 7 by 8, sometimes shaped. Both fill the width of the screen, centred vertically in the safe area between the Dynamic Island and the home indicator. A Calm board of seven rows at 61 points is about 430 points tall, which leaves well over a hundred points of plain background between the lowest gem row and the bottom edge, so a swipe on the board never starts in the home-indicator strip.
 
-**Nothing else on the screen but the board, a small goal lantern at the top, and a dim moon in one corner** (the parent gate). No score, no move counter, no buttons she could get lost in.
+**Nothing else on the screen but the board, a small goal lantern at the top with her companion resting beside it, and a dim moon in one corner** (the parent gate). No score, no move counter, no buttons she could get lost in. The companion is the only thing besides a gem that responds to touch, and only if the map peek in 3.5 survives (Section 7).
 
 ### 3.3 Feel: motion, touch, feedback
 
@@ -97,8 +97,8 @@ This is the thing to get right first, and the prototype stage exists to tune it 
 - **Match:** matched gems brighten and bloom for about 120 ms, then dissolve into a few drifting sparkles over about 220 ms. Brightness ramps are capped so nothing ever flashes or strobes.
 - **Fall:** gravity with real acceleration and a soft landing (a 5 or 6 percent squash and settle), staggered per column so a cascade reads as a wave, not a jolt. Each landing gets a very quiet low "thud" so the pieces feel like they have weight.
 - **Cascades:** each step waits for the board to settle, about 350 to 450 ms per step, and each step plays the next note up a pentatonic scale, so a long cascade becomes a rising melody. Cascades of six or more steps also ripple a slow aurora across the background: a quiet "that was special" that costs nothing and never shouts.
-- **Touch:** both **swipe-to-swap** (drag a quarter of a cell in a direction) and **tap-tap** (first tap lifts and glows a gem, second tap on a neighbour swaps; a tap elsewhere just moves the selection). Only the first finger down drives a gesture; extra fingers are ignored. Every touch, valid or not, produces a tiny soft ripple of light under the fingertip, so mashing never feels dead and never produces an error. Pieces that are not currently moving can be swapped while other columns are still falling, which keeps the game responsive to a quick child without ever corrupting the board, because all state changes run through one deterministic core (Section 4.2).
-- **Hints:** after a pause (Calm: about 4 seconds, Play: about 10, adjustable), a valid swap glows gently and pulses at breathing pace. It prefers a swap that would create a power. It is an invitation, never a nag: no arrows, no sound.
+- **Touch:** both **swipe-to-swap** (drag a quarter of a cell in a direction) and **tap-tap** (first tap lifts and glows a gem, second tap on a neighbour swaps; a tap elsewhere just moves the selection). One finger at a time drives a gesture: normally the first one down, so extra fingers mashing alongside do nothing. The exception is a finger that lands and then stays put, which is what a palm or the heel of her hand looks like to the screen. If another finger moves or taps while the first is parked, the moving finger takes over, so a palm resting on the glass never makes the board go dead, and lifting the palm changes nothing. Every touch, valid or not, produces a tiny soft ripple of light under the fingertip, so mashing never feels dead and never produces an error. Pieces that are not currently moving can be swapped while other columns are still falling, which keeps the game responsive to a quick child without ever corrupting the board, because all state changes run through one deterministic core (Section 4.2).
+- **Hints:** after a pause (Calm: about 4 seconds, Play: about 10, adjustable), a valid swap glows gently and pulses at breathing pace. It prefers, in order: a swap that sets off a power already on the board, then one that makes a power, then any valid swap. It is an invitation, never a nag: no arrows, no sound.
 - **Dead ends:** if no valid move exists, the gems quietly swirl and resettle into a new arrangement that is guaranteed to have one. Tests enforce this (Section 4.5).
 
 ### 3.4 Powers: the special pieces, and how she discovers them
@@ -113,9 +113,11 @@ Powers are the heart of the wonder, so they are a rich set, each with a distinct
 | **Prism Orb** | five in a line | A slowly swirling orb of every colour (the "chocolate ball" she loves). Swap it with any gem and every gem of that colour across the board lights up and dissolves in a ripple spreading out from the orb, with a sparkling two-octave run. |
 | **Bloom** | an L or a T | A closed flower bud. Set off, it blooms into a soft ring of light clearing the 3 by 3 around it, drifts down with the falling gems, then blooms once more, bigger. |
 | **Lantern Sprite** | a 2 by 2 square | A tiny glowing creature. Set off, it flits in a curving path with a sparkle trail to something useful (a goal piece, a frost tile, or a gem that will start a cascade) and pops it. |
-| **Starburst** | a plus shape | A radiant star. Set off, light sweeps outward along its row and column at once, a cross of light. (Later area; optional, see Section 7.) |
-| **Moonrise** | a 2 by 3 block | A pearl like a small moon. Set off, a wide moonbeam sweeps slowly down the board, clearing a three-wide band and any frost in its path. (Rare; a later discovery.) |
-| **Aurora** | six or more in a line | Very rare. The whole sky shimmers, and every gem of two colours dissolves in slow waves. A "legendary" discovery for a lucky day. |
+| **Starburst** | a plus shape | A radiant star. Set off, light sweeps outward along both diagonals, an X of light: the one power that moves diagonally. (Later area; optional, see Section 7.) |
+| **Moonrise** | a 2 by 3 block | A pearl like a small moon. Set off, a wide moonbeam sweeps slowly down the board, clearing a three-wide band and any frost in its path. (A later discovery.) |
+| **Aurora** | six or more in a line | A late milestone discovery (Aurora Peak). The whole sky shimmers, and every gem of two colours dissolves in slow waves: the colour it was swapped with and the board's most common other colour. |
+
+**Setting a power off.** Comet, Bloom, Lantern Sprite, Starburst and Moonrise keep the colour and shape of the gems that made them: the gem stays visible inside the glow, so she can match it by shape as usual. They go off when they take part in any match, when they are swapped directly onto another power, or when another power's light touches them. Prism Orb and Aurora have no colour and go off when swapped with anything: the Orb clears the colour it was swapped with, and Aurora clears that colour plus the board's most common other colour. For Gather goals and for an Orb's colour-clear, a coloured power counts as its colour.
 
 **Combining two powers** (swap one onto another) is where the biggest moments live:
 
@@ -127,9 +129,16 @@ Powers are the heart of the wonder, so they are a rich set, each with a distinct
 | Prism Orb + Comet | Every gem of that colour turns into a comet, and they all fly in turn. |
 | Prism Orb + Bloom | Every gem of that colour becomes a bloom and they open in a wave across the board. |
 | Prism Orb + Prism Orb | The biggest moment in the game: a sunrise sweeps the whole board, every gem becomes light over about 2.5 seconds, with a slow warm swell and a full run of twinkling notes. Majestic, not loud. |
-| Lantern Sprite + anything | The sprite carries the other power to the best spot on the board and sets it off there. |
+| Lantern Sprite + Comet or Bloom | The sprite carries the other power to the best spot on the board and sets it off there. |
+| Lantern Sprite + Prism Orb | The sprite carries the orb to a gem of the board's most common colour and sets it off on that colour. |
+| Lantern Sprite + Lantern Sprite | Both fly, to two different useful spots. |
+| Starburst + Comet | An eight-pointed star: row, column and both diagonals sweep outward from the centre. |
 
-**How she discovers them.** Powers unlock at milestone lanterns. Before a milestone, the matching shape simply clears normally. At the milestone level, the board **starts with the new power already sitting in it**, glowing with a soft halo, and the hint system draws her hand to it after a few seconds. The first time any power goes off, time slows slightly (about 0.7 times speed) and the sound is a little richer, so the moment lands. From then on the power is created by its shape as usual, and Calm mode's board bias (below) makes sure she keeps getting them.
+Any pairing not listed sets both powers off from the swap cell, one after the other with each one's own effect, so no swap of two powers is ever a dud. The remaining named pairings (Moonrise, Starburst and Aurora with the others) are designed in Stage 3.
+
+**How she discovers them.** Powers unlock at milestone lanterns. Before its milestone, a line shape (four or five in a line, an L, a T) clears as a plain match; a plus makes a Bloom until Starburst unlocks, and six in a line makes a Prism Orb until Aurora unlocks. A 2 by 2 square is not a match at all until the Lantern Sprite unlocks, and a 2 by 3 block clears as its two lines of three until Moonrise unlocks, so the loop stays Candy Crush's loop and the Sprite's shape is a true discovery. From a milestone on, the fresh-board, bias, hint and dead-end rules treat that shape as a match.
+
+At the milestone level, the board **starts with the new power already sitting in it**, glowing with a soft halo. The gift is always placed where a single swap sets it off, and the hint points at that swap from the first pause. The first time any power goes off, time slows slightly (about 0.7 times speed) and the sound is a little richer, so the moment lands. If the lantern would fill before she has set the gift off, the finishing sequence fires it first: the finishing light touches the gift and it goes off, with the slowed first-firing treatment, before the remaining gems drift up into the lantern. So every discovery is seen, never left to chance. From then on the power is created by its shape as usual, and Calm mode's board bias (below) makes sure she keeps getting them.
 
 Proposed unlock order along the first areas:
 
@@ -141,22 +150,27 @@ Proposed unlock order along the first areas:
 - Level 21 (Mermaid Lagoon): Prism Orb + Comet gift.
 - Level 25: Starburst (if we keep it).
 - Level 31 (Cloud Castle): Moonrise.
-- Level 41 onward: Aurora becomes possible.
+- Level 35: Bloom + Bloom gift.
+- Level 41 (Star Garden): Prism Orb + Bloom gift.
+- Level 51 (Aurora Peak): Aurora, placed on the board like every other milestone power; from here six in a line makes one, and the Calm bias can occasionally set one up.
+- Level 55: Prism Orb + Prism Orb gift.
+- Level 61 (Dragon Hollow): Moonrise + Comet gift.
+- From the second cycle of areas on, the first lantern of each area gifts the combination she has fired least, so the journey never runs out of first times.
 
-**Making powers happen often in Calm mode.** When new gems fall in, with some probability (Calm: around a third of the time, Play: lower) the game picks a colour that sets up a four- or five-in-a-line one move away, rather than a uniformly random one. If she has gone several moves without making a power, that probability rises. Occasionally a ready-made power simply drops in with the refill as a small gift. None of this is visible as a mechanic; the board just feels generous. The tests check that the bias never creates a match on its own and never leaves the board without a move.
+**Making powers happen often in Calm mode.** When new gems fall in, with some probability (Calm: around a third of the time, Play: lower) the game picks a colour that sets up a four- or five-in-a-line one move away, rather than a uniformly random one. If she has gone several moves without making a power, that probability rises. Occasionally, in Calm mode only, a ready-made power she has already unlocked simply drops in with the refill as a small gift (a judgment call, Section 7). None of this is visible as a mechanic; the board just feels generous. The tests check that the bias never creates a match on its own and never leaves the board without a move.
 
 ### 3.5 The journey: the map
 
 - A winding vertical path of lanterns through the areas above. Lit lanterns behind her, unlit ones ahead (dimmer, never locked or padlocked, nothing greyed out as "not allowed").
 - Her **companion** sits on the current lantern. After a level, the view eases out to the map, the companion hops forward along the path, the new lantern lights with a small bloom and a warm chord, the camera lingers about four seconds, then eases into the next level. She can tap to continue sooner.
-- **She picks her companion herself, on the map, with no reading.** The app still opens straight into level 1 with a default firefly sprite, so nothing blocks the instant start. On her first visit to the map, after level 1, three creatures wait by the path, glowing softly: the firefly sprite, a small glowing fish, and a small caped hero sprite. Tapping one makes it hop to her lantern and become her marker; the others stay in the scene as friends. The three friends reappear at the first lantern of each new area, so she can change her mind, and the creature she is not using waves as she passes. Nothing about the choice is required or timed; if she never taps, the firefly stays.
+- **She picks her companion herself, on the map, with no reading.** The app still opens straight into level 1 with a default firefly, so nothing blocks the instant start. On her first visit to the map, after level 1, three creatures wait by the path, glowing softly: the firefly, a small glowing fish, and a small caped hero. Tapping one makes it hop to her lantern and become her marker; the others stay in the scene as friends. The three friends reappear at the first lantern of each new area, so she can change her mind, and the two creatures she is not using wave as she passes. On the visits where the creatures are offered, the map lingers about eight seconds instead of four and does not move on while a finger is on the screen. A tap on or near a creature picks it: it hops to her lantern and the map lingers a few seconds more. A tap on empty sky continues at once, as usual. If she never taps, the map continues and the firefly stays. The choice is never required.
 - Crossing into a new area is a bigger moment: the scenery changes as she walks, the ambient sound shifts, and a small creature of that area appears to greet her (a firefly, a glowing fish, a sleepy dragon).
-- The app never opens onto the map. The map is the transition between levels. *Recommendation:* she can also peek at the map by tapping her companion, which sits at the top of the board next to the goal lantern, and return by tapping anywhere. Easy to drop if it proves distracting (Section 7).
+- The app never opens onto the map. The map is the transition between levels. *Recommendation:* she can also peek at the map by holding her companion, which rests at the top of the board beside the goal lantern, for about half a second. A tap on the board brings the board back, and the companion does not respond again for about a second, so a mash near the top of the screen cannot flip between board and map. Easy to drop if it proves distracting (Section 7).
 - The path is generated procedurally and is infinite. Areas cycle after the seventh with palette variations and new creature cameos, so the sense of "somewhere new" continues.
 
 ### 3.6 Two modes: Calm and Play
 
-I agree Calm mode should be the default every time the app opens cold. The phone gets handed over mid-meltdown; nobody is going to open a menu first.
+I agree Calm mode should be the default whenever the app opens after a gap; the launch rule below sets the gap. The phone gets handed over mid-meltdown; nobody is going to open a menu first.
 
 **Calm mode (default).**
 - 6 by 7 board, four or five gem types, no obstacles, full rectangle.
@@ -171,11 +185,11 @@ I agree Calm mode should be the default every time the app opens cold. The phone
 - Slower hints (about 10 seconds), still a reshuffle on dead ends, still no way to lose.
 - A gentle difficulty ramp as she travels, with a parent setting for the overall level (gentle / medium / bigger).
 
-**How the modes relate: one path, one marker.** Every lantern on the map can be played as a Calm level or a Play level, generated from the same seed and theme with different parameters. She advances along the same path in both modes, the same powers unlock at the same milestones, and the same areas come and go. If she is mid-way through a Play level and the mode is switched to Calm, the current lantern becomes a fresh Calm level; the half-finished Play board is kept and comes back if the mode is switched back at the same lantern. I considered a separate gentle path or two markers and rejected both: a single journey is simpler for her to understand and avoids any sense that one mode is the "lesser" one.
+**How the modes relate: one path, one marker.** Every lantern on the map can be played as a Calm level or a Play level, generated from the same seed and theme with different parameters. She advances along the same path in both modes, the same powers unlock at the same milestones, and the same areas come and go. If she is mid-way through a Play level and the mode is switched to Calm, the current lantern becomes a fresh Calm level; the half-finished Play board is kept and comes back if the mode is switched back at the same lantern. Switching Calm to Play is never an emergency, so it takes effect when the current Calm level finishes, a minute or so later: the lantern lights as normal, the map transition plays, and the next lantern opens as a Play level. Switching Play to Calm stays immediate, because that is the emergency direction. I considered a separate gentle path or two markers and rejected both: a single journey is simpler for her to understand and avoids any sense that one mode is the "lesser" one.
 
 **Switching modes, one-handed, in a car.** Through the parent gate (Section 3.9), the mode switch is the first and biggest control on the panel: two large tiles, Calm and Play, with the active one lit. Gate plus switch is about three seconds with a thumb. Below it sits the "Finish after this level" button, because those two are what you will reach for in a car.
 
-**Launch rule** (decided): a relaunch within 10 minutes resumes the exact board, mode and position. A launch after a longer gap starts in Calm mode at her current lantern on a fresh board. A parent setting can change this to "remember the last mode".
+**Launch rule** (decided): if the game was resting when it was closed, the rest rule in 3.8 comes first, and a relaunch before the rest-until time shows the sleeping scene whatever the gap. Otherwise, a relaunch within 10 minutes resumes the exact board, mode and position, and a launch after a longer gap starts in Calm mode at her current lantern on a fresh board. A parent setting can change this to "remember the last mode".
 
 ### 3.7 Play mode: how it stays engaging with no way to lose
 
@@ -190,10 +204,10 @@ Candy Crush gets difficulty from scarcity (moves, lives). Without scarcity, chal
 
 **Obstacles, all static. Nothing spreads, grows back, or counts down.**
 
-- **Frost:** one or two layers, cleared by adjacent matches.
+- **Frost:** one or two layers under the gems, hiding part of the picture. Matching a gem that sits on a frosted cell clears one layer, and a power's light clears the frost it passes over.
 - **Vines:** hold a gem in place; matching that gem frees it.
 - **Cloud puffs:** block falling gems, cleared by adjacent matches, so the board changes shape as she works.
-- **Moonstone blocks:** immovable, only cleared by powers.
+- **Moonstone blocks:** immovable; any power's light clears them, and the Lantern Sprite counts a moonstone that guards a goal as "something useful". When the only remaining goal items sit behind moonstone, the power bias rises to Calm mode's level and the hint prefers the swap whose power would reach the moonstone, so the last step is a minute of play, not luck.
 - **Shaped boards:** missing cells make some places hard to reach.
 
 **Ramp.** The level generator has a handful of dials (board shape, number of types, frost layers, moonstone count, number of goals) and raises them slowly as the lantern number grows, with a reset to gentle at the start of each new area so each area begins easy and ends with a satisfying "big" level. Generated levels are checked by a solver bot before they are shown (Section 4.5).
@@ -206,42 +220,42 @@ The design goal is that stopping feels like the end of a story, and that you are
 
 **Three ways a session ends, all arriving at the same resting point:**
 
-1. **The timer.** A session length (default 10 minutes of active play, adjustable from 5 to 30 or off) with a wind-down phase (default the last 2 minutes). Time only counts while the app is in the foreground and she is actually playing.
+1. **The timer.** A session length (default 10 minutes of active play, adjustable from 5 to 30 or off) with a wind-down phase (the last 2 minutes). Time only counts while the app is in the foreground and she is actually playing.
 2. **"Finish after this level."** One large button on the parent panel. The current level becomes the last; wind-down begins immediately so the softening coincides with her finishing.
-3. **"Finish now, gently."** A second button for when it has to be now. The remaining gems twinkle and drift up into the lantern over a few seconds, the lantern lights, and the ending sequence plays. Still no cut-off; it is the same ending, just sooner.
+3. **"Finish now, gently."** A second button for when it has to be now. The remaining gems twinkle and drift up into the lantern over a few seconds, the lantern lights, and the ending sequence plays. In a Play level the goal resolves first (frost melts off the picture, bubbles float free, seeds drift down and sprout), then the gems drift into the lantern, so the level's own reward is never skipped. Still no cut-off; it is the same ending, just sooner.
 
 **What wind-down does.** Over the final two minutes the game softens, without announcing it:
 
 - Motion slows by about 20 to 30 percent and eases more gently. Falls are a little floatier.
-- Chimes drop an octave and get quieter; the optional ambient bed fades in very quietly and swells with the breathing rhythm.
+- Chimes drop an octave and get quieter; the music thins to its simplest form, the tempo eases, the ornaments stop and the pad takes over, swelling with the breathing rhythm (3.11).
 - The background deepens toward night; stars come out; fireflies slow.
-- The level goal shortens so the current level completes within the window, and powers are still generous.
+- The level goal shortens so the current level completes within the window, and powers are still generous. In Play mode "shortens" means the moon helps: each match also melts a layer of frost, pops a bubble or drops a star-seed one row, so the level resolves within the window.
 - Screen brightness dims by 15 to 20 percent via a soft overlay.
 
 **The resting point.** The last lantern lights, her companion hops forward on the map, curls up on the new lantern, and falls asleep, glowing in slow breaths. The map rests there. Stars twinkle slowly. A sparse, lullaby-like handful of notes plays and then fades to silence over about 30 seconds. Tapping the screen makes a star twinkle and a very soft chime, and nothing more: the game has gone to sleep, but the phone is not "dead" in her hands. After two minutes the chimes stop and the screen dims further; after ten minutes it settles to a near-black night with a few slow stars, releases the screen wake lock so the phone can auto-lock, and does almost no work (battery).
 
-**Coming back.** The sleeping scene persists until a grown-up opens the gate and taps "New session", or until a set time has passed (default 30 minutes, adjustable, or "until a grown-up unlocks"). So if she closes and reopens the app herself, she sees her sleeping companion, not a new level.
+**Coming back.** While the app stays open, the sleeping scene never ends on its own. On a later launch she sees it again until a grown-up opens the gate and taps "New session", or until the rest-until time has passed since the ending (default 30 minutes, adjustable, or "until a grown-up unlocks"); only then does the launch rule in 3.6 apply. So if she closes and reopens the app herself, she sees her sleeping companion, not a new level.
 
-**The breathing glow.** You asked whether a glow that breathes at a calm pace would help. My view: it is worth having, with modest expectations. There is reasonable evidence that slow visual rhythms nudge breathing in adults; for a five-year-old it is at least a calm, consistent thing in the periphery of her vision, and it costs nothing. I would run it at about 8 breaths per minute (a 7-second cycle, slightly longer out than in), which is slower than a child's resting rate but not so slow that it reads as unrelated to breathing. It is always subtle during play (a soft vignette around the board in Calm mode), becomes the dominant rhythm during wind-down and rest, and is never labelled, instructed or counted. It is a parent toggle.
+**The breathing glow.** You asked whether a glow that breathes at a calm pace would help. My view: it is worth having, with modest expectations. There is reasonable evidence that slow visual rhythms nudge breathing in adults; for a five-year-old it is at least a calm, consistent thing in the periphery of her vision, and it costs nothing. I would run it at about 8 breaths per minute (a cycle of about 7.5 seconds, slightly longer out than in), which is slower than a child's resting rate but not so slow that it reads as unrelated to breathing. It is always subtle during play (a soft vignette around the board in Calm mode), becomes the dominant rhythm during wind-down and rest, and is never labelled, instructed or counted. It is a parent toggle.
 
 ### 3.9 The grown-up gate and settings
 
 **The gate: two deliberate steps, the second needing reading.**
 
-1. **Hold the moon.** A small, dim moon sits in a corner (top-left, clear of the Dynamic Island). Hold it for 1.5 seconds and a thin ring fills around it. Letting go early, or a second finger landing, cancels quietly. A child will sometimes do this, which is why there is a second step.
-2. **Tap the word.** A small panel shows six word tiles (for example MOON, STAR, LEAF, FISH, SNOW, GEM, shuffled every time) and the instruction "Tap the word: STAR". You read and tap. A pre-reader cannot. A wrong tap simply fades the panel out with no sound and the gate stays quiet for 20 seconds. Two wrong taps and it stays quiet for a minute.
+1. **Hold the moon.** A small, dim moon sits in a corner (top-left, clear of the Dynamic Island). Hold it for 1.5 seconds and a thin ring fills around it. Letting go early, or a second finger landing, cancels quietly. The moon ignores a touch with a large contact area or one that begins while another finger is already down (a resting hand), and the ring stays very faint until the last half second, so a casual hold shows almost nothing. A child will still sometimes do this, which is why there is a second step.
+2. **Tap the words.** A small panel shows eight word tiles (for example MOON, STAR, LEAF, FISH, SNOW, GEM, TREE, BOAT, shuffled every time) and the instruction "Tap STAR, then MOON". You read and tap twice. A pre-reader cannot, and guessing gets in one time in 56. The tiles arm only after the panel has been fully visible for half a second and accept only a clean tap (down and up inside one tile, no other finger down), so a mash already in progress cannot register. A wrong tap simply fades the panel out with no sound and the gate stays quiet for 20 seconds. Two wrong attempts and it stays quiet for a minute.
 
-Both steps together take a grown-up about 2.5 seconds with one thumb. You confirmed she cannot yet match written words. When she starts to, the second step becomes a 4-digit PIN with the same quiet failure behaviour, switched on from the panel. I considered a plain long-press plus a swipe, and rejected it: an upset child holds and swipes.
+Both steps together take a grown-up about 3.5 seconds with one thumb. You confirmed she cannot yet match written words. When she starts to, the second step becomes a 4-digit PIN with the same quiet failure behaviour, switched on from the panel. I considered a plain long-press plus a swipe, and rejected it: an upset child holds and swipes.
 
 The panel closes itself after 30 seconds of inactivity, and closing it never disturbs the board.
 
-**What is on the panel** (text is fine here; big targets, the important ones in thumb reach at the bottom):
+**What is on the panel** (text is fine here; big targets, the important ones in thumb reach at the bottom, sitting just above the home-indicator inset, which is left empty so a thumb reaching for a button cannot swipe the app away):
 
 - **Mode:** Calm / Play (two large tiles).
-- **Finish after this level** and **Finish now, gently**. Then **New session** when resting.
+- **Finish after this level** (one tap) and **Finish now, gently** (two taps: the button, then a confirm tile that appears elsewhere on the panel, so a stray mash after an accidental entry cannot end her session). Then **New session** when resting.
 - **Session:** length (5 / 10 / 15 / 20 / 30 / off), wind-down on/off, rest-until (15 / 30 / 60 min / unlock), launch rule (Calm on launch / remember last mode).
-- **Sound:** on/off, level (soft / normal), ambient bed on/off, "play even when iPhone is on Silent" (see 3.11).
-- **Feel:** hint delay (quick / normal / slow / off), breathing glow on/off, reduced motion (follow iPhone / on / off), haptic tick (if it proves workable).
+- **Sound:** music on/off, music level (soft / normal), chimes on/off, "play even when iPhone is on Silent" (see 3.11).
+- **Feel:** hint delay (quick / normal / slow / off; normal keeps each mode's own default of about 4 seconds in Calm and 10 in Play, quick roughly halves both, slow roughly doubles both), breathing glow on/off, reduced motion (follow iPhone / on / off), haptic tick (if it proves workable).
 - **Night dimmer:** a slider that dims the whole game below the iPhone's minimum brightness, for dark cars and cabins.
 - **Play difficulty:** gentle / medium / bigger.
 - **Map position:** set the current lantern number. This is the recovery tool if the phone ever loses local data or you move to a new phone, so she never loses her journey.
@@ -276,23 +290,23 @@ All three share the same shapes, the same motion and the same rules, so choosing
 - **Layers.** A soft sustained pad; a music-box or celesta melody; a sparse low pulse for warmth; and twinkling high ornaments that appear only now and then. Each area swaps the melody instrument and the motif set (celesta in Crystal Cave, a softened, watery tone in the Lagoon, a gentle horn-like voice in Cloud Castle), so the music changes as she travels.
 - **Chimes and music agree.** Every match chime is drawn from the chord the music is playing at that moment, so cascades always harmonise with the tune instead of clashing with it. Powers and level completions are short phrases in the same key that sit on top of the music; during a big effect the music dips slightly to make room, then returns.
 - **Wind-down and rest.** Over the final two minutes the melody thins to its simplest form, the tempo eases, the ornaments stop, and the pad takes over. At the resting scene the music becomes a lullaby version of the area's motif, then fades to silence over about 30 seconds. Taps in the rest scene twinkle in the same key.
-- **Controls and defaults.** Music is on by default at a low level in both modes. The parent panel has music on/off, music level (soft / normal), and chimes on/off separately, so "music but no chimes" and "chimes but no music" both work. The game is fully playable with everything off.
+- **Controls and defaults.** Music is on by default in both modes, at the "soft" level and mixed beneath the chimes. The parent panel has music on/off, music level (soft / normal), and chimes on/off separately, so "music but no chimes" and "chimes but no music" both work. The game is fully playable with everything off.
 - **Choosing the feel.** You asked to hear options first. The Stage 1 mockup page will carry three short music sketches, each about 40 seconds and generated live in the browser, with a tap-to-listen button (the browser needs a tap before it may play sound): **music-box lullaby** (gentle melody over pads, slow and dreamy), **playful and light** (brighter and a little bouncier, still soft and never fast), and **dreamy ambient** (mostly pads and shimmer with only occasional melody). Each will also show its settled wind-down form. Pick one, or ask for a blend.
 
 **Loudness.** A master limiter caps output; the first sound after launch fades in over about 1.5 seconds so there is never a sudden first note; a parent "soft / normal" level sits below the iPhone's volume. It is mixed to sound good at low volume, and the game is fully playable with sound off: every sound has a visual twin.
 
-**Your iPhone's Silent mode, and headphones.** This is how iOS actually behaves, confirmed against current WebKit:
+**Your iPhone's Silent mode, and headphones.** This is how iOS behaves in practice. Silent mode is decided by iOS's audio session rather than by the browser engine, and Apple documents only the speaker case, so the two route points below are ones I will confirm on your phone in Stage 2:
 
-- By default, web audio runs in iOS's "ambient" audio session. On the iPhone's own speaker it **follows Silent mode**: toggle Silent on (Action Button or Control Center) and the game is silent. I recommend keeping this default, because it gives you a physical, zero-UI mute in a quiet cabin, and it means the game cannot surprise anyone.
-- With **headphones or AirPods**, ambient audio plays even in Silent mode (iOS treats headphones as private), at the iPhone's volume. If AirPods disconnect mid-session, iOS interrupts the audio session; the game detects this and resumes sound on her next touch.
+- By default, web audio runs in iOS's "ambient" audio session. On the iPhone's own speaker it **follows Silent mode**: toggle Silent on (the Action Button by default, or a Silent Mode control you add to Control Center; see 5.3) and the game is silent. I recommend keeping this default, because it gives you a physical, zero-UI mute in a quiet cabin, and it means the game cannot surprise anyone.
+- With **headphones or AirPods**, ambient audio plays even in Silent mode (iOS treats headphones as private), at the iPhone's volume. If AirPods disconnect mid-session, iOS interrupts the audio session; the game detects this and resumes sound on her next touch. The headphone behaviour is widely reported for years but not documented by Apple, so I will confirm it with AirPods in Stage 2.
 - Ambient audio **mixes** with other audio, so if you are playing a podcast in the car the game chimes over it rather than stopping it.
-- **Car Bluetooth / CarPlay:** if the phone is connected to the car, iOS routes the game's sound to the car speakers like any app, and treats it like headphones, so Silent mode will not mute it there. You said that is welcome, and that the music can be calming for her, so this is the intended behaviour. The game cannot choose an output device; the in-panel music and chime switches are the controls for the rare time you want it quiet in the car, which is why they sit one tap behind the gate.
-- **Optional "play even when on Silent":** Safari 17 and later let a page ask for the "playback" session type, which ignores Silent mode. I will offer this as a parent setting, off by default. It may pause other audio playing on the phone, which is why it is not the default.
+- **Car Bluetooth / CarPlay:** if the phone is connected to the car, iOS routes the game's sound to the car speakers like any app, and treats it like headphones, so Silent mode will not mute it there. The same caveat applies, and I will confirm it in the car in Stage 2; if either route turns out to be muted, the "play even when on Silent" setting below is the fix. You said that is welcome, and that the music can be calming for her, so this is the intended behaviour. The game cannot choose an output device; the in-panel music and chime switches are the controls for the rare time you want it quiet in the car, which is why they sit one tap behind the gate.
+- **Optional "play even when on Silent":** Safari 17 and later let a page ask for the "playback" audio session, which ignores Silent mode. I will offer this as a parent setting, off by default, because it has two side effects: it interrupts other audio on the phone, and since iOS 17.5 a page using the playback session is allowed to keep its audio running when it is hidden or the screen locks. The game therefore suspends its own audio engine whenever it is hidden and resumes it when it returns, in both session types, so nothing can keep sounding from a locked phone in a bag.
 - Phone calls interrupt the audio; the game pauses its animation while hidden and resumes everything when it comes back.
 
 ### 3.12 Haptics
 
-There is no proper haptics API for web pages on iOS; Safari has never shipped the vibration API. One trick exists: iOS plays a system "tick" when an iOS-style switch control is toggled, and a page can hide such a switch and toggle it in response to a touch. It gives a single, fixed, light tick, it only works inside a real touch event, and Apple has been narrowing it (iOS 26.5 reduced what it can do). So: I will build it as an experiment behind a parent toggle, off by default, tied to matches only. If it feels good on your phone and survives updates, keep it; if not, we lose nothing. A native wrapper would give real haptics (Section 4.1), but I do not think it is worth the cost for this alone.
+There is no haptics API for web pages on iOS; Safari has never shipped the vibration API. One trick remains: iOS plays a light system tick when an iOS-style switch control is toggled by a tap. Until iOS 26.4 a page could fire that tick from script at any moment inside a touch; since iOS 26.5 Apple has narrowed it, and reports differ on whether anything but a genuine tap landing on the switch's own invisible label still ticks. The honest plan is therefore tap-time only: the tick can happen at the instant her finger lifts from a tap, never when a match resolves, never during a cascade or a power, and never on a swipe, because a drag is not a tap. The page can still decide, inside that tap, whether to let the tick happen, so the one version worth trying is a tick on the second tap of a tap-tap swap when that swap makes a match, arriving about a swap-length (160 ms) before the bloom. I will build that as an experiment behind a parent toggle, off by default, and drop it if it feels early or wrong on your phone. A true tick on the match itself, for swipes and cascades, would need the native wrapper (4.1), which I still do not think this alone justifies.
 
 ---
 
@@ -314,13 +328,13 @@ A home-screen web app is the right choice here, and the alternatives are worse f
 | Stop notifications or calls appearing over the game | Guided Access blocks them; a **Focus mode** covers the times you do not start Guided Access |
 | Lock the orientation (iOS ignores a web app's orientation request) | Control Center **Portrait Orientation Lock**, or Guided Access with **Motion** off. The game also lays itself out sensibly in landscape so nothing breaks |
 | Real haptics | The experiment in 3.12; otherwise none |
-| Choose the audio output device | Silent mode, the panel switch, or Control Center |
-| Guarantee local data is never cleared | iOS keeps installed web apps' data separate from Safari and does not apply its 7-day cleanup to them, so risk is low; the **Map position** setting restores her journey in a minute if it ever happens |
+| Choose the audio output device | Silent mode, the panel's music and chime switches, or Control Center |
+| Guarantee local data is never cleared | iOS keeps an installed web app's data in its own store, separate from Safari, and its 7-day rule counts only days the app itself is used, so ordinary use never triggers it. The one thing that does erase everything is deleting the icon from the Home Screen (or reinstalling from a different address), because the app's store goes with it. The **Map position** setting restores her journey in a minute if that ever happens |
 | Launch with zero system frames | iOS shows a plain launch background for a fraction of a second; I will set it to the game's night colour so it reads as the game appearing |
 
 ### 4.2 Stack and architecture
 
-**Zero runtime dependencies.** TypeScript for the code, Vite to bundle it (one development dependency), Vitest for tests. No frameworks, no game engine, no audio library, no asset pipeline. The whole app ships as a handful of files under about 300 KB.
+**Zero runtime dependencies.** TypeScript for the code, Vite to bundle it and Vitest for tests: three development dependencies, and nothing shipped to the phone. No frameworks, no game engine, no audio library, no asset pipeline. The whole app ships as a handful of files under about 300 KB.
 
 **Rendering:** a single full-screen `<canvas>` using the 2D context at device pixel ratio. Gem sprites, glows and halos are drawn once into offscreen canvases at launch (gradients, highlights and soft glows baked in), then composited with additive blending for light effects. Particles are capped. The slow background elements (breathing vignette, fireflies, twinkles) are CSS animations on ordinary elements, which the compositor runs cheaply, so the canvas only draws frames while the board is actually moving. When nothing moves, nothing is drawn.
 
@@ -336,15 +350,15 @@ A home-screen web app is the right choice here, and the alternatives are worse f
 - **Sound unlock:** iOS requires a touch before a page may make sound. The game creates its audio on her first touch anywhere on the board, so her first natural swipe is the unlock, and the first sound fades in rather than starting abruptly.
 - **Resume:** on launch, the saved state is restored and the exact board is drawn before the first frame. The launch rule in 3.6 decides whether a long-absent Play board is set aside for a Calm one.
 - **Offline:** a hand-written service worker (about a hundred lines, no library) pre-caches the whole app on first visit and serves everything from cache after that. The app makes no network requests of its own, ever. The only traffic is the browser fetching the app and checking for updates.
-- **Silent updates:** when a new build is published, the service worker downloads it in the background and keeps it waiting. It becomes active on the next cold launch, never mid-session, and there is no prompt. All files of a build are cached together under one version so a half-updated mix can never be served. The parent panel shows the build date so you can confirm what is installed.
+- **Silent updates:** when a new build is published, the service worker downloads it in the background and keeps it waiting. It becomes active the next time the app is started after being fully closed, never mid-session, and there is no prompt. All files of a build are cached together under one version so a half-updated mix can never be served. The parent panel shows the build date so you can confirm what is installed.
 
 ### 4.4 Hardened input, screen, battery, performance, accessibility
 
 - **Portrait:** laid out for portrait; in landscape the board simply shrinks to fit and the game keeps working. Real locking comes from the phone (Section 5).
 - **No zoom, no refresh, no selection, no callouts:** the whole page is a fixed, non-scrolling layer with browser touch handling disabled on the game surface, selection and long-press callouts disabled, and pinch and double-tap handled by the game rather than the browser. Installed web apps have no pull-to-refresh or address bar, and the game has no links at all, so there is nowhere to navigate.
-- **Stray touches:** pointer events are tracked by finger; only the first finger down drives a gesture, extra fingers do nothing, and a lost touch (a finger sliding off the edge) simply cancels. Edge swipes land on nothing. A fuzz test fires hundreds of thousands of random taps and swipes at the core and checks that the board is always full, never has a stuck piece and always has a move.
-- **Screen:** the Screen Wake Lock API (supported on iOS Safari since 16.4) keeps the display on during active play, re-requested whenever the app returns to the foreground, and released during rest. Guided Access's own auto-lock setting is the belt to this brace.
-- **Battery:** no frames drawn when nothing moves, CSS animations for the slow background, no timers running while hidden, wind-down and rest dim the screen and reduce animation, and rest ends in a near-static night scene.
+- **Stray touches:** pointer events are tracked by finger; the first finger down drives a gesture unless it is parked, in which case the next finger that moves does (3.3); other extra fingers do nothing; and a lost touch (a finger sliding off the edge) simply cancels. Edge swipes land on nothing. A fuzz test fires hundreds of thousands of random taps and swipes at the core and checks that the board is always full, never has a stuck piece and always has a move.
+- **Screen:** the Screen Wake Lock API (in iOS Safari since 16.4, and working in home-screen web apps on current iOS; I will verify on your phone) keeps the display on during active play, re-requested whenever the app returns to the foreground, and released when she has stopped touching for a while (Battery, below) and during rest. Guided Access's Display Auto-Lock, set to 15 minutes (5.2), is the belt to this brace: it covers the lock ever failing during play, and it is what finally locks the phone once the game lets go.
+- **Battery:** no frames drawn when nothing moves, CSS animations for the slow background, no timers running and the audio engine suspended while hidden, wind-down and rest dim the screen and reduce animation, and rest ends in a near-static night scene. **Idle:** if she has not touched the screen for about two minutes outside the rest scene (the session timer has already stopped counting by then, 3.8), the game treats it as a pause: the hint stops pulsing, canvas drawing stops, the music settles to its sustained pad, and the screen wake lock is released so the phone can lock on its own schedule. Her next touch restores everything instantly and re-requests the wake lock; nothing on the board changes.
 - **Performance:** target a steady 60 frames per second on the iPhone 16 Pro including the largest combined effects. Baked sprites, additive compositing without runtime blur, capped particles, and a per-frame budget checked in profiling on your actual phone before each stage is called done.
 - **Accessibility:** the iPhone's Reduce Motion setting is respected automatically (shorter, fade-based transitions, fewer particles, no slow-motion), with a parent override. All brightness changes are rate-limited so nothing strobes regardless of what the board does.
 
@@ -352,7 +366,7 @@ A home-screen web app is the right choice here, and the alternatives are worse f
 
 Vitest unit and property tests over the pure core, run on every push before deployment:
 
-- Match detection: lines of three, four and five, horizontal and vertical, L, T, plus, 2 by 2 and 2 by 3 shapes, overlapping matches, and the power each shape creates.
+- Match detection: lines of three, four, five and six or more, horizontal and vertical, L, T, plus, 2 by 2 and 2 by 3 shapes, overlapping matches, and the power each shape creates.
 - Gravity and cascades: pieces fall correctly in rectangular and shaped boards and around cloud puffs; cascades resolve to a stable board with no matches remaining; event lists are in a valid order.
 - Powers: every power's clear pattern; every combination's effect; chain reactions (a comet that hits a bloom sets it off); the slow-motion and sound events are emitted exactly once per discovery.
 - Board generation: across tens of thousands of seeds and every board shape and type count, no fresh board starts with a match, and every fresh board has at least one valid move.
@@ -360,7 +374,7 @@ Vitest unit and property tests over the pure core, run on every push before depl
 - Generator bias: the generosity bias never itself creates a match and never leaves the board without a move.
 - Level completability: every generated Play level passes two checks. A static one: every goal cell can be part of some line of three on that board shape. A dynamic one: a simple bot playing valid moves (preferring goal progress, with reshuffles when stuck) completes the level within a move bound, across many seeds and every difficulty setting.
 - Save and resume: any state serialises and restores to an identical board; old schema versions migrate.
-- Input fuzz: random tap and swipe storms against the core never corrupt the board.
+- Input fuzz: random tap and swipe storms against the core never corrupt the board, including storms with a wide, stationary "palm" pointer held down throughout, which must never block the other fingers.
 
 I will add a Playwright smoke test later (the environment has Chromium) that loads the built app, plays a few moves and checks the service worker caches everything.
 
@@ -368,12 +382,12 @@ I will add a Playwright smoke test later (the environment has Chromium) that loa
 
 **Recommendation: GitHub Pages, deployed by GitHub Actions on every push to `main`.** It is free, it is HTTPS (which a PWA needs), and it is the least work for you: one setting to flip once, then every build is live about a minute after I push.
 
-The URL will be `https://dustyshelf2455.github.io/glimmerfall/` once you rename the repository (decided in Section 2). Until the rename it answers at `.../HarperCrush/`; the app is built for the `/glimmerfall/` path, so please rename before installing it on your phone.
+The URL will be `https://dustyshelf2455.github.io/glimmerfall/` once you rename the repository (decided in Section 2). Until then the same site answers at `.../HarperCrush/`. The site is built with relative paths, so it works at either address and the mockups can go up before the rename. What cannot wait is installing: GitHub does not redirect the Pages address after a rename, so anything installed from the old address would stop working. Please rename before the game goes onto your Home Screen.
 
 **What you need to do, once:**
 
 1. Open the repository on github.com, then **Settings** (the repo's settings tab, not your account's).
-2. Under **General**, in **Repository name**, change `HarperCrush` to `glimmerfall` and tap **Rename**. GitHub redirects the old name, and I will update the remote on my side.
+2. Under **General**, in **Repository name**, change `HarperCrush` to `glimmerfall` and tap **Rename**. GitHub redirects the repository page and git remotes from the old name, but not the Pages site: the old `.../HarperCrush/` address simply stops working and the site reappears at `.../glimmerfall/`. I will update the remote on my side.
 3. In the left sidebar choose **Pages**.
 4. Under **Build and deployment**, set **Source** to **GitHub Actions**. There is nothing else to pick.
 5. The repository currently has no `main` branch (only the two `claude/...` branches). Once you approve this design, I will create `main` from the approved branch and push it. Then in **Settings → General → Default branch**, switch the default to `main`. That is the branch the deployment watches.
@@ -399,7 +413,7 @@ These are written for iOS 26. iOS 27 should be the same or very close; if a menu
 4. Make sure **Open as Web App** is turned **on**. (This is new in iOS 26. Off makes a plain bookmark that opens in Safari with the address bar, which we do not want.)
 5. Tap **Add**. The icon appears on the Home Screen. Open the game from that icon, never from Safari, so it runs full screen.
 
-If you move the icon into a folder or the dock, nothing changes.
+If you move the icon into a folder or the Dock, nothing changes. Do not delete and re-add the icon: an installed web app keeps its saved data inside itself, so deleting the icon erases her progress.
 
 ### 5.2 Guided Access: lock the phone to the game
 
@@ -409,7 +423,7 @@ Guided Access is the single most useful thing here. It disables the home gesture
 
 1. **Settings → Accessibility → Guided Access**, and turn **Guided Access** on.
 2. Tap **Passcode Settings → Set Guided Access Passcode** and choose a code Harper will not know. Turn on **Face ID** so you can end a session by looking at the phone.
-3. Back in Guided Access, set **Display Auto-Lock** to **Never** (or 15 minutes if you prefer; the game also keeps the screen awake itself while she plays).
+3. Back in Guided Access, set **Display Auto-Lock** to **15 minutes**, the longest choice short of Never. While she is playing, the game holds the screen awake itself, and her touches reset the iPhone's idle timer anyway, so this never bites mid-play. It matters at the other end: when the session comes to rest (3.8) or she has stopped touching for a while (4.4), the game lets go of the screen, and this setting is what then lets the phone go dark. With Never, that release would do nothing inside Guided Access and the screen would stay lit until you end the session.
 4. Turn on **Accessibility Shortcut** so a triple-click of the side button starts Guided Access.
 
 **Start a session (about three seconds, one-handed):**
@@ -431,15 +445,15 @@ Guided Access already blocks notifications. This covers the moments you hand the
 2. Name it **Harper**, pick a colour and a glyph (the moon or a star), tap **Next**, then **Customize Focus**.
 3. Under **Allowed Notifications**, tap **People**: choose **Allow Notifications From** and add Jane (and anyone whose call you must take). Turn on **Allow Repeated Calls** so a true emergency gets through. Then tap **Apps** and allow none.
 4. Under **Options**, turn **Show on Lock Screen** off, **Dim Lock Screen** on, and leave **Hide Notification Badges** on.
-5. To turn it on quickly: swipe down from the top-right for Control Center, tap the **Focus** tile, tap **Harper**. To make it one press: **Settings → Action Button**, choose **Focus**, select **Harper**. (This replaces Silent mode on the Action Button; Silent is still one tap away in Control Center. Your call.)
+5. To turn it on quickly: swipe down from the top-right for Control Center, tap the **Focus** tile, tap **Harper**. To make it one press: **Settings → Action Button**, choose **Focus**, select **Harper**. This replaces Silent mode on the Action Button. Silent Mode is not in Control Center by default, so first add it: open Control Center, long-press an empty area, tap **Add a Control**, search for **Silent Mode** and add it. After that Silent really is one tap away, and it is also a switch under **Settings → Sounds & Haptics**. Your call.
 
 ### 5.4 Other settings worth checking
 
 - **Portrait Orientation Lock:** Control Center → the padlock-with-arrow tile. Leave it on. (Guided Access with Motion off also prevents rotation.)
 - **Back Tap:** Settings → Accessibility → Touch → Back Tap. Make sure both are **Off**, or a thump on the back of the phone could trigger a screenshot or Control Center.
-- **Siri by side button:** Guided Access disables the side button. Outside Guided Access, a long hold brings up Siri; nothing to do about that except Guided Access.
+- **Siri by side button:** Guided Access disables the side button entirely. For the times you hand the phone over without Guided Access, stop a long hold from opening Siri over the game: **Settings → Apple Intelligence & Siri → Talk & Type to Siri** (called **Talk to Siri** on some builds) and turn off **Press Side Button for Siri**. The same switch is also at **Settings → Accessibility → Side Button → Press and Hold to Speak → Off**. Siri still answers your voice if you use it, and a long hold on the side button then does nothing.
 - **Screen Time:** if you use Content Restrictions for web content, add the game's address to **Always Allow**, or the game will be blocked.
-- **Do not clear Safari website data** (Settings → Apps → Safari → Clear History and Website Data) while the game is installed; on current iOS the installed app's data is separate, but it is the one action that could plausibly touch it. If progress is ever lost, the panel's **Map position** setting puts her back on her lantern.
+- **Her progress lives inside the installed app.** Deleting the icon deletes it. Clearing Safari's data (Settings → Apps → Safari → Clear History and Website Data) does not touch it on current iOS, but I would still avoid it while the game is installed. If progress is ever lost, the panel's **Map position** setting puts her back on her lantern.
 - **Brightness in the dark:** the game has its own night dimmer. iOS's **Reduce White Point** (Settings → Accessibility → Display & Text Size) is a good extra for a dark cabin.
 
 ---
@@ -448,17 +462,17 @@ Guided Access already blocks notifications. This covers the moments you hand the
 
 Each stage ends with something you can open on your phone and react to. I will not start a stage until the previous one has had your feedback, except where the next stage is pure infrastructure.
 
-**Stage 0: design (this document).** You confirm the understanding, answer the questions, pick a direction or ask for changes.
+**Stage 0: design (this document).** The seven questions are answered (Section 2). You confirm the understanding in Section 1, weigh in on the judgment calls in Section 7, and give the go-ahead to create the `main` branch (Section 8).
 
 **Stage 1: look, sound and pipeline.** Repo skeleton (TypeScript, Vite, Vitest), the GitHub Pages deployment, and a mockup page under `/mockups/` with: the three visual directions, each a full board at real size with one power animating and a glimpse of the map including the three companion creatures; and the three music sketches from 3.11 with tap-to-listen buttons and their wind-down forms. You pick a look and a musical feel. *You do: the repository rename, the one-time Pages setting and the default branch.*
 
-**Stage 2: the feel prototype.** A playable Calm-mode board with the chosen look: 6 by 7, five gem types, swipe and tap-tap, gravity, cascades, hints, reshuffle, the full sound set for matches and cascades, the chosen music playing under it with chimes drawn from its chords, and two powers (Comet and Prism Orb) with their effects and sounds. Installable, offline, saves and resumes. The core tests for matching, cascades, generation and reshuffle. This is where we tune weight, timing and sound on your phone until it feels right. *You do: install it, play it yourself first, then let Harper try it in a calm moment.*
+**Stage 2: the feel prototype.** A playable Calm-mode board with the chosen look: 6 by 7, four gem types as in the first area (3.2) with a switch to try five, swipe and tap-tap, gravity, cascades, hints, reshuffle, the full sound set for matches and cascades, the chosen music playing under it with chimes drawn from its chords, and two powers (Comet and Prism Orb) with their effects and sounds. Installable, offline, saves and resumes. The core tests for matching, cascades, generation and reshuffle. This is where we tune weight, timing and sound on your phone until it feels right. *You do: install it, play it yourself first, then let Harper try it in a calm moment.*
 
-**Stage 3: powers, journey and the gate.** The remaining powers and all combinations, discovery gifts and slow-motion first-firings, Calm-mode lantern goals and level completion, the map with areas, the three companion creatures and her choice of them, per-area music voices, the parent gate and panel with mode, sound, hints and the Finish buttons. The launch rule.
+**Stage 3: powers, journey and the gate.** The remaining powers and all combinations, discovery gifts and slow-motion first-firings, Calm-mode lantern goals and level completion, the map with areas, the three companion creatures and her choice of them, per-area music voices, the parent gate and panel with mode, sound, hints and the Finish buttons in a provisional form that ends the current level at the map transition (their wind-down and resting-scene behaviour arrives in Stage 5). The launch rule.
 
 **Stage 4: Play mode.** The level generator with shaped boards, frost, vines, cloud puffs and moonstone, the four goal types, the difficulty ramp and setting, and the completability tests.
 
-**Stage 5: endings.** The session timer, wind-down softening, the resting scene, the breathing glow, the rest-until rule, the night dimmer, and the battery behaviour that goes with them.
+**Stage 5: endings.** The session timer, wind-down softening, the resting scene, the full behaviour of the two Finish buttons and New session, the breathing glow, the rest-until rule, the night dimmer, and the battery behaviour that goes with them.
 
 **Stage 6: polish and hardening.** Performance profiling on your phone during the biggest effects, Reduce Motion, the haptics experiment, area creatures and cameos, the optional discoveries book, launch background and icons, a Playwright smoke test, and a README with the iPhone setup from Section 5 kept up to date.
 
@@ -470,18 +484,19 @@ Throughout: tests run on every push, and every push to `main` deploys.
 
 Things where I have a recommendation but you may feel differently:
 
-1. **Cell size versus board size.** 6 wide in Calm mode (60-point cells) and 7 wide in Play. If you would rather one consistent board, 7 wide works for both.
-2. **Peeking at the map by tapping the companion** (3.5). Nice for anticipation; drop it if she gets lost there.
+1. **Cell size versus board size.** 6 wide in Calm mode (61-point cells) and 7 wide in Play. If you would rather one consistent board, 7 wide works for both.
+2. **Peeking at the map by holding the companion** (3.5). Nice for anticipation; drop it if she gets lost there.
 3. **The rest scene responds to taps with twinkles** (3.8) rather than being completely still. I think a gently responsive sky is a better bridge to handing the phone back than a dead screen, but a still scene is a one-line change.
-4. **Rest lasts 30 minutes, then a cold launch starts fresh** (3.8). The strict alternative is "only a grown-up can restart", which protects the ending but costs you the gate every time.
-5. **Sound follows Silent mode on the phone speaker by default** (3.11), with "play even on Silent" as an option. Over car speakers or headphones it plays regardless, as you asked.
-6. **Music on by default at a low level in both modes** (3.11), with separate music and chime switches.
-7. **Starburst** (the plus shape) is the one power whose shape is close to Bloom's T. It adds a discovery; it also adds a subtle rule. I lean toward keeping it as a later-area discovery, but it is the first thing I would cut.
+4. **Rest lasts 30 minutes, then the next launch starts fresh** (3.8). The strict alternative is "only a grown-up can restart", which protects the ending but costs you the gate every time.
+5. **Sound follows Silent mode on the phone speaker by default** (3.11), with "play even on Silent" as an option. Over car speakers or headphones it plays regardless, as you asked; to be confirmed in the car in Stage 2.
+6. **Music on by default at the soft level in both modes** (3.11), with separate music and chime switches.
+7. **Starburst** (the plus shape) is the one power whose shape is close to Bloom's T, and in the first draft its effect duplicated Comet + Comet. It is now the one power that moves diagonally, which gives it a reason to exist, but it still adds a subtle rule. I lean toward keeping it as a later-area discovery, but it is the first thing I would cut.
 8. **The discoveries book** (3.7): additive and gentle, but it is a screen that is not the board. I have placed it last and would only add it if Play mode wants more sense of accumulation.
-9. **Haptics experiment** (3.12): off by default; worth ten minutes to try.
+9. **Haptics experiment** (3.12): on the current iOS this can only be a tap-time tick on matching tap-tap swaps, never on swipes or cascades; off by default; worth ten minutes to try.
+10. **Powers that drop in unearned** (3.4). In Calm mode a ready-made power occasionally arrives with the refill without her making it. It is pure generosity and a nice surprise, but strictly it is a reward on a random schedule rather than something her own swap produced, which is the shape of mechanic your guiding principle rules out. The refill bias, which already rises the longer she goes without a power, gets most of the same effect through her own moves. My lean is to keep the gift, Calm mode only and rare; say if you would rather every power come from her own hand.
 
 ---
 
 ## 8. What happens next
 
-The seven questions are answered. What remains before Stage 1 starts: any corrections to Section 1, any objections to the judgment calls in Section 7, and your go-ahead for me to create the `main` branch for deployment. On your side, the repository rename and the one-time Pages setting (4.6) can be done any time before the mockups go up. Stage 1 then delivers the repo skeleton, the deployment, the three visual directions and the three music sketches for your phone.
+The seven questions are answered. What remains before Stage 1 starts: any corrections to Section 1, any objections to the judgment calls in Section 7, and your go-ahead for me to create the `main` branch for deployment. On your side, the one-time Pages setting (4.6) can be done any time before the mockups go up, and the repository rename any time before the game is installed on your phone. Stage 1 then delivers the repo skeleton, the deployment, the three visual directions and the three music sketches for your phone.
