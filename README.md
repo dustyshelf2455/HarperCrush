@@ -24,7 +24,7 @@ A few things are settable from the address bar when you open the game in Safari 
 
 | Address | Effect |
 |---------|--------|
-| `.../?debug=1` | a small overlay showing audio state, lantern, area, mode and gift |
+| `.../?debug=1` (or `.../#debug`) | a small overlay showing the build date, audio state, lantern, area, mode, gift and update state |
 | `.../?reset=1` | throw away the saved journey and start fresh at lantern 1 |
 | `.../?level=15` | open straight at that lantern on a fresh board (for example the Sprite's gift) |
 | `.../?seed=123` | a particular fresh board, for reproducing something |
@@ -61,6 +61,8 @@ index.html    the game
 ## Deploying
 
 Every push to `main` runs `.github/workflows/deploy.yml`: typecheck, tests, build, then deploy `dist/` to GitHub Pages. After a push, the **Actions** tab shows the run; the site updates about a minute later.
+
+**How an update reaches a phone.** The app is served by a service worker from its own cache, so it opens instantly and offline. A new build is downloaded in the background; it takes over at a launch, never mid-play: if the new build is already waiting when the app opens, the page switches to it at once (a quick dark reload before the first touch); if the download only finishes after play has begun, the new build is used at the next launch. In Safari, a tab left open on the game keeps the old build alive, so to see a fresh deploy right away either close every Safari tab showing the game and open the address again, or open the address in a Private tab (Private tabs have no service worker and always fetch the live site). The `?debug=1` overlay shows the build date and the update state (`current`, `installing`, `adopting`, `next-launch`).
 
 One-time repository setting, which the workflow cannot do by itself: **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until that is set, the run fails at the `configure-pages` step with "Resource not accessible by integration". After setting it, open the failed run in the **Actions** tab and choose **Re-run all jobs**, or push any commit to `main`.
 

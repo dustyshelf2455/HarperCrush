@@ -110,7 +110,7 @@ export function optionsFromUrl(): AppOptions {
   const q = new URLSearchParams(location.search);
   const level = Number(q.get('level'));
   return {
-    debug: q.get('debug') === '1',
+    debug: q.get('debug') === '1' || location.hash === '#debug',
     seed: q.get('seed') ? Number(q.get('seed')) : null,
     reset: q.get('reset') === '1',
     level: Number.isFinite(level) && level >= 1 ? Math.floor(level) : null,
@@ -851,7 +851,7 @@ export class App {
         `lantern ${this.level} ${areaForLevel(this.level)} ${this.mode}${this.pendingMode ? ' -> ' + this.pendingMode : ''} ${this.phase}`,
         `matches ${this.matches}/${boardFor(this.mode).goal} moves ${this.state.moves} gift ${gift}`,
         `unlocked ${this.state.unlocked.join(',')} seen ${[...this.seen].join(',')}`,
-        `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'}`,
+        `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'} update ${document.documentElement.dataset.update ?? '-'}`,
         this.engine.lastError ? `err ${this.engine.lastError}` : '',
       ].join('\n');
     }, 500);
