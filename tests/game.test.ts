@@ -237,6 +237,9 @@ function replay(board: Board, steps: ReturnType<typeof applySwap>['steps']): Boa
       }
       case 'fire':
         break;
+      case 'transform':
+        st.changes.forEach((ch) => put(ch.cell, ch.piece));
+        break;
       case 'clear':
         st.cells.forEach((c) => put(c, null));
         break;
@@ -266,14 +269,19 @@ describe('power rules', () => {
   const rowComet = (type: GemType): Board[number][number] => ({ type, power: 'cometRow' });
   const colComet = (type: GemType): Board[number][number] => ({ type, power: 'cometCol' });
 
-  it('an orb swapped onto a comet sets the comet off too', () => {
+  it('an orb swapped onto a comet is the Comet Shower: every heart becomes a comet and they all fly', () => {
+    // Stage 3 rule (DESIGN.md 3.4): Orb + Comet turns every gem of that colour into a comet. In Stage 2 both simply fired.
     const board = fromRows(['OHSDA', 'DLSAH', 'LAHDS', 'HSDAL', 'SDLHA']);
     (board[0] as Board[number])[1] = rowComet('heart');
+    const hearts = board.flat().filter((p) => p?.type === 'heart').length;
     const r = applySwap(state(board), { row: 0, col: 0 }, { row: 0, col: 1 });
-    const fires = r.steps.filter((st) => st.kind === 'fire');
-    expect(fires.map((f) => (f.kind === 'fire' ? f.power : ''))).toEqual(expect.arrayContaining(['orb', 'cometRow']));
-    const comet = fires.find((f) => f.kind === 'fire' && f.power === 'cometRow');
-    expect(comet && comet.kind === 'fire' && comet.cells.every((c) => c.row === 0)).toBe(true);
+    const transform = r.steps.find((st) => st.kind === 'transform');
+    expect(transform && transform.kind === 'transform' && transform.combo).toBe('cometShower');
+    expect(transform && transform.kind === 'transform' && transform.changes.length).toBe(hearts - 1);
+    const fires = r.steps.filter((st) => st.kind === 'fire' && st.combo === 'cometShower');
+    expect(fires.length).toBe(hearts);
+    const first = fires[0];
+    expect(first && first.kind === 'fire' && first.power === 'cometRow' && first.cells.every((c) => c.row === 0)).toBe(true);
     expect(replay(board, r.steps)).toEqual(r.state.board);
   });
 
