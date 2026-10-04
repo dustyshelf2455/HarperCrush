@@ -493,7 +493,22 @@ export class App {
     if (rest) this.player.setWindDown(true);
   }
 
+  /** The board must belong to the mode she is in: a switch made on the map or in rest takes effect here. */
+  private ensureBoardForMode(): void {
+    if (this.pendingMode) {
+      this.mode = this.pendingMode;
+      this.pendingMode = null;
+    }
+    const spec = boardFor(this.mode);
+    if (this.state.rows !== spec.rows || this.state.cols !== spec.cols) {
+      this.state = this.freshState(this.level, this.mode);
+      this.matches = 0;
+      this.placeLevelGift();
+    }
+  }
+
   private leaveMap(): void {
+    this.ensureBoardForMode();
     this.map.hide();
     this.phase = 'playing';
     this.view.setState(this.state);
