@@ -42,12 +42,12 @@ export class PointerInput {
     el.addEventListener('pointermove', this.move);
     el.addEventListener('pointerup', this.up);
     el.addEventListener('pointercancel', this.cancel);
-    // Belt and braces against zoom and scroll: the canvas owns every touch.
+    // touch-action: none (CSS) stops scroll and zoom. Do not preventDefault touchstart or
+    // touchend: on iOS that cancels the click, and the click is what ticks the haptic switch.
     const block = (e: Event): void => e.preventDefault();
-    el.addEventListener('touchstart', block, { passive: false });
-    el.addEventListener('touchmove', block, { passive: false });
     el.addEventListener('gesturestart', block);
     el.addEventListener('contextmenu', block);
+    el.addEventListener('dblclick', block);
   }
 
   destroy(): void {

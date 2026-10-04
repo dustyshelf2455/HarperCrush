@@ -18,9 +18,15 @@ Updated 4 October 2026, end of Stage 2.
 - Wants the largest playable surface: board is now 6 by 9 with 8-pixel gutters.
 - Companion and path art are placeholders and need real taste and polish (Stage 3).
 
+## Open issue: sound and haptics on the phone (4 October, evening)
+
+Second play-test still had no sound and no haptic tick in the installed app, while other apps were fine. Two causes were found in code and fixed in the same push: (1) the touch surface called preventDefault on touchstart, which on iOS cancels the click that ticks the haptic switch; (2) the audio relied on `navigator.audioSession.type = 'playback'` alone, so if iOS did not honour it and the phone was on Silent, nothing played. Now a looping silent media element is also started on the first touch (the long-standing way to move a web app onto the playback session), the unlock retries on pointerup too, and `?debug=1` shows the build date, context state, session type and keep-alive state. The bottom row being cut off in the installed app was the canvas being sized from the padded stage; it is now sized from its own content box.
+
+**If sound is still missing:** ask for a screenshot of the game opened in Safari with `?debug=1` after one tap. `audio running` plus `keepalive playing` with no sound means Silent mode is winning: try `?silent=follow` toggled off/on, check Silent mode via the Action Button, and check the ringer volume (ambient-session volume follows the ringer, not media, on some iOS versions). `audio suspended` or `keepalive blocked` means the gesture is not reaching the unlock in the installed app: move the unlock into a `click` handler on the touch surface and test again. Also confirm the overlay's build date matches the latest deploy; if it is old, the installed app is still on the previous service-worker cache: close it fully and open it twice, or delete the icon and re-add it (progress is not important yet).
+
 ## Next
 
-1. **Confirm sound on the phone** with the new default (`?debug=1` shows `audio running`). If still silent, check whether the first touch reaches the audio unlock in the installed app; the overlay shows the context state and any error.
+1. **Confirm sound and the haptic tick on the phone** using the steps above.
 2. **Stage 3** per DESIGN.md Section 6: remaining powers (Bloom, Lantern Sprite, Starburst, Moonrise, Aurora) and all combinations with their trigger rules (3.4), discovery gifts with slowed first firings, the map between levels with areas and the companion hop, the three companions and her choice of them with a real art pass, per-area music voices, the grown-up gate and parent panel (mode, sound, hints, Finish buttons), the launch rule (3.6).
 3. **Stage 4** Play mode goals and obstacles (3.7) with completability tests.
 4. **Stage 5** endings and wind-down (3.8). **Stage 6** polish, performance on the phone, Reduce Motion, README install guide.

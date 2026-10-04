@@ -13,6 +13,35 @@ import type { MelodyInstrument } from './composer';
 const MASTER_LEVEL = 0.55;
 const SILENT = 0.0001;
 
+/** 1 s of silence: 8 kHz, 8-bit mono PCM WAV. */
+const SILENT_WAV = (() => {
+  const rate = 8000;
+  const samples = rate;
+  const header = new Uint8Array(44);
+  const view = new DataView(header.buffer);
+  const str = (o: number, s: string): void => {
+    for (let i = 0; i < s.length; i++) header[o + i] = s.charCodeAt(i);
+  };
+  str(0, 'RIFF');
+  view.setUint32(4, 36 + samples, true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  str(36, 'data');
+  view.setUint32(40, samples, true);
+  const body = new Uint8Array(samples).fill(128);
+  let bin = '';
+  for (const b of header) bin += String.fromCharCode(b);
+  for (const b of body) bin += String.fromCharCode(b);
+  return 'data:audio/wav;base64,' + btoa(bin);
+})();
+
 interface Partial {
   ratio: number;
   gain: number;
@@ -170,6 +199,8 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private unlocked = false;
   private silentMode: SilentMode = 'ignore';
+  private keepAlive: HTMLAudioElement | null = null;
+  keepAliveState = 'off';
   lastError = '';
 
   /**
@@ -193,9 +224,47 @@ export class AudioEngine {
   }
 
   /** For the debug overlay. */
-  get status(): { state: string; unlocked: boolean; session: string; sampleRate: number } {
+  get status(): { state: string; unlocked: boolean; session: string; sampleRate: number; keepAlive: string } {
     const nav = navigator as Navigator & { audioSession?: { type: string } };
-    return { state: this.ctx?.state ?? 'none', unlocked: this.unlocked, session: nav.audioSession?.type ?? 'n/a', sampleRate: this.ctx?.sampleRate ?? 0 };
+    return { state: this.ctx?.state ?? 'none', unlocked: this.unlocked, session: nav.audioSession?.type ?? 'n/a', sampleRate: this.ctx?.sampleRate ?? 0, keepAlive: this.keepAliveState };
+  }
+
+  /**
+   * iOS plays Web Audio on the "ambient" session, which Silent mode mutes, unless a
+   * media element is playing: then the app is treated as a media player. A looping,
+   * silent clip is the long-standing way to claim that, on every iOS version.
+   */
+  private startKeepAlive(): void {
+    if (this.silentMode !== 'ignore') {
+      this.stopKeepAlive();
+      return;
+    }
+    if (!this.keepAlive) {
+      const el = document.createElement('audio');
+      el.setAttribute('playsinline', '');
+      el.setAttribute('x-webkit-airplay', 'deny');
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = 0.01;
+      // One second of 8 kHz 8-bit silence as a WAV data URI (small, decodes everywhere).
+      el.src = SILENT_WAV;
+      this.keepAlive = el;
+    }
+    const p = this.keepAlive.play();
+    this.keepAliveState = 'starting';
+    if (p) {
+      p.then(() => (this.keepAliveState = 'playing')).catch((e) => {
+        this.keepAliveState = 'blocked';
+        this.lastError = `keepalive: ${String(e)}`;
+      });
+    }
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAlive) {
+      this.keepAlive.pause();
+      this.keepAliveState = 'off';
+    }
   }
 
   get context(): AudioContext | null {
@@ -214,6 +283,7 @@ export class AudioEngine {
   async unlock(): Promise<AudioContext | null> {
     if (typeof AudioContext === 'undefined') return null;
     this.applySession();
+    if (this.keepAliveState !== 'playing') this.startKeepAlive();
     if (!this.ctx) {
       try {
         this.ctx = new AudioContext();
@@ -242,11 +312,13 @@ export class AudioEngine {
 
   /** The page is hidden: nothing may keep sounding from a pocket or a bag. */
   suspend(): void {
+    this.stopKeepAlive();
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend();
   }
 
   /** The page is back, or the user touched it after an interruption. */
   resume(): void {
+    if (this.unlocked && this.keepAliveState !== 'playing') this.startKeepAlive();
     if (this.ctx && this.unlocked && this.ctx.state !== 'running') void this.ctx.resume();
   }
 

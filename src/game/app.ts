@@ -112,6 +112,8 @@ export class App {
       onSwipe: (from, to) => this.trySwap(from, to),
     });
     this.setupHaptics(surface);
+    // A second chance at the audio unlock on the release of the touch, which every browser counts as a gesture.
+    surface.addEventListener('pointerup', () => this.unlockAudio(), { passive: true });
     if (opts.debug) this.setupDebug();
     window.addEventListener('resize', () => this.view.resize());
     document.addEventListener('visibilitychange', () => (document.hidden ? this.sleep() : this.wakeUp()));
@@ -273,7 +275,8 @@ export class App {
       const s = this.engine.status;
       const nav = navigator as Navigator & { standalone?: boolean };
       el.textContent = [
-        `audio ${s.state} unlocked ${s.unlocked} session ${s.session}`,
+        `build ${__BUILD_DATE__}`,
+        `audio ${s.state} unlocked ${s.unlocked} session ${s.session} keepalive ${s.keepAlive}`,
         `music ${this.player.current?.id ?? 'off'} sr ${s.sampleRate}`,
         `level ${this.level} matches ${this.matches}/${GOAL_MATCHES} moves ${this.state.moves}`,
         `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'}`,

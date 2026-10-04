@@ -263,9 +263,12 @@ export class GameView {
   }
 
   resize(): void {
-    const rect = this.canvas.parentElement?.getBoundingClientRect();
-    const width = Math.max(280, Math.floor(rect?.width ?? window.innerWidth));
-    const height = Math.max(400, Math.floor(rect?.height ?? window.innerHeight));
+    // The canvas is 100% of the stage's content box, which excludes the safe-area padding.
+    this.canvas.style.width = '100%';
+    this.canvas.style.height = '100%';
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(280, Math.floor(rect.width || window.innerWidth));
+    const height = Math.max(400, Math.floor(rect.height || window.innerHeight));
     const pad = 8;
     const hud = 108; // lantern and companion row plus the goal stars
     const cell = Math.min((width - pad * 2) / this.state.cols, (height - hud - 24) / this.state.rows);
@@ -277,8 +280,6 @@ export class GameView {
     const boardY = hud + Math.max(6, spare * 0.6 - 8);
     const hudY = boardY - 70;
     this.layout = { width, height, cell, boardX, boardY, hudY };
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
     this.canvas.width = Math.round(width * this.dpr);
     this.canvas.height = Math.round(height * this.dpr);
     this.ambient = this.style.createAmbient(width, height, 5);
