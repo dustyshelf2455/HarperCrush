@@ -1,6 +1,6 @@
 # Status
 
-Updated 4 October 2026, end of Stage 2.
+Updated 4 October 2026, end of Stage 2 (after the Stage 2 code review).
 
 ## Where things are
 
@@ -23,6 +23,10 @@ Updated 4 October 2026, end of Stage 2.
 Second play-test still had no sound and no haptic tick in the installed app, while other apps were fine. Two causes were found in code and fixed in the same push: (1) the touch surface called preventDefault on touchstart, which on iOS cancels the click that ticks the haptic switch; (2) the audio relied on `navigator.audioSession.type = 'playback'` alone, so if iOS did not honour it and the phone was on Silent, nothing played. Now a looping silent media element is also started on the first touch (the long-standing way to move a web app onto the playback session), the unlock retries on pointerup too, and `?debug=1` shows the build date, context state, session type and keep-alive state. The bottom row being cut off in the installed app was the canvas being sized from the padded stage; it is now sized from its own content box.
 
 **If sound is still missing:** ask for a screenshot of the game opened in Safari with `?debug=1` after one tap. `audio running` plus `keepalive playing` with no sound means Silent mode is winning: try `?silent=follow` toggled off/on, check Silent mode via the Action Button, and check the ringer volume (ambient-session volume follows the ringer, not media, on some iOS versions). `audio suspended` or `keepalive blocked` means the gesture is not reaching the unlock in the installed app: move the unlock into a `click` handler on the touch surface and test again. Also confirm the overlay's build date matches the latest deploy; if it is old, the installed app is still on the previous service-worker cache: close it fully and open it twice, or delete the icon and re-add it (progress is not important yet).
+
+## Review fixes applied (4 October, late evening)
+
+A second code review of Stage 2 found thirteen real issues; all are fixed and covered by tests where the logic is pure. Core: swapping an orb onto a comet fires both; swapping two powers fires both; a comet swapped into its own four fires before the new power is created; hint strength now has tiers (orb swaps and power lines strongest) so the hint reflects what the swap does; chain firing no longer skips the anchor piece. View and input: the frame loop stays live while a celebration or queued steps are pending; a resting finger is ignored on move as well as on down; a pending swap is dropped once the level is done so a tap cannot carry into the next board. Audio: the keep-alive state reported by `?debug=1` is the element's real state, music restarts after the tab was hidden, and suspend/resume fade instead of cutting. Tests: a replay helper proves a random move sequence reproduces the same final board and that saved state round-trips.
 
 ## Next
 

@@ -178,6 +178,7 @@ export function isValidSwap(state: GameState, a: Cell, b: Cell): boolean {
   const pb = at(state.board, b.row, b.col);
   if (!pa || !pb) return false;
   if (pa.power === 'orb' || pb.power === 'orb') return true;
+  if (pa.power && pb.power) return true; // two powers swapped set each other off
   if (pa.type === pb.type) return false;
   const board = cloneBoard(state.board);
   set(board, a, pb);
@@ -207,16 +208,20 @@ export function findValidSwaps(state: GameState): SwapOption[] {
   return out;
 }
 
+/** 6: sets off a power already on the board; 5: makes an orb; 4: makes a comet; 3: a plain three. */
 function swapStrength(state: GameState, a: Cell, b: Cell): number {
   const pa = at(state.board, a.row, a.col);
   const pb = at(state.board, b.row, b.col);
-  if (pa?.power === 'orb' || pb?.power === 'orb') return 5;
+  if (pa?.power === 'orb' || pb?.power === 'orb') return 6;
+  if (pa?.power && pb?.power) return 6;
   const board = cloneBoard(state.board);
   set(board, a, pb);
   set(board, b, pa);
   let best = 0;
   for (const line of findLines(board)) {
-    if (line.cells.some((c) => same(c, a) || same(c, b))) best = Math.max(best, line.cells.length);
+    if (!line.cells.some((c) => same(c, a) || same(c, b))) continue;
+    if (line.cells.some((c) => at(board, c.row, c.col)?.power)) return 6;
+    best = Math.max(best, line.cells.length);
   }
   return best;
 }
@@ -321,18 +326,20 @@ export function applySwap(state: GameState, a: Cell, b: Cell): Resolution {
         }
       });
       for (const g of groups) for (const c of g.cells) round.set(key(c), c);
-      // Comets caught in a clear go off; orbs caught in a clear clear the most common colour.
-      let chained = true;
-      while (chained) {
-        chained = false;
-        for (const c of [...round.values()]) {
-          const p = at(board, c.row, c.col);
-          if (!p || !p.power || fired.has(key(c))) continue;
-          if (creations.some((cr) => same(cr.cell, c))) continue;
-          chained = true;
-          if (p.power === 'orb') fireOrb(board, c, mostCommonType(board, state.types), round, fired, steps);
-          else fireComet(board, c, round, fired, steps);
-        }
+    }
+
+    // Powers caught in the round go off: comets sweep, orbs clear the most common colour.
+    // This runs whether the round came from lines or from a power swap, and a power at a
+    // creation anchor fires too; the new power is placed after the clear.
+    let chained = true;
+    while (chained) {
+      chained = false;
+      for (const c of [...round.values()]) {
+        const p = at(board, c.row, c.col);
+        if (!p || !p.power || fired.has(key(c))) continue;
+        chained = true;
+        if (p.power === 'orb') fireOrb(board, c, mostCommonType(board, state.types), round, fired, steps);
+        else fireComet(board, c, round, fired, steps);
       }
     }
 

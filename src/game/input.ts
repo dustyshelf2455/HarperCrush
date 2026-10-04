@@ -57,6 +57,11 @@ export class PointerInput {
     this.el.removeEventListener('pointercancel', this.cancel);
   }
 
+  /** A finger that landed and has sat still: a palm or a resting thumb. */
+  private isResting(p: Tracked, now: number): boolean {
+    return !p.gestured && !p.parked && Math.hypot(p.x - p.x0, p.y - p.y0) <= PARK_STILL_PX && now - p.t0 >= PARK_AFTER_MS;
+  }
+
   private readonly down = (e: PointerEvent): void => {
     const now = performance.now();
     this.pointers.set(e.pointerId, { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: now, lastMove: now, gestured: false, parked: false });
@@ -67,6 +72,7 @@ export class PointerInput {
     }
     this.handler.onTouch(e.clientX, e.clientY);
     const current = this.primary !== null ? this.pointers.get(this.primary) : undefined;
+    if (current && this.isResting(current, now)) current.parked = true;
     if (!current || current.parked) this.primary = e.pointerId;
   };
 
@@ -84,8 +90,7 @@ export class PointerInput {
     const current = this.primary !== null ? this.pointers.get(this.primary) : undefined;
     if (current && current.id !== p.id && moved > 8) {
       // Another finger is moving. If the primary has sat still long enough, it is a resting hand: hand over.
-      const still = Math.hypot(current.x - current.x0, current.y - current.y0) <= PARK_STILL_PX;
-      if (!current.gestured && still && now - current.t0 >= PARK_AFTER_MS) {
+      if (this.isResting(current, now)) {
         current.parked = true;
         this.primary = p.id;
       }

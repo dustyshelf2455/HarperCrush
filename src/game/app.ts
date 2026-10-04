@@ -122,6 +122,8 @@ export class App {
     void this.requestWakeLock();
     // Save at once so even an untouched fresh board resumes exactly.
     this.save();
+    // A save written at the moment the row completed: finish that level now.
+    if (this.progress >= 1) this.nextLevel();
   }
 
   private fresh(): GameState {
@@ -207,7 +209,7 @@ export class App {
     if (b.row < 0 || b.col < 0 || b.row >= ROWS || b.col >= COLS) return;
     this.select(null);
     if (this.view.busy) {
-      this.pending = { a, b };
+      if (this.progress < 1) this.pending = { a, b }; // never carry a swap across the level's end
       return;
     }
     const valid = isValidSwap(this.state, a, b);
@@ -242,6 +244,8 @@ export class App {
   }
 
   private nextLevel(): void {
+    this.pending = null;
+    this.select(null);
     this.level += 1;
     this.progress = 0;
     this.matches = 0;
@@ -312,13 +316,12 @@ export class App {
   }
 
   private wakeUp(): void {
-    this.engine.resume();
-    if (this.musicWanted && this.engine.isRunning) void this.player.start(LULLABY, 4242 + this.level, false, null);
+    void this.engine.resume().then(() => {
+      if (this.musicWanted && this.engine.isRunning && !this.player.current) void this.player.start(LULLABY, 4242 + this.level, false, null);
+    });
     this.view.start();
     this.armHint();
     void this.requestWakeLock();
-    // Save at once so even an untouched fresh board resumes exactly.
-    this.save();
   }
 
   private async requestWakeLock(): Promise<void> {

@@ -356,16 +356,14 @@ export class GameView {
     this.draw();
     if (!this.running) return;
     if (moving) {
+      this.active = true;
       this.raf = requestAnimationFrame(this.frame);
     } else {
       // Idle: a slow tick keeps the fireflies and the breathing glow alive cheaply.
       this.active = false;
       this.idleTimer = setTimeout(() => {
+        this.idleTimer = null;
         if (!this.running || this.active) return;
-        const t = performance.now();
-        this.time += t - this.lastNow;
-        this.lastNow = t;
-        this.draw();
         this.frame(performance.now());
       }, 1000 / IDLE_FPS);
     }
@@ -423,6 +421,7 @@ export class GameView {
       }
     }
     if (this.step(dt)) moving = true;
+    if (this.celebrating || this.queue.length > 0 || this.current) moving = true;
     return moving;
   }
 

@@ -226,7 +226,14 @@ export class AudioEngine {
   /** For the debug overlay. */
   get status(): { state: string; unlocked: boolean; session: string; sampleRate: number; keepAlive: string } {
     const nav = navigator as Navigator & { audioSession?: { type: string } };
-    return { state: this.ctx?.state ?? 'none', unlocked: this.unlocked, session: nav.audioSession?.type ?? 'n/a', sampleRate: this.ctx?.sampleRate ?? 0, keepAlive: this.keepAliveState };
+    const keepAlive = this.keepAlive ? (this.keepAliveActive ? 'playing' : this.keepAliveState === 'blocked' ? 'blocked' : 'paused') : 'off';
+    return { state: this.ctx?.state ?? 'none', unlocked: this.unlocked, session: nav.audioSession?.type ?? 'n/a', sampleRate: this.ctx?.sampleRate ?? 0, keepAlive };
+  }
+
+  /** True while the silent clip is really playing; iOS can pause it behind our back. */
+  private get keepAliveActive(): boolean {
+    const el = this.keepAlive;
+    return !!el && !el.paused && !el.ended;
   }
 
   /**
@@ -248,6 +255,9 @@ export class AudioEngine {
       el.volume = 0.01;
       // One second of 8 kHz 8-bit silence as a WAV data URI (small, decodes everywhere).
       el.src = SILENT_WAV;
+      el.addEventListener('pause', () => {
+        if (this.keepAliveState === 'playing') this.keepAliveState = 'paused';
+      });
       this.keepAlive = el;
     }
     const p = this.keepAlive.play();
@@ -283,7 +293,7 @@ export class AudioEngine {
   async unlock(): Promise<AudioContext | null> {
     if (typeof AudioContext === 'undefined') return null;
     this.applySession();
-    if (this.keepAliveState !== 'playing') this.startKeepAlive();
+    if (!this.keepAliveActive) this.startKeepAlive();
     if (!this.ctx) {
       try {
         this.ctx = new AudioContext();
@@ -303,23 +313,43 @@ export class AudioEngine {
     }
     if (!this.unlocked && ctx.state === 'running' && this.master) {
       this.unlocked = true;
-      const t = ctx.currentTime;
-      this.master.gain.setValueAtTime(SILENT, t);
-      this.master.gain.exponentialRampToValueAtTime(MASTER_LEVEL, t + 1.5);
+      this.fadeIn(1.5);
     }
     return ctx;
+  }
+
+  /** Ramp the master from silence; used for the very first sound and after every resume. */
+  private fadeIn(seconds: number): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(t);
+    this.master.gain.setValueAtTime(SILENT, t);
+    this.master.gain.exponentialRampToValueAtTime(MASTER_LEVEL, t + seconds);
   }
 
   /** The page is hidden: nothing may keep sounding from a pocket or a bag. */
   suspend(): void {
     this.stopKeepAlive();
+    if (this.ctx && this.master) {
+      // Silence first, so no half-decayed note cuts back in at full level on resume.
+      const t = this.ctx.currentTime;
+      this.master.gain.cancelScheduledValues(t);
+      this.master.gain.setValueAtTime(SILENT, t);
+    }
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend();
   }
 
-  /** The page is back, or the user touched it after an interruption. */
-  resume(): void {
-    if (this.unlocked && this.keepAliveState !== 'playing') this.startKeepAlive();
-    if (this.ctx && this.unlocked && this.ctx.state !== 'running') void this.ctx.resume();
+  /** The page is back, or the user touched it after an interruption. Resolves once the context runs again. */
+  async resume(): Promise<void> {
+    if (this.unlocked && !this.keepAliveActive) this.startKeepAlive();
+    if (this.ctx && this.unlocked && this.ctx.state !== 'running') {
+      try {
+        await this.ctx.resume();
+      } catch (e) {
+        this.lastError = `resume: ${String(e)}`;
+      }
+    }
+    if (this.unlocked && this.ctx?.state === 'running') this.fadeIn(0.6);
   }
 
   /** A fader pair into the bus and the reverb. Each music sketch gets one so it can be faded as a whole. */
