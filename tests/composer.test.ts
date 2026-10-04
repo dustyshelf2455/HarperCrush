@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { Composer, type MusicEvent } from '../src/audio/composer';
-import { SKETCHES } from '../src/audio/sketches';
+import { Composer, type MusicEvent, type SketchSpec } from '../src/audio/composer';
+import { AREA_SKETCHES, LULLABY, SKETCHES, sketchForArea } from '../src/audio/sketches';
+import { AREA_IDS } from '../src/core/journey';
 import { createRng } from '../src/shared/rng';
 import { isInScale } from '../src/shared/scale';
 
-function run(spec: (typeof SKETCHES)[number], beats: number, seed: number, windDownAt: number | null = null): MusicEvent[] {
+/** The three mockup sketches plus every area's lullaby (the Meadow is LULLABY itself, already in SKETCHES). */
+const ALL_SKETCHES: readonly SketchSpec[] = [...SKETCHES, ...AREA_IDS.map(sketchForArea).filter((s) => s !== LULLABY)];
+
+function run(spec: SketchSpec, beats: number, seed: number, windDownAt: number | null = null): MusicEvent[] {
   const composer = new Composer(spec, createRng(seed));
   const events: MusicEvent[] = [];
   for (let upTo = 2; upTo <= beats; upTo += 2) {
@@ -15,7 +19,7 @@ function run(spec: (typeof SKETCHES)[number], beats: number, seed: number, windD
 }
 
 describe('composer', () => {
-  for (const spec of SKETCHES) {
+  for (const spec of ALL_SKETCHES) {
     describe(spec.id, () => {
       it('only ever plays notes from the pentatonic scale', () => {
         for (const seed of [1, 2, 3]) {
@@ -78,4 +82,54 @@ describe('composer', () => {
       });
     });
   }
+});
+
+describe('area sketches', () => {
+  it('gives every area a sketch with its own id, and keeps the Meadow exactly the chosen lullaby (DESIGN.md 2b)', () => {
+    expect(sketchForArea('meadow')).toBe(LULLABY);
+    expect(AREA_SKETCHES.meadow).toBe(LULLABY);
+    const ids = new Set(AREA_IDS.map((a) => sketchForArea(a).id));
+    expect(ids.size).toBe(AREA_IDS.length);
+    for (const area of AREA_IDS) {
+      const spec = sketchForArea(area);
+      expect(spec.id.startsWith('lullaby')).toBe(true);
+      expect(spec.id).toBe(area === 'meadow' ? 'lullaby' : `lullaby-${area}`);
+    }
+  });
+
+  it('plays each area in its own voice (DESIGN.md 2c, "Area voices")', () => {
+    expect(sketchForArea('meadow').melody.instrument).toBe('celesta');
+    expect(sketchForArea('cave').melody.instrument).toBe('glass');
+    expect(sketchForArea('lagoon').melody.instrument).toBe('water');
+    expect(sketchForArea('castle').melody.instrument).toBe('horn');
+    expect(sketchForArea('garden').melody.instrument).toBe('harp');
+    expect(sketchForArea('peak').melody.instrument).toBe('shimmer');
+    expect(sketchForArea('hollow').melody.instrument).toBe('kalimba');
+  });
+
+  it('stays recognisably the lullaby: the same base and chords, at least four of its six motifs untouched, a near tempo', () => {
+    const lullabyMotifs = LULLABY.melody.motifs.map((m) => JSON.stringify(m));
+    for (const area of AREA_IDS) {
+      const spec = sketchForArea(area);
+      expect(spec.melody.base).toBe(LULLABY.melody.base);
+      expect(spec.melody.motifs.length).toBe(LULLABY.melody.motifs.length);
+      const kept = spec.melody.motifs.filter((m) => lullabyMotifs.includes(JSON.stringify(m))).length;
+      expect(kept, area).toBeGreaterThanOrEqual(4);
+      expect([...spec.chords].map((c) => c.name).sort()).toEqual([...LULLABY.chords].map((c) => c.name).sort());
+      expect(spec.beatsPerChord).toBe(LULLABY.beatsPerChord);
+      expect(Math.abs(spec.bpm - LULLABY.bpm)).toBeLessThanOrEqual(6);
+      expect(spec.windDown.bpm).toBeLessThan(spec.bpm);
+      expect(spec.shimmer).not.toBeNull();
+    }
+  });
+
+  it('keeps every area about as loud as the Meadow', () => {
+    for (const area of AREA_IDS) {
+      const spec = sketchForArea(area);
+      expect(spec.melody.velocity[1]).toBeLessThanOrEqual(LULLABY.melody.velocity[1]);
+      expect(spec.padLevel).toBeLessThanOrEqual(LULLABY.padLevel + 0.05);
+      expect(spec.shimmer?.level ?? 0).toBeLessThanOrEqual(LULLABY.shimmer!.level + 0.03);
+      expect(spec.bass?.level ?? 0).toBeLessThanOrEqual(LULLABY.bass!.level + 0.03);
+    }
+  });
 });
