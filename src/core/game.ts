@@ -6,16 +6,68 @@
  * the presentation should show it: the swap, each clear with the cascade
  * depth, powers created and fired, every fall, and any reshuffle.
  *
- * Stage 2 powers: Comet (four in a line) and Prism Orb (five in a line).
- * Bloom, Sprite and the rest arrive in Stage 3 on top of the same model.
+ * Powers (DESIGN.md 3.4): Comet (four in a line), Prism Orb (five), Bloom
+ * (an L or a T), Lantern Sprite (a 2 by 2 square), Starburst (a plus),
+ * Moonrise (a 2 by 3 block) and Aurora (six or more in a line). Which shapes
+ * count is decided by `GameState.unlocked`, so a shape is a plain match until
+ * its milestone lantern on the path.
  */
 import { type Rng, createRng, deriveSeed } from '../shared/rng';
 import type { Cell, GemType } from './grid';
 
-export type PowerKind = 'cometRow' | 'cometCol' | 'orb';
+export type PowerKind =
+  /** Four in a line; sweeps its row or its column. The streak shows which. */
+  | 'cometRow'
+  | 'cometCol'
+  /** Five in a line (six or more before Aurora unlocks). No colour; clears the colour it is swapped with. */
+  | 'orb'
+  /** An L or a T (and a plus before Starburst unlocks). Opens on the 3 by 3 around it, rides the fall, opens once more, bigger. */
+  | 'bloom'
+  /** A 2 by 2 square, once unlocked. Flies to something useful and pops it and the gems touching it. */
+  | 'sprite'
+  /** A plus, once unlocked. Light sweeps both diagonals: an X. */
+  | 'starburst'
+  /** A 2 by 3 block, once unlocked. A moonbeam sweeps down a three-wide band. */
+  | 'moonrise'
+  /** Six or more in a line, once unlocked. No colour; clears two colours in slow waves. */
+  | 'aurora';
+
+/** The powers as they unlock along the path (both comet orientations are one family). */
+export type PowerFamily = 'comet' | 'orb' | 'bloom' | 'sprite' | 'starburst' | 'moonrise' | 'aurora';
+export const POWER_FAMILIES: readonly PowerFamily[] = ['comet', 'orb', 'bloom', 'sprite', 'starburst', 'moonrise', 'aurora'];
+
+export function familyOf(power: PowerKind): PowerFamily {
+  return power === 'cometRow' || power === 'cometCol' ? 'comet' : power;
+}
+
+/** Powers with no colour: they go off when swapped with anything. */
+export function isColourless(power: PowerKind | null): boolean {
+  return power === 'orb' || power === 'aurora';
+}
+
+/** What happened when two powers were swapped onto each other (DESIGN.md 3.4, combinations). */
+export type Combo =
+  | 'cross' // Comet + Comet: row and column at once
+  | 'wideCross' // Comet + Bloom: three rows and three columns
+  | 'giantBloom' // Bloom + Bloom: a 5 by 5 flower that opens twice
+  | 'cometShower' // Orb + Comet: every gem of that colour becomes a comet and they fly in turn
+  | 'bloomWave' // Orb + Bloom: every gem of that colour becomes a bloom and they open in a wave
+  | 'sunrise' // Orb + Orb: the whole board becomes light
+  | 'carry' // Sprite + another power: the sprite carries it to the best spot
+  | 'twinFlight' // Sprite + Sprite: both fly to two different useful spots
+  | 'eightStar' // Starburst + Comet, Starburst + Starburst: row, column and both diagonals
+  | 'starShower' // Orb + Starburst: every gem of that colour becomes a starburst
+  | 'wideMoon' // Moonrise + Comet: a five-wide beam plus the comet's row
+  | 'moonflower' // Moonrise + Bloom: a five-wide beam that leaves flowers
+  | 'moonTide' // Orb + Moonrise: a beam falls from every gem of that colour
+  | 'fullMoon' // Moonrise + Moonrise: the whole board sweeps down as one beam
+  | 'moonStar' // Moonrise + Starburst: the beam plus both diagonals
+  | 'auroraSky' // Aurora + Aurora: the whole board, colour by colour, in waves
+  | 'auroraDawn' // Aurora + Orb: the three most common colours
+  | 'pair'; // any other pairing: both go off from the swap cell, one after the other
 
 export interface Piece {
-  /** null only for the Prism Orb, which has no colour. */
+  /** null only for the colourless powers (Prism Orb, Aurora). */
   readonly type: GemType | null;
   readonly power: PowerKind | null;
 }
@@ -34,6 +86,13 @@ export interface GameState {
   readonly moves: number;
   /** Probability that a refill is steered toward setting up a four or five. */
   readonly bias: number;
+  /**
+   * Powers whose shapes count as matches. Comets and orbs are always on. Before
+   * 'bloom' an L or T clears plainly; before 'sprite' a 2 by 2 is not a match
+   * at all; before 'moonrise' a 2 by 3 clears as two lines; before 'starburst'
+   * a plus makes a Bloom; before 'aurora' six in a line makes an Orb.
+   */
+  readonly unlocked: readonly PowerFamily[];
 }
 
 export interface ClearGroup {
@@ -41,11 +100,36 @@ export interface ClearGroup {
   readonly type: GemType | null;
 }
 
+export type FireStep = {
+  kind: 'fire';
+  power: PowerKind;
+  /** Where the power was when it went off. */
+  at: Cell;
+  /** Every cell this firing clears (the firing piece included, unless it survives: a bloom's first opening). */
+  cells: Cell[];
+  /** The colour cleared (orb), or the power's own colour; null for a colourless sweep. */
+  color: GemType | null;
+  /** Aurora: the colours it clears, in the order the waves pass. */
+  colors?: GemType[];
+  /** Bloom: 1 is the first opening (the bud survives and rides the fall), 2 the second, bigger one. */
+  phase?: 1 | 2;
+  /** Sprite: where it flies to. `cells` is what it pops there. */
+  target?: Cell;
+  /** Sprite: the power it carries; that power's own fire step follows, at `target`. */
+  carrying?: PowerKind;
+  /** Set when this firing is part of a two-power swap. */
+  combo?: Combo;
+  /** Fire steps that share a group go off together; otherwise they go off one after another. */
+  group?: number;
+};
+
 export type Step =
   | { kind: 'swap'; a: Cell; b: Cell; valid: boolean }
   | { kind: 'clear'; cascade: number; groups: ClearGroup[]; cells: Cell[] }
   | { kind: 'create'; cell: Cell; piece: Piece }
-  | { kind: 'fire'; power: PowerKind; at: Cell; cells: Cell[]; color: GemType | null }
+  | FireStep
+  /** Gems turn into powers in place (Orb + Comet, Orb + Bloom, Orb + Starburst, Orb + Moonrise); their fire steps follow. */
+  | { kind: 'transform'; changes: Array<{ cell: Cell; piece: Piece }>; combo: Combo }
   | { kind: 'fall'; moves: Array<{ from: Cell; to: Cell }>; spawns: Array<{ to: Cell; piece: Piece; fromRow: number }> }
   | { kind: 'reshuffle'; board: Board };
 
@@ -81,7 +165,10 @@ export function gem(type: GemType): Piece {
 
 // ----------------------------------------------------------------- creation
 
-export function newGame(rows: number, cols: number, types: readonly GemType[], seed: number, bias = 0.3): GameState {
+/** The two powers every path starts with. */
+export const BASE_UNLOCKED: readonly PowerFamily[] = ['comet', 'orb'];
+
+export function newGame(rows: number, cols: number, types: readonly GemType[], seed: number, bias = 0.3, unlocked: readonly PowerFamily[] = BASE_UNLOCKED): GameState {
   const rng = createRng(deriveSeed(seed, 0));
   for (let attempt = 0; attempt < 200; attempt++) {
     const board: Board = Array.from({ length: rows }, () => Array<Piece | null>(cols).fill(null));
@@ -90,7 +177,7 @@ export function newGame(rows: number, cols: number, types: readonly GemType[], s
         set(board, { row: r, col: c }, gem(pickNoLine(board, r, c, types, rng, bias)));
       }
     }
-    const state: GameState = { rows, cols, types, board, seed, moves: 0, bias };
+    const state: GameState = { rows, cols, types, board, seed, moves: 0, bias, unlocked };
     if (findLines(board).length === 0 && findValidSwaps(state).length > 0) return state;
   }
   throw new Error('could not create a board with a valid move');
@@ -517,6 +604,8 @@ export function deserialize(json: string): GameState | null {
   try {
     const s = JSON.parse(json) as GameState;
     if (!s || !Array.isArray(s.board) || typeof s.rows !== 'number' || typeof s.cols !== 'number') return null;
+    // Saves from before unlocks existed carry the two starting powers.
+    if (!Array.isArray(s.unlocked)) return { ...s, unlocked: BASE_UNLOCKED };
     return s;
   } catch {
     return null;

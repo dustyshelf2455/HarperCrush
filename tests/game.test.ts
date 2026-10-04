@@ -21,7 +21,7 @@ function fromRows(rows: string[]): Board {
 }
 
 function state(board: Board, types: readonly GemType[] = FIVE, seed = 1): GameState {
-  return { rows: board.length, cols: board[0]?.length ?? 0, types, board, seed, moves: 0, bias: 0 };
+  return { rows: board.length, cols: board[0]?.length ?? 0, types, board, seed, moves: 0, bias: 0, unlocked: ['comet', 'orb'] };
 }
 
 function typesOf(board: Board): string[] {

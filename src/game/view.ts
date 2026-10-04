@@ -579,6 +579,8 @@ export class GameView {
         return !this.anyClearing();
       case 'create':
         return cur.t >= APPEAR_MS * this.motionScale * 0.6;
+      case 'transform':
+        return true;
       case 'fall':
         return !this.updateFalling(dt / 1000, dt);
       case 'reshuffle': {
