@@ -161,12 +161,42 @@ export class PadVoice {
   }
 }
 
+export type SilentMode = 'ignore' | 'follow';
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private bus: GainNode | null = null;
   private reverbIn: GainNode | null = null;
   private master: GainNode | null = null;
   private unlocked = false;
+  private silentMode: SilentMode = 'ignore';
+  lastError = '';
+
+  /**
+   * 'ignore': ask iOS for the playback audio session, which plays through
+   * Silent mode. 'follow': the ambient session, muted by Silent mode on the
+   * speaker. Set before the first unlock; applied again on every unlock.
+   */
+  setSilentMode(mode: SilentMode): void {
+    this.silentMode = mode;
+    this.applySession();
+  }
+
+  private applySession(): void {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (!nav.audioSession) return;
+    try {
+      nav.audioSession.type = this.silentMode === 'ignore' ? 'playback' : 'ambient';
+    } catch (e) {
+      this.lastError = `audioSession: ${String(e)}`;
+    }
+  }
+
+  /** For the debug overlay. */
+  get status(): { state: string; unlocked: boolean; session: string; sampleRate: number } {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    return { state: this.ctx?.state ?? 'none', unlocked: this.unlocked, session: nav.audioSession?.type ?? 'n/a', sampleRate: this.ctx?.sampleRate ?? 0 };
+  }
 
   get context(): AudioContext | null {
     return this.ctx;
@@ -183,16 +213,22 @@ export class AudioEngine {
   /** Create or resume the context. The first call must come from a user gesture. */
   async unlock(): Promise<AudioContext | null> {
     if (typeof AudioContext === 'undefined') return null;
+    this.applySession();
     if (!this.ctx) {
-      this.ctx = new AudioContext();
-      this.build(this.ctx);
+      try {
+        this.ctx = new AudioContext();
+        this.build(this.ctx);
+      } catch (e) {
+        this.lastError = `create: ${String(e)}`;
+        return null;
+      }
     }
     const ctx = this.ctx;
     if (ctx.state !== 'running') {
       try {
         await ctx.resume();
-      } catch {
-        /* still needs a gesture; the next touch will try again */
+      } catch (e) {
+        this.lastError = `resume: ${String(e)}`;
       }
     }
     if (!this.unlocked && ctx.state === 'running' && this.master) {

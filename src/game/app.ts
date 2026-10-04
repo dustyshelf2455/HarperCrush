@@ -14,12 +14,12 @@ import { GameSounds } from './sounds';
 import { GameView } from './view';
 
 const SAVE_KEY = 'glimmerfall.save.v1';
-const ROWS = 7;
+const ROWS = 9;
 const COLS = 6;
 const FOUR: readonly GemType[] = ['star', 'heart', 'drop', 'leaf'];
 const FIVE: readonly GemType[] = ['star', 'heart', 'drop', 'leaf', 'diamond'];
-/** Light poured into the lantern per cleared piece; about ninety pieces light it. */
-const LIGHT_PER_PIECE = 0.011;
+/** Matches (clear groups, cascades included) that light the lantern in Calm mode. */
+const GOAL_MATCHES = 12;
 const HINT_AFTER_MS = 4000;
 
 interface Save {
@@ -35,6 +35,9 @@ export interface AppOptions {
   types: 4 | 5;
   music: boolean;
   chimes: boolean;
+  haptics: boolean;
+  silent: 'ignore' | 'follow';
+  debug: boolean;
   seed: number | null;
   reset: boolean;
 }
@@ -42,9 +45,12 @@ export interface AppOptions {
 export function optionsFromUrl(): AppOptions {
   const q = new URLSearchParams(location.search);
   return {
-    types: q.get('types') === '5' ? 5 : 4,
+    types: q.get('types') === '4' ? 4 : 5,
     music: q.get('music') !== '0',
     chimes: q.get('chimes') !== '0',
+    haptics: q.get('haptics') !== '0',
+    silent: q.get('silent') === 'follow' ? 'follow' : 'ignore',
+    debug: q.get('debug') === '1',
     seed: q.get('seed') ? Number(q.get('seed')) : null,
     reset: q.get('reset') === '1',
   };
@@ -65,13 +71,15 @@ export class App {
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeLock: { release(): Promise<void> } | null = null;
   private musicWanted: boolean;
-  private unlocked = false;
+  private matches = 0;
+  private hapticArmed = false;
 
   constructor(
     canvas: HTMLCanvasElement,
     private readonly opts: AppOptions,
   ) {
     this.musicWanted = opts.music;
+    this.engine.setSilentMode(opts.silent);
     const loaded = opts.reset ? null : this.load();
     this.state = loaded ?? this.fresh();
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -92,14 +100,19 @@ export class App {
     );
     this.sounds = new GameSounds(this.engine, this.player);
     this.sounds.enabled = opts.chimes;
-    this.view.setLantern(this.progress);
-    this.input = new PointerInput(canvas, {
+    this.matches = Math.round(this.progress * GOAL_MATCHES);
+    this.view.setGoal(this.matches, GOAL_MATCHES);
+    // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
+    const surface = (document.getElementById('touch') as HTMLElement | null) ?? canvas;
+    this.input = new PointerInput(surface, {
       cellAt: (x, y) => this.view.cellAt(x, y),
       cellSize: () => this.view.currentLayout.cell,
       onTouch: (x, y) => this.touched(x, y),
-      onTap: (cell) => this.tapped(cell),
+      onTap: (cell, x, y) => this.tapped(cell, x, y),
       onSwipe: (from, to) => this.trySwap(from, to),
     });
+    this.setupHaptics(surface);
+    if (opts.debug) this.setupDebug();
     window.addEventListener('resize', () => this.view.resize());
     document.addEventListener('visibilitychange', () => (document.hidden ? this.sleep() : this.wakeUp()));
     this.view.start();
@@ -110,7 +123,7 @@ export class App {
   }
 
   private fresh(): GameState {
-    const types = this.opts.types === 5 ? FIVE : FOUR;
+    const types = this.opts.types === 4 ? FOUR : FIVE;
     const seed = this.opts.seed ?? (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
     return newGame(ROWS, COLS, types, seed, 0.3);
   }
@@ -124,7 +137,7 @@ export class App {
       const state = deserialize(save.state);
       if (!state || state.rows !== ROWS || state.cols !== COLS) return null;
       if (this.opts.seed !== null) return null;
-      if (state.types.length !== (this.opts.types === 5 ? 5 : 4)) return null;
+      if (state.types.length !== (this.opts.types === 4 ? 4 : 5)) return null;
       this.level = save.level;
       this.progress = save.progress;
       this.companion = save.companion;
@@ -149,19 +162,28 @@ export class App {
   private touched(x: number, y: number): void {
     this.view.ripple(x, y);
     this.clearHint();
-    if (!this.unlocked) {
-      this.unlocked = true;
-      void this.engine.unlock().then(() => {
-        if (this.musicWanted && !this.player.current) void this.player.start(LULLABY, 4242, false, null);
-      });
-    } else {
-      this.engine.resume();
-    }
+    // A tap that will complete a valid tap-tap swap may tick (see setupHaptics).
+    const cell = this.view.cellAt(x, y);
+    this.hapticArmed = this.opts.haptics && !!cell && !!this.selected && Math.abs(this.selected.row - cell.row) + Math.abs(this.selected.col - cell.col) === 1 && isValidSwap(this.state, this.selected, cell);
+    this.unlockAudio();
   }
 
-  private tapped(cell: Cell | null): void {
+  /** Idempotent: creates the context on the first touch, resumes it after interruptions, starts the music once it runs. */
+  private unlockAudio(): void {
+    void this.engine.unlock().then(() => {
+      if (this.engine.isRunning && this.musicWanted && !this.player.current) void this.player.start(LULLABY, 4242, false, null);
+    });
+  }
+
+  private tapped(cell: Cell | null, x: number, y: number): void {
     if (!cell) {
       this.select(null);
+      const hit = this.view.hudHit(x, y);
+      if (hit) {
+        this.view.poke(hit);
+        const ctx = this.engine.context;
+        if (ctx && this.engine.isRunning && this.opts.chimes) this.engine.arpeggio(this.player.chordNow(10, 16).slice(0, 3), ctx.currentTime + 0.02, 0.35, 0.08);
+      }
       return;
     }
     if (this.selected && Math.abs(this.selected.row - cell.row) + Math.abs(this.selected.col - cell.col) === 1) {
@@ -190,11 +212,15 @@ export class App {
     const result = applySwap(this.state, a, b);
     if (valid) {
       this.state = result.state;
-      this.progress = Math.min(1, this.progress + result.cleared * LIGHT_PER_PIECE);
+      const groups = result.steps.filter((st) => st.kind === 'clear').reduce((n, st) => n + (st.kind === 'clear' ? st.groups.length : 0), 0);
+      this.matches = Math.min(GOAL_MATCHES, this.matches + groups);
+      this.progress = this.matches / GOAL_MATCHES;
       this.save();
-      this.view.setLantern(this.progress);
     }
-    this.view.play(result.steps, result.state, () => this.settled());
+    this.view.play(result.steps, result.state, () => this.settled(), (step) => {
+      // Light the next star as each clear lands, not all at once at the end.
+      if (step.kind === 'clear') this.view.setGoal(Math.min(GOAL_MATCHES, this.view.goalDone + step.groups.length), GOAL_MATCHES);
+    });
   }
 
   private settled(): void {
@@ -216,11 +242,44 @@ export class App {
   private nextLevel(): void {
     this.level += 1;
     this.progress = 0;
+    this.matches = 0;
     this.state = this.fresh();
     this.save();
     this.view.setState(this.state);
-    this.view.setLantern(0);
+    this.view.setGoal(0, GOAL_MATCHES);
     this.armHint();
+  }
+
+  /**
+   * Haptics experiment. iOS has no vibration API for web pages, but it plays a
+   * system tick when an iOS-style switch is toggled by a real tap. The touch
+   * surface is a label for a hidden switch; a tap that is not meant to tick
+   * has its click cancelled so the switch is left alone.
+   */
+  private setupHaptics(surface: HTMLElement): void {
+    if (surface.tagName !== 'LABEL') return;
+    surface.addEventListener('click', (e) => {
+      if (!this.hapticArmed) e.preventDefault();
+      this.hapticArmed = false;
+    });
+  }
+
+  private setupDebug(): void {
+    const el = document.createElement('div');
+    el.id = 'debug';
+    el.style.cssText = 'position:fixed;right:8px;top:env(safe-area-inset-top,0px);z-index:9;font:11px/1.3 -apple-system,monospace;color:#9fe;background:rgba(0,0,0,.55);padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre';
+    document.body.appendChild(el);
+    setInterval(() => {
+      const s = this.engine.status;
+      const nav = navigator as Navigator & { standalone?: boolean };
+      el.textContent = [
+        `audio ${s.state} unlocked ${s.unlocked} session ${s.session}`,
+        `music ${this.player.current?.id ?? 'off'} sr ${s.sampleRate}`,
+        `level ${this.level} matches ${this.matches}/${GOAL_MATCHES} moves ${this.state.moves}`,
+        `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'}`,
+        this.engine.lastError ? `err ${this.engine.lastError}` : '',
+      ].join('\n');
+    }, 500);
   }
 
   private armHint(): void {
@@ -251,7 +310,7 @@ export class App {
 
   private wakeUp(): void {
     this.engine.resume();
-    if (this.unlocked && this.musicWanted && this.engine.isRunning) void this.player.start(LULLABY, 4242 + this.level, false, null);
+    if (this.musicWanted && this.engine.isRunning) void this.player.start(LULLABY, 4242 + this.level, false, null);
     this.view.start();
     this.armHint();
     void this.requestWakeLock();

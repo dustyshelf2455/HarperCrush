@@ -43,6 +43,15 @@ describe('newGame', () => {
   it('is deterministic for a seed', () => {
     expect(newGame(7, 6, FIVE, 42)).toEqual(newGame(7, 6, FIVE, 42));
   });
+
+  it('works for the 6 by 9 Calm board with bias', () => {
+    for (let seed = 1; seed <= 1000; seed++) {
+      const g = newGame(9, 6, FIVE, seed, 0.3);
+      expect(findLines(g.board)).toHaveLength(0);
+      expect(findValidSwaps(g).length).toBeGreaterThan(0);
+      expect(isFull(g.board)).toBe(true);
+    }
+  });
 });
 
 describe('swaps', () => {

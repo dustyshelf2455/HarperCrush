@@ -10,7 +10,7 @@ export interface InputHandler {
   cellAt(clientX: number, clientY: number): Cell | null;
   cellSize(): number;
   onTouch(clientX: number, clientY: number): void;
-  onTap(cell: Cell | null): void;
+  onTap(cell: Cell | null, clientX: number, clientY: number): void;
   onSwipe(from: Cell, to: Cell): void;
 }
 
@@ -107,7 +107,7 @@ export class PointerInput {
     if (!p) return;
     const now = performance.now();
     if (this.primary === p.id && !p.gestured && !p.parked && now - p.t0 <= TAP_MAX_MS) {
-      this.handler.onTap(this.handler.cellAt(p.x, p.y));
+      this.handler.onTap(this.handler.cellAt(p.x, p.y), p.x, p.y);
     }
     this.release(e.pointerId);
   };

@@ -849,9 +849,9 @@ export function drawOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: 
   ctx.clip();
   const colors = ['#ffc84a', '#ff6fa8', '#4aa8ff', '#45e49a', '#b57dff'];
   colors.forEach((c, i) => {
-    const a = t * 0.9 + (i * Math.PI * 2) / colors.length;
-    const ox = Math.cos(a) * r * 0.45;
-    const oy = Math.sin(a * 1.3) * r * 0.45;
+    const a = t * 0.45 + (i * Math.PI * 2) / colors.length;
+    const ox = Math.cos(a) * r * 0.42;
+    const oy = Math.sin(a) * r * 0.42;
     const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, r * 0.8);
     g.addColorStop(0, rgba(c, 0.9));
     g.addColorStop(1, rgba(c, 0));
@@ -865,11 +865,21 @@ export function drawOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: 
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.stroke();
   highlight(ctx, -0.35 * r, -0.4 * r, r * 0.32, r * 0.18, -0.6, 0.85);
+  // A slow sheen drifting around the rim, and a breathing halo: calm, not busy.
+  ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 3; i++) {
-    const a = t * 2 + (i * Math.PI * 2) / 3;
-    glowDisc(ctx, Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3, r * 0.22, '#ffffff', 0.7);
-  }
+  const sweep = t * 0.6;
+  ctx.rotate(sweep);
+  const sheen = ctx.createLinearGradient(-r, 0, r, 0);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.02, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  glowDisc(ctx, 0, 0, r * 1.6, '#ffffff', 0.12 + 0.1 * (0.5 + 0.5 * Math.sin(t * 1.4)));
   ctx.restore();
 }
 

@@ -9,8 +9,9 @@ import { createRng } from '../shared/rng';
 import { lighten, rgba } from '../render/color';
 import { type CompanionId, drawCompanion, drawLantern } from '../render/creatures';
 import { drawOrb } from '../render/board';
+import { shapePath } from '../render/shapes';
 import { GemSprites } from '../render/sprites';
-import { breath, clamp01, easeInOutSine, easeOutCubic, glowDisc, softRing } from '../render/styles/common';
+import { breath, clamp01, easeInOutSine, easeOutCubic, glowDisc, highlight, softRing } from '../render/styles/common';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
 interface VPiece {
@@ -39,7 +40,21 @@ interface Particle {
   maxLife: number;
   color: string;
   size: number;
+  /** Converging particles fly toward a point instead of drifting. */
+  target?: { x: number; y: number };
 }
+
+interface Ring {
+  x: number;
+  y: number;
+  t: number;
+  duration: number;
+  radius: number;
+  color: string;
+  alpha: number;
+}
+
+export type HudTarget = 'lantern' | 'companion';
 
 interface Ripple {
   x: number;
@@ -98,7 +113,13 @@ export class GameView {
   private nextId = 1;
   private particles: Particle[] = [];
   private ripples: Ripple[] = [];
+  private rings: Ring[] = [];
   private fires: FireAnim[] = [];
+  private onStep: ((step: Step) => void) | null = null;
+  private goal = { done: 0, total: 8 };
+  private goalPulse: number[] = [];
+  private pulse = 0;
+  private pokes: { target: HudTarget; t: number }[] = [];
   private queue: Step[] = [];
   private current: { step: Step; t: number; phase: number } | null = null;
   private finalBoard: Board | null = null;
@@ -163,6 +184,38 @@ export class GameView {
     this.wake();
   }
 
+  get goalDone(): number {
+    return this.goal.done;
+  }
+
+  /** The Calm goal: `total` stars, `done` of them lit. The lantern fills with them. */
+  setGoal(done: number, total: number): void {
+    const prev = this.goal.done;
+    this.goal = { done: Math.min(done, total), total };
+    for (let i = prev; i < this.goal.done; i++) this.goalPulse[i] = 0;
+    this.setLantern(total > 0 ? this.goal.done / total : 0);
+  }
+
+  /** What HUD element, if any, is under a point. */
+  hudHit(clientX: number, clientY: number): HudTarget | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * this.layout.width;
+    const y = ((clientY - rect.top) / rect.height) * this.layout.height;
+    const cx = this.layout.width / 2;
+    if (Math.hypot(x - (cx - 34), y - this.layout.hudY) < 34) return 'lantern';
+    if (Math.hypot(x - (cx + 40), y - this.layout.hudY) < 34) return 'companion';
+    return null;
+  }
+
+  /** A little response when she touches the lantern or the companion. */
+  poke(target: HudTarget): void {
+    this.pokes.push({ target, t: 0 });
+    const cx = this.layout.width / 2;
+    const x = target === 'lantern' ? cx - 34 : cx + 40;
+    this.spawnSparkles(x, this.layout.hudY, '#ffe9a8', 7, 0.6);
+    this.wake();
+  }
+
   cellAt(clientX: number, clientY: number): Cell | null {
     const rect = this.canvas.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * this.layout.width;
@@ -190,11 +243,12 @@ export class GameView {
   }
 
   /** Play a resolution's steps, then snap to its final board and call done. */
-  play(steps: Step[], finalState: GameState, done: () => void): void {
+  play(steps: Step[], finalState: GameState, done: () => void, onStep: ((step: Step) => void) | null = null): void {
     this.state = finalState;
     this.finalBoard = finalState.board;
     this.queue.push(...steps);
     this.onDone = done;
+    this.onStep = onStep;
     this.selected = null;
     this.hint = null;
     this.wake();
@@ -212,15 +266,16 @@ export class GameView {
     const rect = this.canvas.parentElement?.getBoundingClientRect();
     const width = Math.max(280, Math.floor(rect?.width ?? window.innerWidth));
     const height = Math.max(400, Math.floor(rect?.height ?? window.innerHeight));
-    const pad = 16;
-    const hud = 84;
-    const cell = Math.min((width - pad * 2) / this.state.cols, (height - hud - 40) / this.state.rows);
+    const pad = 8;
+    const hud = 108; // lantern and companion row plus the goal stars
+    const cell = Math.min((width - pad * 2) / this.state.cols, (height - hud - 24) / this.state.rows);
     const boardW = cell * this.state.cols;
     const boardH = cell * this.state.rows;
     const boardX = (width - boardW) / 2;
-    const boardY = hud + Math.max(12, (height - hud - boardH) / 2 - 10);
-    // The lantern and companion sit just above the board, so they read as part of it.
-    const hudY = Math.max(hud / 2, boardY - 54);
+    const spare = height - hud - boardH;
+    // Board a little below centre so it sits under her thumbs; the HUD rides just above it.
+    const boardY = hud + Math.max(6, spare * 0.6 - 8);
+    const hudY = boardY - 70;
     this.layout = { width, height, cell, boardX, boardY, hudY };
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
@@ -272,6 +327,26 @@ export class GameView {
     this.raf = requestAnimationFrame(this.frame);
   }
 
+  private clearFlourish(step: Extract<Step, { kind: 'clear' }>): void {
+    const cell = this.layout.cell;
+    for (const g of step.groups) {
+      if (g.cells.length === 0) continue;
+      let sx = 0;
+      let sy = 0;
+      for (const c of g.cells) {
+        sx += c.col;
+        sy += c.row;
+      }
+      const centre = this.centre(sx / g.cells.length, sy / g.cells.length);
+      const color = g.type ? this.style.gemColor(g.type).light : '#fff2c8';
+      const big = g.cells.length >= 4 || step.cascade > 0;
+      this.rings.push({ x: centre.x, y: centre.y, t: 0, duration: big ? 620 : 480, radius: cell * (g.cells.length >= 4 ? 1.9 : 1.4) * (1 + step.cascade * 0.12), color, alpha: big ? 0.55 : 0.4 });
+      if (big) this.rings.push({ x: centre.x, y: centre.y, t: 0, duration: 760, radius: cell * 2.6, color: '#ffffff', alpha: 0.18 });
+    }
+    // Each cascade step brightens the whole scene a touch more: a soft swell, never a flash.
+    this.pulse = Math.min(0.14, 0.05 + step.cascade * 0.03);
+  }
+
   private readonly frame = (now: number): void => {
     const dt = Math.min(50, now - this.lastNow);
     this.lastNow = now;
@@ -301,6 +376,21 @@ export class GameView {
     let moving = false;
     this.ripples = this.ripples.filter((r) => (r.t += dt) < 480);
     if (this.ripples.length > 0) moving = true;
+    this.rings = this.rings.filter((r) => (r.t += dt) < r.duration);
+    if (this.rings.length > 0) moving = true;
+    if (this.pulse > 0.001) {
+      this.pulse *= Math.exp(-dt / 260);
+      moving = true;
+    } else this.pulse = 0;
+    for (let i = 0; i < this.goalPulse.length; i++) {
+      const v = this.goalPulse[i];
+      if (v !== undefined && v < 900) {
+        this.goalPulse[i] = v + dt;
+        moving = true;
+      }
+    }
+    this.pokes = this.pokes.filter((p) => (p.t += dt) < 700);
+    if (this.pokes.length > 0) moving = true;
     if (this.updateParticles(seconds)) moving = true;
     if (this.updateClearing(dt)) moving = true;
     if (this.updateAppear(dt)) moving = true;
@@ -375,6 +465,8 @@ export class GameView {
       }
       case 'clear': {
         this.events.onClear?.(step.groups, step.cascade);
+        this.onStep?.(step);
+        this.clearFlourish(step);
         for (const c of step.cells) {
           const p = this.pieces.get(key(c));
           if (p && p.clearing === null) p.clearing = 0;
@@ -386,6 +478,16 @@ export class GameView {
         const vp = this.make(step.piece, step.cell.row, step.cell.col, step.cell.row);
         vp.appear = 0;
         this.pieces.set(key(step.cell), vp);
+        // Light gathers in from around the cell and settles into the new power.
+        const to = this.centre(step.cell.col, step.cell.row);
+        const color = step.piece.type ? this.style.gemColor(step.piece.type).light : '#ffffff';
+        const cell = this.layout.cell;
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + this.rng.range(-0.2, 0.2);
+          const d = cell * this.rng.range(1.2, 2.2);
+          this.particles.push({ x: to.x + Math.cos(a) * d, y: to.y + Math.sin(a) * d, vx: 0, vy: 0, life: 0, maxLife: 420, color, size: cell * 0.08, target: to });
+        }
+        this.rings.push({ x: to.x, y: to.y, t: 0, duration: 700, radius: cell * 1.6, color: '#ffffff', alpha: 0.35 });
         return;
       }
       case 'fall': {
@@ -619,6 +721,13 @@ export class GameView {
     const damp = Math.exp(-0.9 * seconds);
     for (const p of this.particles) {
       p.life += seconds * 1000;
+      if (p.target) {
+        const q = easeInOutSine(clamp01(p.life / p.maxLife));
+        const k = Math.min(1, seconds * 6 + q * 0.2);
+        p.x += (p.target.x - p.x) * k;
+        p.y += (p.target.y - p.y) * k;
+        continue;
+      }
       p.x += p.vx * seconds;
       p.y += p.vy * seconds;
       p.vx *= damp;
@@ -753,7 +862,15 @@ export class GameView {
     ctx.restore();
 
     this.drawFires(t);
+    this.drawRings();
     this.drawParticles();
+    if (this.pulse > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = rgba('#ffe9c8', this.pulse);
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
     for (const r of this.ripples) {
       const q = clamp01(r.t / 480);
       softRing(ctx, r.x, r.y, 6 + q * cell * 0.9, cell * 0.18, this.style.palette.hint, 0.35 * (1 - q));
@@ -837,6 +954,50 @@ export class GameView {
     void t;
   }
 
+  private drawRings(): void {
+    const { ctx } = this;
+    if (this.rings.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const r of this.rings) {
+      const q = clamp01(r.t / r.duration);
+      const radius = easeOutCubic(q) * r.radius;
+      softRing(ctx, r.x, r.y, radius, this.layout.cell * 0.28, r.color, r.alpha * (1 - q));
+    }
+    ctx.restore();
+  }
+
+  private drawGoal(t: number): void {
+    const { ctx } = this;
+    const { width: w, hudY } = this.layout;
+    const n = this.goal.total;
+    if (n <= 0) return;
+    const gap = Math.min(30, (w - 48) / n);
+    const x0 = w / 2 - ((n - 1) * gap) / 2;
+    const y = hudY + 42;
+    for (let i = 0; i < n; i++) {
+      const lit = i < this.goal.done;
+      const pulse = this.goalPulse[i];
+      const pop = pulse !== undefined && pulse < 900 ? Math.sin(clamp01(pulse / 900) * Math.PI) : 0;
+      const x = x0 + i * gap;
+      ctx.save();
+      ctx.translate(x, y - pop * 4);
+      if (lit) {
+        glowDisc(ctx, 0, 0, 16 + pop * 10, '#ffd27a', 0.5 + 0.35 * pop + 0.08 * breath(t + i));
+        ctx.fillStyle = '#ffe49a';
+        ctx.fill(shapePath('star', 7 + pop * 3));
+        highlight(ctx, -2, -2.5, 2.6, 1.6, -0.6, 0.8);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.fill(shapePath('star', 6.5));
+        ctx.strokeStyle = 'rgba(255,233,168,0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke(shapePath('star', 6.5));
+      }
+      ctx.restore();
+    }
+  }
+
   private drawParticles(): void {
     const { ctx } = this;
     if (this.particles.length === 0) return;
@@ -868,9 +1029,14 @@ export class GameView {
     const { ctx } = this;
     const { width: w, hudY } = this.layout;
     const cx = w / 2;
-    drawLantern(ctx, cx - 30, hudY + 4, 44, this.lanternFill + 0.02 * Math.sin(t * 0.55), this.style.palette, t);
+    const pokeL = this.pokes.find((p) => p.target === 'lantern');
+    const pokeC = this.pokes.find((p) => p.target === 'companion');
+    const lanternSize = 48 * (1 + (pokeL ? 0.12 * Math.sin(clamp01(pokeL.t / 700) * Math.PI) : 0));
+    drawLantern(ctx, cx - 34, hudY, lanternSize, Math.min(1, this.lanternFill + 0.02 * Math.sin(t * 0.55) + (pokeL ? 0.25 * Math.sin(clamp01(pokeL.t / 700) * Math.PI) : 0)), this.style.palette, t);
     const bob = Math.sin(t * 1.3) * 1.5;
-    drawCompanion(ctx, this.companion, cx + 36, hudY + 2 + bob, 40, t);
+    const hop = pokeC ? -14 * Math.sin(clamp01(pokeC.t / 700) * Math.PI) : 0;
+    drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
+    this.drawGoal(t);
     // Moon (the grown-up gate, Stage 3), dim, top-left; baked so the cut-out never touches the canvas beneath.
     ctx.save();
     ctx.globalAlpha = 0.3;
