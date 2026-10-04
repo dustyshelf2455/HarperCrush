@@ -1665,11 +1665,12 @@ export class GameView {
           const bh = cell * 1.8;
           const g2 = ctx.createLinearGradient(0, by - bh / 2, 0, by + bh / 2);
           g2.addColorStop(0, 'rgba(255,226,180,0)');
-          g2.addColorStop(0.5, `rgba(255,232,190,${0.5 * env})`);
+          // The gems in the band already brighten as they dissolve, so the band itself stays soft: a glow, not a bar of white.
+          g2.addColorStop(0.5, `rgba(255,232,190,${0.32 * env})`);
           g2.addColorStop(1, 'rgba(255,226,180,0)');
           ctx.fillStyle = g2;
           ctx.fillRect(0, by - bh / 2, w, bh);
-          glowDisc(ctx, w / 2, by, w * 0.6, '#ffd9a0', 0.18 * env);
+          glowDisc(ctx, w / 2, by, w * 0.6, '#ffd9a0', 0.14 * env);
           break;
         }
       }
