@@ -6,6 +6,11 @@
  * - The context is created and resumed inside a user gesture (unlock()).
  * - The very first sound fades in over 1.5 s so nothing is ever sudden.
  * - suspend()/resume() exist so a hidden page never keeps sounding.
+ *
+ * Signal path: chimes go straight to the bus; music sketches go through a
+ * Channel into the music stages (a duck that dips during big effects, then
+ * the parent's soft/normal level, DESIGN.md 3.11), then the bus. The bus and
+ * the reverb meet at the limiter, then the master fader.
  */
 import { midiToHz } from '../shared/scale';
 import type { MelodyInstrument } from './composer';
@@ -42,7 +47,8 @@ const SILENT_WAV = (() => {
   return 'data:audio/wav;base64,' + btoa(bin);
 })();
 
-interface Partial {
+export interface Partial {
+  /** Frequency as a multiple of the fundamental. Whole numbers (or 0.5) keep every voice harmonic, so voices never clash. */
   ratio: number;
   gain: number;
   decay: number;
@@ -51,7 +57,19 @@ interface Partial {
   detune?: number;
 }
 
-const INSTRUMENTS: Record<MelodyInstrument, { partials: Partial[]; wet: number }> = {
+export interface InstrumentDef {
+  partials: Partial[];
+  /** Send level into the shared reverb. */
+  wet: number;
+}
+
+/**
+ * The melody voices. Each is a small table of harmonic partials. The summed
+ * partial gain of every voice sits between 1.3 and 1.6 (the celesta is 1.49),
+ * so switching the area voice never changes how loud the music is; a pure
+ * test in tests/sounds.test.ts holds that line.
+ */
+export const INSTRUMENTS: Record<MelodyInstrument, InstrumentDef> = {
   // Music box / celesta: a pure fundamental with a little sparkle on top.
   celesta: {
     partials: [
@@ -81,7 +99,92 @@ const INSTRUMENTS: Record<MelodyInstrument, { partials: Partial[]; wet: number }
     ],
     wet: 0.65,
   },
+  // Crystal Cave (DESIGN.md 2c): a struck crystal. Pure and long, with a slow
+  // beat between two fundamentals a few cents apart for the shimmer.
+  glass: {
+    partials: [
+      { ratio: 1, gain: 1.0, decay: 2.6 },
+      { ratio: 1, gain: 0.25, decay: 2.0, detune: 3 },
+      { ratio: 2, gain: 0.12, decay: 1.6 },
+      { ratio: 4, gain: 0.06, decay: 0.5 },
+      { ratio: 6, gain: 0.02, decay: 0.25 },
+    ],
+    wet: 0.5,
+  },
+  // Mermaid Lagoon: a marimba heard under water. Slow, rounded attack and
+  // almost nothing above the second partial, as if low-passed by the water.
+  water: {
+    partials: [
+      { ratio: 1, gain: 1.0, decay: 0.9, attack: 0.06 },
+      { ratio: 1, gain: 0.3, decay: 0.6, attack: 0.08, type: 'triangle' },
+      { ratio: 2, gain: 0.15, decay: 0.4, attack: 0.05 },
+    ],
+    wet: 0.45,
+  },
+  // Cloud Castle: a gentle horn. Slow attack, warm low partials that bloom a
+  // little after the fundamental.
+  horn: {
+    partials: [
+      { ratio: 1, gain: 0.9, decay: 1.2, attack: 0.12 },
+      { ratio: 2, gain: 0.35, decay: 1.0, attack: 0.14 },
+      { ratio: 3, gain: 0.15, decay: 0.8, attack: 0.16 },
+      { ratio: 4, gain: 0.06, decay: 0.6, attack: 0.18 },
+    ],
+    wet: 0.35,
+  },
+  // Star Garden: a plucked harp. Quick attack, a warm second partial, a short sparkle.
+  harp: {
+    partials: [
+      { ratio: 1, gain: 1.0, decay: 1.6, attack: 0.003 },
+      { ratio: 2, gain: 0.35, decay: 1.0, attack: 0.003 },
+      { ratio: 3, gain: 0.1, decay: 0.5, attack: 0.003 },
+      { ratio: 5, gain: 0.03, decay: 0.2, attack: 0.003 },
+    ],
+    wet: 0.4,
+  },
+  // Aurora Peak: a bell with a slow detuned pair (about 3 cents apart, a beat
+  // of two or three per second in the melody register) that breathes like the ribbons.
+  shimmer: {
+    partials: [
+      { ratio: 1, gain: 0.65, decay: 2.8, detune: -3 },
+      { ratio: 1, gain: 0.65, decay: 2.8, detune: 3 },
+      { ratio: 2, gain: 0.15, decay: 1.8 },
+      { ratio: 3, gain: 0.05, decay: 1.0 },
+    ],
+    wet: 0.6,
+  },
+  // Dragon Hollow: a kalimba. Warm and woody, with a hollow third partial that
+  // dies quickly, like a tine over a gourd.
+  kalimba: {
+    partials: [
+      { ratio: 1, gain: 1.0, decay: 1.1 },
+      { ratio: 1, gain: 0.25, decay: 0.5, type: 'triangle' },
+      { ratio: 3, gain: 0.12, decay: 0.25 },
+      { ratio: 5, gain: 0.05, decay: 0.12 },
+    ],
+    wet: 0.3,
+  },
 };
+
+/** Music level (DESIGN.md 3.11: soft / normal). The Stage 2 loudness is "soft"; normal is about 3 dB up, so soft is about 0.7 of normal. */
+export type MusicLevel = 'soft' | 'normal';
+const MUSIC_LEVEL_GAIN: Record<MusicLevel, number> = { soft: 1, normal: 1.4 };
+const MUSIC_LEVEL_RAMP = 0.6;
+
+/** The duck during a big effect (DESIGN.md 3.11: "the music dips slightly to make room"): about 6 dB. */
+const DUCK_GAIN = 0.5;
+
+/**
+ * When a duck of `seconds` dips, holds and eases back, as offsets from its
+ * start. Pure, so the shape is testable: the dip is quick but never a step,
+ * the return takes the last two fifths of the time.
+ */
+export function duckTimes(seconds: number): { dip: number; rise: number; end: number } {
+  const end = Math.min(8, Math.max(0.6, seconds));
+  const dip = Math.min(0.18, end * 0.25);
+  const rise = end * 0.6;
+  return { dip, rise, end };
+}
 
 const BASS: Partial[] = [
   { ratio: 1, gain: 1.0, decay: 1.1, attack: 0.01 },
@@ -117,7 +220,7 @@ export class PadVoice {
   private readonly level: number;
   private released = false;
 
-  constructor(ctx: AudioContext, midis: readonly number[], t: number, level: number, dest: AudioNode, reverbIn: AudioNode) {
+  constructor(ctx: AudioContext, midis: readonly number[], t: number, level: number, dest: AudioNode, reverbIn: AudioNode, attack = PAD_ATTACK) {
     this.level = Math.max(level, SILENT * 2);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -160,7 +263,7 @@ export class PadVoice {
     // change, where exponential ramps would leave a near-silent gap in the middle.
     this.gain.gain.value = 0;
     this.gain.gain.setValueAtTime(0, t);
-    this.gain.gain.linearRampToValueAtTime(this.level, t + PAD_ATTACK);
+    this.gain.gain.linearRampToValueAtTime(this.level, t + Math.max(0.05, attack));
     filter.connect(this.gain);
     this.gain.connect(dest);
     const wet = ctx.createGain();
@@ -197,6 +300,10 @@ export class AudioEngine {
   private bus: GainNode | null = null;
   private reverbIn: GainNode | null = null;
   private master: GainNode | null = null;
+  /** The two music stages every sketch channel runs through: the duck, then the parent's level. */
+  private musicDuck: Channel | null = null;
+  private musicLevel: Channel | null = null;
+  private musicLevelName: MusicLevel = 'soft';
   private unlocked = false;
   private silentMode: SilentMode = 'ignore';
   private keepAlive: HTMLAudioElement | null = null;
@@ -352,16 +459,61 @@ export class AudioEngine {
     if (this.unlocked && this.ctx?.state === 'running') this.fadeIn(0.6);
   }
 
-  /** A fader pair into the bus and the reverb. Each music sketch gets one so it can be faded as a whole. */
+  /**
+   * A fader pair for one music sketch, so it can be faded as a whole. It feeds
+   * the music stages (duck, then level) rather than the bus directly, so the
+   * parent's music level and the dip during a big effect apply to every sketch.
+   */
   createChannel(): Channel | null {
-    if (!this.ctx || !this.bus || !this.reverbIn) return null;
+    if (!this.ctx || !this.musicDuck) return null;
     const dry = this.ctx.createGain();
     const wet = this.ctx.createGain();
     dry.gain.value = 1;
     wet.gain.value = 1;
-    dry.connect(this.bus);
-    wet.connect(this.reverbIn);
+    dry.connect(this.musicDuck.dry);
+    wet.connect(this.musicDuck.wet);
     return { dry, wet };
+  }
+
+  /** The parent's music level (DESIGN.md 3.11). Eases over 0.6 s so a change mid-tune is never a step. May be set before unlock. */
+  setMusicLevel(level: MusicLevel): void {
+    this.musicLevelName = level;
+    const stage = this.musicLevel;
+    if (!this.ctx || !stage) return;
+    const t = this.ctx.currentTime;
+    const target = MUSIC_LEVEL_GAIN[level];
+    for (const g of [stage.dry.gain, stage.wet.gain]) {
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(target, t + MUSIC_LEVEL_RAMP);
+    }
+  }
+
+  get musicLevelSetting(): MusicLevel {
+    return this.musicLevelName;
+  }
+
+  /**
+   * Dip the music by about 6 dB for a big effect and ease back over `seconds`
+   * (DESIGN.md 3.11). Exponential ramps between non-zero values, so the dip is
+   * even to the ear and there is never a click; a second duck during the first
+   * simply holds the dip and restarts the return.
+   */
+  duck(seconds: number, at?: number): void {
+    const stage = this.musicDuck;
+    if (!this.ctx || !stage) return;
+    const t = Math.max(this.ctx.currentTime, at ?? this.ctx.currentTime);
+    const { dip, rise, end } = duckTimes(seconds);
+    for (const g of [stage.dry.gain, stage.wet.gain]) {
+      if (typeof g.cancelAndHoldAtTime === 'function') g.cancelAndHoldAtTime(t);
+      else {
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(Math.max(DUCK_GAIN, Math.min(1, g.value)), t);
+      }
+      g.exponentialRampToValueAtTime(DUCK_GAIN, t + dip);
+      g.setValueAtTime(DUCK_GAIN, t + rise);
+      g.exponentialRampToValueAtTime(1, t + end);
+    }
   }
 
   note(instrument: MelodyInstrument, midi: number, t: number, vel: number, dest?: Channel | null): void {
@@ -377,9 +529,10 @@ export class AudioEngine {
     this.tone(midi, t, vel, PING, 0.75, dest);
   }
 
-  pad(midis: readonly number[], t: number, level: number, dest?: Channel | null): PadVoice | null {
+  /** A sustained chord. `attack` defaults to the music pad's slow 2.6 s; short effect pads pass their own. */
+  pad(midis: readonly number[], t: number, level: number, dest?: Channel | null, attack?: number): PadVoice | null {
     if (!this.ctx || !this.bus || !this.reverbIn) return null;
-    return new PadVoice(this.ctx, midis, t, level, dest?.dry ?? this.bus, dest?.wet ?? this.reverbIn);
+    return new PadVoice(this.ctx, midis, t, level, dest?.dry ?? this.bus, dest?.wet ?? this.reverbIn, attack);
   }
 
   /** A tiny, soft click for a swap. */
@@ -473,9 +626,26 @@ export class AudioEngine {
     bus.connect(limiter);
     limiter.connect(master);
     master.connect(ctx.destination);
+    // Music stages: duck (1 at rest) into level (soft or normal), into the bus and the reverb.
+    const level = this.stage(ctx, MUSIC_LEVEL_GAIN[this.musicLevelName]);
+    level.dry.connect(bus);
+    level.wet.connect(reverbIn);
+    const duck = this.stage(ctx, 1);
+    duck.dry.connect(level.dry);
+    duck.wet.connect(level.wet);
     this.master = master;
     this.bus = bus;
     this.reverbIn = reverbIn;
+    this.musicLevel = level;
+    this.musicDuck = duck;
+  }
+
+  private stage(ctx: AudioContext, gain: number): Channel {
+    const dry = ctx.createGain();
+    const wet = ctx.createGain();
+    dry.gain.value = gain;
+    wet.gain.value = gain;
+    return { dry, wet };
   }
 }
 

@@ -7,7 +7,14 @@
 import type { Rng } from '../shared/rng';
 import { type Chord, chordRootIn, chordTones, degreeToMidi } from '../shared/scale';
 
-export type MelodyInstrument = 'celesta' | 'marimba' | 'bell';
+/**
+ * The melody voices the engine can synthesise. The first three are the Stage 1
+ * sketch voices; the rest are the area voices of DESIGN.md 2c and 3.11: glass
+ * for Crystal Cave, water for Mermaid Lagoon, horn for Cloud Castle, harp for
+ * Star Garden, shimmer for Aurora Peak, kalimba for Dragon Hollow.
+ */
+export type MelodyInstrument = 'celesta' | 'marimba' | 'bell' | 'glass' | 'water' | 'horn' | 'harp' | 'shimmer' | 'kalimba';
+export const MELODY_INSTRUMENTS: readonly MelodyInstrument[] = ['celesta', 'marimba', 'bell', 'glass', 'water', 'horn', 'harp', 'shimmer', 'kalimba'];
 
 /** One note of a motif: scale degree relative to the melody base, and length in beats. */
 export interface MotifNote {

@@ -4,9 +4,9 @@
  * effect within half a second.
  */
 import { createRng } from '../shared/rng';
-import { CHORDS, chordTones } from '../shared/scale';
+import { CHORDS, type Chord, chordTones } from '../shared/scale';
 import { Composer, type SketchSpec } from './composer';
-import type { AudioEngine, Channel, PadVoice } from './engine';
+import type { AudioEngine, Channel, MusicLevel, PadVoice } from './engine';
 
 const LOOKAHEAD_SECONDS = 0.5;
 const TICK_MS = 100;
@@ -100,10 +100,25 @@ export class MusicPlayer {
     if (wasPlaying) this.emit();
   }
 
+  /** The chord sounding now (the home chord, G, when nothing plays), so every chime and phrase agrees with the tune (DESIGN.md 3.11). */
+  get chord(): Chord {
+    if (!this.composer) return CHORDS.G;
+    return this.composer.chordAt(this.beatAt(this.engine.now));
+  }
+
   /** MIDI notes of the chord sounding now, in the given degree window, for chimes. */
   chordNow(lo = 5, hi = 14): number[] {
-    if (!this.composer) return chordTones(CHORDS.G, lo, hi);
-    return chordTones(this.composer.chordAt(this.beatAt(this.engine.now)), lo, hi);
+    return chordTones(this.chord, lo, hi);
+  }
+
+  /** The parent's music level, soft or normal (DESIGN.md 3.11); soft is the Stage 2 loudness. Safe to call before the first sound. */
+  setLevel(level: MusicLevel): void {
+    this.engine.setMusicLevel(level);
+  }
+
+  /** Dip the music for a big effect and ease back over `seconds` (DESIGN.md 3.11). `at` is an audio-clock time; defaults to now. */
+  duck(seconds: number, at?: number): void {
+    this.engine.duck(seconds, at);
   }
 
   private beatAt(time: number): number {
