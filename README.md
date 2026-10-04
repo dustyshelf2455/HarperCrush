@@ -42,7 +42,9 @@ index.html    root page (will become the game)
 
 ## Deploying
 
-Every push to `main` runs `.github/workflows/deploy.yml`: typecheck, tests, build, then deploy `dist/` to GitHub Pages. One-time repository setting: **Settings → Pages → Build and deployment → Source: GitHub Actions**. After a push, the **Actions** tab shows the run; the site updates about a minute later.
+Every push to `main` runs `.github/workflows/deploy.yml`: typecheck, tests, build, then deploy `dist/` to GitHub Pages. After a push, the **Actions** tab shows the run; the site updates about a minute later.
+
+One-time repository setting, which the workflow cannot do by itself: **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until that is set, the run fails at the `configure-pages` step with "Resource not accessible by integration". After setting it, open the failed run in the **Actions** tab and choose **Re-run all jobs**, or push any commit to `main`.
 
 ## Putting it on the iPhone
 

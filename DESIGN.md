@@ -389,7 +389,7 @@ The URL will be `https://dustyshelf2455.github.io/glimmerfall/` once you rename 
 1. Open the repository on github.com, then **Settings** (the repo's settings tab, not your account's).
 2. Under **General**, in **Repository name**, change `HarperCrush` to `glimmerfall` and tap **Rename**. GitHub redirects the repository page and git remotes from the old name, but not the Pages site: the old `.../HarperCrush/` address simply stops working and the site reappears at `.../glimmerfall/`. I will update the remote on my side.
 3. In the left sidebar choose **Pages**.
-4. Under **Build and deployment**, set **Source** to **GitHub Actions**. There is nothing else to pick.
+4. Under **Build and deployment**, set **Source** to **GitHub Actions**. There is nothing else to pick. (The workflow tries to do this itself, but GitHub does not let it: until the setting is made, each run fails at the `configure-pages` step with "Resource not accessible by integration". After you set it, open the failed run under the **Actions** tab and choose **Re-run all jobs**.)
 5. The repository currently has no `main` branch (only the two `claude/...` branches). Once you approve this design, I will create `main` from the approved branch and push it. Then in **Settings → General → Default branch**, switch the default to `main`. That is the branch the deployment watches.
 
 **Then, each time I push a build:**
