@@ -5,31 +5,31 @@ A calm, wonder-filled match-3 game for Harper: a purpose-made regulation aid tha
 - **BRIEF.md** is the brief this project answers.
 - **DESIGN.md** is the agreed design and the staged build plan.
 
-## Status: Stage 2, the feel prototype
+## Status: Stage 3, powers, journey and the gate
 
 The site is live from the `main` branch via GitHub Pages:
 
-- `https://dustyshelf2455.github.io/HarperCrush/` is the game: a playable Calm-mode board (6 by 9, five gem types) with swipe and tap-tap swaps, cascades, the Comet and the Prism Orb, a goal of twelve matches shown as stars that light one by one, a lantern that lights when they are all lit, hints after a pause, reshuffles on dead ends, the music-box lullaby with chimes drawn from its chords, continuous saving and exact resume, and offline support. Installable to the Home Screen.
+- `https://dustyshelf2455.github.io/HarperCrush/` is the game: Calm mode on a 6 by 9 board with swipe and tap-tap swaps, cascades, all seven powers and their combinations unlocking along the path, gifts at the milestone lanterns, a goal of twelve matches shown as stars, a lantern that lights when they are all lit, the map between levels with her companion hopping forward through seven areas, a choice of three companions, hints after a pause, reshuffles on dead ends, the music-box lullaby in each area's voice, the grown-up gate and parent panel, continuous saving and exact resume, and offline support. Installable to the Home Screen.
 - `https://dustyshelf2455.github.io/HarperCrush/mockups/` keeps the Stage 1 mockups.
 
 After the repository is renamed the addresses move to `.../glimmerfall/`. The site is built with relative paths, so it works at either address. Rename the repository **before** the game is installed on a phone: GitHub does not redirect the Pages address after a rename, and an installed web app keeps its saved progress inside itself.
 
-### Testing switches (Stage 2 only)
+### The grown-up gate
 
-There is no parent panel yet, so a few things are settable from the address bar when you open the game in Safari (an installed Home Screen app keeps the address it was added with):
+Hold the dim moon in the top-left corner for a second and a half, then tap the two words the panel names. The panel has the mode switch, the Finish buttons, sound, feel and launch settings, the map position (to restore her journey) and reset.
+
+### Testing switches
+
+A few things are settable from the address bar when you open the game in Safari (an installed Home Screen app keeps the address it was added with):
 
 | Address | Effect |
 |---------|--------|
-| `.../?types=4` | four gem types instead of five (starts a fresh board) |
-| `.../?music=0` | no music |
-| `.../?chimes=0` | no chimes or ticks |
-| `.../?haptics=0` | switch off the haptic tick experiment |
-| `.../?silent=follow` | follow the phone's Silent mode instead of playing through it |
-| `.../?debug=1` | a small overlay showing audio state, level and moves |
-| `.../?reset=1` | throw away the saved board and start fresh |
+| `.../?debug=1` | a small overlay showing audio state, lantern, area, mode and gift |
+| `.../?reset=1` | throw away the saved journey and start fresh at lantern 1 |
+| `.../?level=15` | open straight at that lantern on a fresh board (for example the Sprite's gift) |
 | `.../?seed=123` | a particular fresh board, for reproducing something |
 
-Sound starts on the first touch and, by default, plays even when the phone is on Silent. See `STATUS.md` for where the build is and what is next, and `CLAUDE.md` for how to continue in a new session.
+Sound starts on the first touch and, by default, plays even when the phone is on Silent (switchable in the panel). See `STATUS.md` for where the build is and what is next, and `CLAUDE.md` for how to continue in a new session.
 
 ## Working on it
 
@@ -47,14 +47,15 @@ npm run check      # typecheck + tests + build, what CI runs
 ## Layout
 
 ```
-src/core      pure game logic (board generation, matches, swaps, reshuffle); no DOM
+src/core      pure game logic (grid helpers; game.ts: swaps, matches, powers, combinations, gifts, cascades, hints, reshuffle; journey.ts: areas, unlocks, gifts, boards per mode)
 src/shared    seeded RNG, the pentatonic scale and chords
-src/audio     Web Audio engine and instruments, the pure composer, the player, the sketches
-src/render    gem shapes, the three visual styles, sprite baking, board and map mockups, creatures
+src/audio     Web Audio engine and instruments, the pure composer, the player, the sketches and area voices
+src/render    gem shapes, the three visual styles, sprite baking, the area themes, creatures, the path drawing, the mockup board and map
+src/game      the playable app: app (journey, modes, save), view (animation), input (gestures), mapScene, gate, panel, settings, sounds
 src/mockups   the Stage 1 mockup page
 tests         Vitest tests over the pure modules
 mockups/      HTML entry for the mockup page
-index.html    root page (will become the game)
+index.html    the game
 ```
 
 ## Deploying

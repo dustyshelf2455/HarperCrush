@@ -602,6 +602,37 @@ export class MapScene {
     if (!opts) return;
     this.drawWorld(t, opts, colors);
     this.drawTwinkles();
+    // The resting scene stays up until a grown-up opens the gate (DESIGN.md 3.8), so the dim moon shows where to hold.
+    if (opts.rest) this.drawMoon();
+  }
+
+  private moon: HTMLCanvasElement | null = null;
+
+  /** The same dim moon the board draws at (12,14), baked so the cut-out never erases the scene beneath. */
+  private drawMoon(): void {
+    if (!this.moon) {
+      const size = 24;
+      const canvas = document.createElement('canvas');
+      canvas.width = size * this.dpr;
+      canvas.height = size * this.dpr;
+      const c = canvas.getContext('2d');
+      if (c) {
+        c.scale(this.dpr, this.dpr);
+        c.fillStyle = this.style.palette.text;
+        c.beginPath();
+        c.arc(12, 12, 9, 0, Math.PI * 2);
+        c.fill();
+        c.globalCompositeOperation = 'destination-out';
+        c.beginPath();
+        c.arc(17, 9, 8, 0, Math.PI * 2);
+        c.fill();
+      }
+      this.moon = canvas;
+    }
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.3;
+    this.ctx.drawImage(this.moon, 12, 14, 24, 24);
+    this.ctx.restore();
   }
 
   private drawVignette(): void {
