@@ -55,6 +55,32 @@ function autoBlink(t: number, offset: number): number {
 
 const BLINK_OFFSET: Record<CompanionId, number> = { firefly: 0, fish: 1.7, hero: 2.9 };
 
+/**
+ * A painted companion (art round two): the picture stands on the same feet
+ * point as the code-drawn creature and takes the same squash, tilt, facing
+ * and sleep cues, so hops and landings feel the same. Its glow is drawn in
+ * code so it can breathe.
+ */
+export function drawPaintedCompanion(ctx: CanvasRenderingContext2D, picture: HTMLImageElement, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
+  const sleep = opts.sleep ?? false;
+  const glow = (opts.glow ?? 1) * glowPulse(t, sleep);
+  const squash = sleep ? Math.min(opts.squash ?? 0.92, 0.92) : (opts.squash ?? 1);
+  const feet = s * 0.46;
+  const dh = s * 1.55;
+  const dw = dh * (picture.naturalWidth / picture.naturalHeight);
+  ctx.save();
+  ctx.translate(x, y + feet);
+  ctx.rotate((opts.tilt ?? 0) + (sleep ? 0.12 : 0));
+  ctx.scale((opts.facing ?? 1) / Math.sqrt(squash), squash);
+  ctx.translate(0, -feet);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 0, s * 0.25, s * 1.1, '#ffd27a', 0.22 * glow);
+  ctx.restore();
+  ctx.drawImage(picture, -dw / 2, feet - dh, dw, dh);
+  ctx.restore();
+}
+
 export function drawCompanion(ctx: CanvasRenderingContext2D, id: CompanionId, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
   const sleep = opts.sleep ?? false;
   const motion = opts.motion ?? 1;

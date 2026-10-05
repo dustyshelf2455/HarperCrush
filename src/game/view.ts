@@ -13,7 +13,7 @@ import type { Cell, GemType } from '../core/grid';
 import { createRng } from '../shared/rng';
 import { type AreaTheme, paintSky } from '../render/areas';
 import { lighten, rgba } from '../render/color';
-import { type CompanionId, drawCompanion, drawLantern } from '../render/creatures';
+import { type CompanionId, drawCompanion, drawLantern, drawPaintedCompanion } from '../render/creatures';
 import { drawBud, drawOrb } from '../render/board';
 import { drawAuroraPiece, drawCometHead, drawMoonPearl, drawSpriteCreature, drawStarburstRays, slowPulse } from '../render/powers';
 import { shapePath } from '../render/shapes';
@@ -284,6 +284,14 @@ export class GameView {
   /** Painted gem pictures have loaded: restamp the sprites and show them. */
   setGemArt(art: GemArt): void {
     this.sprites.setArt(art);
+    this.wake();
+  }
+
+  private companionArt: HTMLImageElement | null = null;
+
+  /** The painted firefly for the board's lantern row (art round two). */
+  setCompanionArt(picture: HTMLImageElement | null): void {
+    this.companionArt = picture;
     this.wake();
   }
 
@@ -2001,7 +2009,8 @@ export class GameView {
     drawLantern(ctx, cx - 34, hudY, lanternSize, Math.min(1, this.lanternFill + 0.02 * Math.sin(t * 0.55) + (pokeL ? 0.25 * Math.sin(clamp01(pokeL.t / 700) * Math.PI) : 0)), this.style.palette, t);
     const bob = Math.sin(t * 1.3) * 1.5;
     const hop = pokeC ? -14 * Math.sin(clamp01(pokeC.t / 700) * Math.PI) : 0;
-    drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
+    if (this.companion === 'firefly' && this.companionArt) drawPaintedCompanion(ctx, this.companionArt, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
+    else drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
     this.drawGoal(t);
     // Moon (the grown-up gate, Stage 3), dim, top-left; baked so the cut-out never touches the canvas beneath.
     // While a grown-up holds it, it brightens and a soft glow gathers, so the hold visibly "takes".

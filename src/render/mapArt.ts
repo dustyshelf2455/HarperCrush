@@ -12,6 +12,10 @@ export interface MapArt {
   backdrop?: HTMLImageElement;
   lanternLit?: HTMLImageElement;
   lanternUnlit?: HTMLImageElement;
+  /** A seamless road surface, repeated inside the path ribbon. */
+  road?: HTMLImageElement;
+  /** The firefly companion, facing right. */
+  firefly?: HTMLImageElement;
   props: Partial<Record<MapPropKind, HTMLImageElement>>;
 }
 
@@ -30,6 +34,8 @@ export function loadMapArt(onReady: (art: MapArt) => void): void {
     ['meadow-backdrop.jpg', (img) => (art.backdrop = img)],
     ['lantern-lit.png', (img) => (art.lanternLit = img)],
     ['lantern-unlit.png', (img) => (art.lanternUnlit = img)],
+    ['road.jpg', (img) => (art.road = img)],
+    ['firefly.png', (img) => (art.firefly = img)],
     ...PROP_KINDS.map((k): [string, (img: HTMLImageElement) => void] => [`prop-${k}.png`, (img) => (art.props[k] = img)]),
   ];
   let pending = files.length;

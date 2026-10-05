@@ -17,7 +17,7 @@
 import './mapScene.css';
 import { areaForLevel, type AreaId } from '../core/journey';
 import { areaTheme, blendThemeColors, paintSky, type AreaTheme } from '../render/areas';
-import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion } from '../render/creatures';
+import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
 import { drawLanternPost, drawPathRibbon, drawSteppingLights, lanternPoint, type LanternPos, pathPoint, postLayout, smoothPolyline } from '../render/map';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
@@ -698,9 +698,32 @@ export class MapScene {
   /** Painted pieces (art round two); anything missing is drawn in code. */
   private art: MapArt | null = null;
 
+  private roadPattern: CanvasPattern | null = null;
+
   setArt(art: MapArt): void {
     this.art = art;
+    this.roadPattern = null;
     this.wake();
+  }
+
+  /** The painted road surface as a repeating pattern, scaled for the screen. */
+  private roadTexture(): CanvasPattern | null {
+    if (this.roadPattern) return this.roadPattern;
+    const img = this.art?.road;
+    if (!img) return null;
+    const pattern = this.ctx.createPattern(img, 'repeat');
+    if (!pattern) return null;
+    const scale = 64 / img.naturalWidth;
+    pattern.setTransform(new DOMMatrix().scale(scale, scale));
+    this.roadPattern = pattern;
+    return pattern;
+  }
+
+  /** The companion: painted when a picture exists for it, else drawn in code. */
+  private drawAnyCompanion(ctx: CanvasRenderingContext2D, id: CompanionId, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
+    const picture = id === 'firefly' ? this.art?.firefly : undefined;
+    if (picture) drawPaintedCompanion(ctx, picture, x, y, s, t, opts);
+    else drawCompanion(ctx, id, x, y, s, t, opts);
   }
 
   /** How much of the painted meadow backdrop shows right now: 1 in the meadow, fading at its borders. */
@@ -985,7 +1008,7 @@ export class MapScene {
     ctx.clip();
     // Over the painted meadow the road is a little translucent, so the grass shows through its edges.
     ctx.globalAlpha = 1 - 0.22 * this.backdropAlpha(this.areasNow().a, this.areasNow().b, this.areasNow().f);
-    drawPathRibbon(ctx, smooth, { path: colors.path, pathLit: colors.pathLit }, (i) => PATH_WIDTH * (0.35 + 0.65 * this.sizeAt((smooth[i] as Pt).y)), (walkedTo - nLo) * SPLINE_PER, { clearY: hy + 8, solidY: hy + h * 0.17 });
+    drawPathRibbon(ctx, smooth, { path: colors.path, pathLit: colors.pathLit, texture: this.backdropAlpha(this.areasNow().a, this.areasNow().b, this.areasNow().f) > 0 ? this.roadTexture() : null }, (i) => PATH_WIDTH * (0.35 + 0.65 * this.sizeAt((smooth[i] as Pt).y)), (walkedTo - nLo) * SPLINE_PER, { clearY: hy + 8, solidY: hy + h * 0.17 });
     ctx.globalAlpha = 1;
     for (let n = nLo; n < walkedTo && n < nHi; n++) {
       const i = n - nLo;
@@ -1042,7 +1065,7 @@ export class MapScene {
       const p = this.slotScreen(fr.slot);
       const bob = Math.sin(t * 1.2 + i * 2.1) * 2;
       glowDisc(ctx, p.x, p.y + FRIEND_S * 0.4, FRIEND_S * 0.6, colors.pathLit, 0.1);
-      drawCompanion(ctx, fr.id, p.x, p.y + bob, FRIEND_S * this.sizeAt(p.y), t + i * 1.3, { glow: 0.85, facing: p.x < perchTo.x ? 1 : -1, wave: waveNow });
+      this.drawAnyCompanion(ctx, fr.id, p.x, p.y + bob, FRIEND_S * this.sizeAt(p.y), t + i * 1.3, { glow: 0.85, facing: p.x < perchTo.x ? 1 : -1, wave: waveNow });
     }
 
     // The companion: entering, hopping, landed, or asleep.
@@ -1053,8 +1076,8 @@ export class MapScene {
       const sinceLand = this.swap.t - HOP_MS;
       const inP = this.arc(slotP, perchTo, k);
       const outP = this.arc(perchTo, slotP, k);
-      drawCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
-      drawCompanion(ctx, this.swap.incoming, inP.x, inP.y, companionSize, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
+      this.drawAnyCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
+      this.drawAnyCompanion(ctx, this.swap.incoming, inP.x, inP.y, companionSize, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
     } else if (this.phase === 'hop') {
       const k = clamp01(this.phaseT / HOP_MS);
       const e = easeInOutSine(k);
@@ -1064,7 +1087,7 @@ export class MapScene {
       const perch = postLayout(ground.x, ground.y, this.lanternSizeAt(ground)).perch;
       const y = perch.y - Math.sin(k * Math.PI) * HOP_HEIGHT;
       const dir = Math.sign(lanternPoint(opts.to).x - lanternPoint(opts.from).x) || 1;
-      drawCompanion(ctx, this.companion, perch.x, y, COMPANION_S * this.sizeAt(perch.y), t, { ...this.hopPose(k, -1, dir), glow: 1.15 });
+      this.drawAnyCompanion(ctx, this.companion, perch.x, y, COMPANION_S * this.sizeAt(perch.y), t, { ...this.hopPose(k, -1, dir), glow: 1.15 });
     } else {
       const perch = this.litTo ? perchTo : this.perchOf(opts.from);
       const pose: CompanionOpts = { glow: 1.1 };
@@ -1080,7 +1103,7 @@ export class MapScene {
       }
       const bob = pose.sleep ? 0 : Math.sin(t * 1.4) * 1.5;
       glowDisc(ctx, perch.x, perch.y, companionSize * 0.7, colors.pathLit, 0.12);
-      drawCompanion(ctx, this.companion, perch.x, perch.y + bob, companionSize, t, pose);
+      this.drawAnyCompanion(ctx, this.companion, perch.x, perch.y + bob, companionSize, t, pose);
     }
   }
 
