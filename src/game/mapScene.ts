@@ -22,6 +22,7 @@ import { drawLanternPost, drawPathRibbon, drawSteppingLights, lanternPoint, type
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
 import { mix, rgba } from '../render/color';
+import { BACKDROP_HORIZON, LANTERN_LAMP_FROM_BOTTOM, type MapArt } from '../render/mapArt';
 import { createRng, deriveSeed } from '../shared/rng';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
@@ -631,6 +632,8 @@ export class MapScene {
     const { a, b, f } = this.areasNow();
     const colors = blendThemeColors(a, b, f);
     paintSky(ctx, w, h, colors);
+    const painted = this.backdropAlpha(a, b, f);
+    this.drawBackdrop(painted);
 
     // Ambient life of the area, crossfading at an area border.
     if (f < 1) {
@@ -668,14 +671,20 @@ export class MapScene {
     ctx.restore();
 
     // Scenery and ground: the incoming area fully, the outgoing one fading over it.
-    if (f > 0) b.drawScenery(ctx, w, h, t, hy);
-    if (f < 1) {
+    // Where the painted backdrop shows, the code-drawn ground gives way to it.
+    if (painted < 1) {
       ctx.save();
-      ctx.globalAlpha = 1 - f;
-      a.drawScenery(ctx, w, h, t, hy);
+      ctx.globalAlpha = 1 - painted;
+      if (f > 0) b.drawScenery(ctx, w, h, t, hy);
+      if (f < 1) {
+        ctx.save();
+        ctx.globalAlpha *= 1 - f;
+        a.drawScenery(ctx, w, h, t, hy);
+        ctx.restore();
+      }
+      this.drawHills(colors);
       ctx.restore();
     }
-    this.drawHills(colors);
     this.drawVignette();
 
     if (!opts) return;
@@ -686,6 +695,70 @@ export class MapScene {
   }
 
   private moon: HTMLCanvasElement | null = null;
+  /** Painted pieces (art round two); anything missing is drawn in code. */
+  private art: MapArt | null = null;
+
+  setArt(art: MapArt): void {
+    this.art = art;
+    this.wake();
+  }
+
+  /** How much of the painted meadow backdrop shows right now: 1 in the meadow, fading at its borders. */
+  private backdropAlpha(a: AreaTheme, b: AreaTheme, f: number): number {
+    if (!this.art?.backdrop) return 0;
+    if (a.id === 'meadow') return 1 - f;
+    if (b.id === 'meadow') return f;
+    return 0;
+  }
+
+  /** The painted backdrop, scaled so its horizon sits on the map's horizon and its ground reaches the bottom edge. */
+  private drawBackdrop(alpha: number): void {
+    const img = this.art?.backdrop;
+    if (!img || alpha <= 0) return;
+    const { ctx, w, h } = this;
+    const hy = this.horizonY;
+    const scale = Math.max((h - hy) / (img.naturalHeight * (1 - BACKDROP_HORIZON)), w / img.naturalWidth);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    const x = (w - dw) / 2 - this.camera * 6;
+    const y = hy - BACKDROP_HORIZON * dh;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, x, y, dw, dh);
+    ctx.restore();
+  }
+
+  /** A painted lantern post standing at (x, groundY), unlit under lit so the light rises as a crossfade. */
+  private drawPaintedLantern(x: number, groundY: number, s: number, lit: number, alpha: number, t: number): boolean {
+    const litImg = this.art?.lanternLit;
+    const unlitImg = this.art?.lanternUnlit;
+    if (!litImg || !unlitImg) return false;
+    const { ctx } = this;
+    const dh = (s * 1.32) / LANTERN_LAMP_FROM_BOTTOM;
+    const dw = dh * (litImg.naturalWidth / litImg.naturalHeight);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (lit > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(x, groundY + s * 0.05);
+      ctx.scale(1, 0.38);
+      glowDisc(ctx, 0, 0, s * 1.9, this.style.palette.lanternGlow, 0.3 * lit * (0.925 + 0.075 * Math.sin(t * 0.9)));
+      ctx.restore();
+    }
+    if (lit < 0.98) ctx.drawImage(unlitImg, x - dw / 2, groundY - dh, dw, dh);
+    if (lit > 0.02) {
+      ctx.globalAlpha = alpha * clamp01(lit);
+      ctx.drawImage(litImg, x - dw / 2, groundY - dh, dw, dh);
+      // The lamp's own light: a warm halo the picture does not carry, breathing slowly.
+      const lamp = postLayout(x, groundY, s).lantern;
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, lamp.x, lamp.y, s * 1.5, this.style.palette.lanternGlow, (0.42 + 0.06 * Math.sin(t * 0.9)) * clamp01(lit));
+      glowDisc(ctx, lamp.x, lamp.y, s * 0.7, '#fff2cf', 0.28 * clamp01(lit));
+    }
+    ctx.restore();
+    return true;
+  }
 
   /** The same dim moon the board draws at (12,14), baked so the cut-out never erases the scene beneath. */
   private drawMoon(): void {
@@ -785,6 +858,19 @@ export class MapScene {
       const glow = 0.6 + 0.4 * Math.sin(t * 0.7 + it.phase);
       ctx.save();
       ctx.globalAlpha = alpha;
+      const picture = this.art?.props[it.kind];
+      if (picture) {
+        // A painted plant or stone, its foot on the ground, breathing a little of the area's light.
+        const dh = s * 1.9;
+        const dw = dh * (picture.naturalWidth / picture.naturalHeight);
+        ctx.drawImage(picture, p.x - dw / 2, p.y - dh * 0.9, dw, dh);
+        if (it.kind !== 'stone') {
+          ctx.globalCompositeOperation = 'lighter';
+          glowDisc(ctx, p.x, p.y - s * 0.8, s * 1.5, colors.accent, 0.12 * glow);
+        }
+        ctx.restore();
+        continue;
+      }
       switch (it.kind) {
         case 'tuft': {
           ctx.strokeStyle = rgba(mix(colors.ground, colors.accent, 0.45), 0.9);
@@ -897,7 +983,10 @@ export class MapScene {
     ctx.beginPath();
     ctx.rect(0, hy + 6, this.w, h);
     ctx.clip();
+    // Over the painted meadow the road is a little translucent, so the grass shows through its edges.
+    ctx.globalAlpha = 1 - 0.22 * this.backdropAlpha(this.areasNow().a, this.areasNow().b, this.areasNow().f);
     drawPathRibbon(ctx, smooth, { path: colors.path, pathLit: colors.pathLit }, (i) => PATH_WIDTH * (0.35 + 0.65 * this.sizeAt((smooth[i] as Pt).y)), (walkedTo - nLo) * SPLINE_PER, { clearY: hy + 8, solidY: hy + h * 0.17 });
+    ctx.globalAlpha = 1;
     for (let n = nLo; n < walkedTo && n < nHi; n++) {
       const i = n - nLo;
       const seg = smooth.slice(i * SPLINE_PER, (i + 1) * SPLINE_PER + 1);
@@ -922,7 +1011,7 @@ export class MapScene {
         lit = 0.1 + 0.9 * easeOutCubic(k) + 0.25 * Math.sin(k * Math.PI);
         if (k < 1) bloomAt = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
       }
-      drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
+      if (!this.drawPaintedLantern(p.x, p.y, this.lanternSizeAt(p), lit, alpha, t + n * 0.7)) drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
     }
     if (!opts.rest && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
       // The invitation: a slow breath of light around the new lantern until she taps it.

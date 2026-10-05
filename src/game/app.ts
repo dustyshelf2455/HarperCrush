@@ -44,6 +44,7 @@ import {
 import { createRng, deriveSeed } from '../shared/rng';
 import { areaTheme } from '../render/areas';
 import { loadGemArt } from '../render/gemArt';
+import { loadMapArt } from '../render/mapArt';
 import type { CompanionId } from '../render/creatures';
 import { nightGarden } from '../render/styles/nightGarden';
 import { Gate } from './gate';
@@ -237,6 +238,7 @@ export class App {
 
     // The map canvas sits above the board and its touch surface; it is hidden when not in use.
     this.map = new MapScene(createMapCanvas(), nightGarden);
+    loadMapArt((art) => this.map.setArt(art));
 
     // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
     const surface = (document.getElementById('touch') as HTMLElement | null) ?? canvas;

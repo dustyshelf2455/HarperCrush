@@ -24,6 +24,7 @@ function serviceWorker(): Plugin {
         './icons/icon-192.png',
         './icons/icon-512.png',
         ...['star', 'heart', 'drop', 'leaf', 'diamond', 'sunstone'].map((t) => `./art/gems/${t}.png`),
+        ...['meadow-backdrop.jpg', 'lantern-lit.png', 'lantern-unlit.png', 'prop-tuft.png', 'prop-flower.png', 'prop-mushroom.png', 'prop-stone.png'].map((f) => `./art/map/${f}`),
       ]);
       for (const f of files) assets.add('./' + f);
       const list = [...assets].sort();
