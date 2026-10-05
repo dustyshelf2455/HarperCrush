@@ -12,10 +12,19 @@ body {
   touch-action: none;
 }
 
+/*
+ * The scene runs to the bottom edge of the screen (Stage 3 play-test: the strip above the home
+ * indicator looked like dead space). Only the top and sides are padded; the view keeps the board and
+ * anything tappable above the bottom inset itself, read from --sab.
+ */
+:root {
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+
 #stage {
   position: fixed;
   inset: 0;
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
   box-sizing: border-box;
 }
 

@@ -67,6 +67,16 @@ interface Ring {
   alpha: number;
 }
 
+/** The home-indicator inset in CSS px, from the --sab variable game.css sets; 0 where there is none. */
+export function bottomInset(): number {
+  try {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sab'));
+    return Number.isFinite(v) ? Math.max(0, v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** A decorative bloom opening (the moonflower's), with no cells of its own. */
 interface Flower {
   x: number;
@@ -442,11 +452,13 @@ export class GameView {
     const height = Math.max(400, Math.floor(rect.height || window.innerHeight));
     const pad = 8;
     const hud = 108; // lantern and companion row plus the goal stars
-    const cell = Math.min((width - pad * 2) / this.state.cols, (height - hud - 24) / this.state.rows);
+    // The canvas runs under the home indicator; the board itself stays above that strip.
+    const inset = bottomInset();
+    const cell = Math.min((width - pad * 2) / this.state.cols, (height - inset - hud - 24) / this.state.rows);
     const boardW = cell * this.state.cols;
     const boardH = cell * this.state.rows;
     const boardX = (width - boardW) / 2;
-    const spare = height - hud - boardH;
+    const spare = height - inset - hud - boardH;
     // Board a little below centre so it sits under her thumbs; the HUD rides just above it.
     const boardY = hud + Math.max(6, spare * 0.6 - 8);
     const hudY = boardY - 70;

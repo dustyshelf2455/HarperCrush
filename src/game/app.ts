@@ -999,6 +999,7 @@ export class App {
   }
 
   private setupDebug(): void {
+    const stageHeight = (): number => document.getElementById('stage')?.getBoundingClientRect().height ?? 0;
     // A hook for the Playwright verification scripts (debug mode only): drive swaps and jumps deterministically.
     const w = window as Window & { glimmerfall?: unknown };
     w.glimmerfall = {
@@ -1046,6 +1047,7 @@ export class App {
         `matches ${this.matches}/${boardFor(this.mode).goal} moves ${this.state.moves} gift ${gift}`,
         `unlocked ${this.state.unlocked.join(',')} seen ${[...this.seen].join(',')}`,
         `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'} update ${document.documentElement.dataset.update ?? '-'}`,
+        `screen ${screen.width}x${screen.height} inner ${innerWidth}x${innerHeight} visual ${Math.round(window.visualViewport?.height ?? 0)} stage ${Math.round(stageHeight())} sab ${getComputedStyle(document.documentElement).getPropertyValue('--sab').trim()}`,
         this.engine.lastError ? `err ${this.engine.lastError}` : '',
       ].join('\n');
     }, 500);
