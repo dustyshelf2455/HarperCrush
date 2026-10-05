@@ -23,6 +23,7 @@ function serviceWorker(): Plugin {
         './icons/icon-180.png',
         './icons/icon-192.png',
         './icons/icon-512.png',
+        ...['star', 'heart', 'drop', 'leaf', 'diamond', 'sunstone'].map((t) => `./art/gems/${t}.png`),
       ]);
       for (const f of files) assets.add('./' + f);
       const list = [...assets].sort();

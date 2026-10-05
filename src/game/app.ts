@@ -43,6 +43,7 @@ import {
 } from '../core/journey';
 import { createRng, deriveSeed } from '../shared/rng';
 import { areaTheme } from '../render/areas';
+import { loadGemArt } from '../render/gemArt';
 import type { CompanionId } from '../render/creatures';
 import { nightGarden } from '../render/styles/nightGarden';
 import { Gate } from './gate';
@@ -227,6 +228,7 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
+    loadGemArt((art) => this.view.setGemArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);
     this.sounds.enabled = settings.chimes;

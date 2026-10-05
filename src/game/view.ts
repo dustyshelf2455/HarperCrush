@@ -18,6 +18,7 @@ import { drawBud, drawOrb } from '../render/board';
 import { drawAuroraPiece, drawCometHead, drawMoonPearl, drawSpriteCreature, drawStarburstRays, slowPulse } from '../render/powers';
 import { shapePath } from '../render/shapes';
 import { GemSprites } from '../render/sprites';
+import type { GemArt } from '../render/gemArt';
 import { breath, clamp01, easeInOutSine, easeOutCubic, glowDisc, highlight, softRing } from '../render/styles/common';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
@@ -278,6 +279,12 @@ export class GameView {
 
   setCompanion(id: CompanionId): void {
     this.companion = id;
+  }
+
+  /** Painted gem pictures have loaded: restamp the sprites and show them. */
+  setGemArt(art: GemArt): void {
+    this.sprites.setArt(art);
+    this.wake();
   }
 
   setSelected(cell: Cell | null): void {

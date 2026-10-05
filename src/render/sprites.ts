@@ -4,6 +4,7 @@
  */
 import type { GemType } from '../core/grid';
 import type { GemStyle } from './styles/types';
+import { GEM_ART_SCALE, type GemArt } from './gemArt';
 
 export interface DrawOpts {
   alpha?: number;
@@ -15,6 +16,7 @@ export interface DrawOpts {
 
 export class GemSprites {
   private cache = new Map<string, { canvas: HTMLCanvasElement; size: number }>();
+  private art: GemArt = {};
 
   constructor(
     private style: GemStyle,
@@ -26,12 +28,20 @@ export class GemSprites {
     this.cache.clear();
   }
 
+  /** Painted pictures for some or all gem types; the rest stay code-drawn. */
+  setArt(art: GemArt): void {
+    this.art = art;
+    this.cache.clear();
+  }
+
   private sprite(type: GemType, radius: number): { canvas: HTMLCanvasElement; size: number } {
     const r = Math.round(radius * 2) / 2;
     const key = `${type}:${r}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
-    const size = Math.ceil(2 * r * (1 + this.style.haloPad));
+    const picture = this.art[type];
+    const side = r * GEM_ART_SCALE;
+    const size = Math.ceil(picture ? Math.max(side, 2 * r * (1 + this.style.haloPad)) : 2 * r * (1 + this.style.haloPad));
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(size * this.dpr);
     canvas.height = Math.ceil(size * this.dpr);
@@ -39,7 +49,8 @@ export class GemSprites {
     if (ctx) {
       ctx.scale(this.dpr, this.dpr);
       ctx.translate(size / 2, size / 2);
-      this.style.drawGem(ctx, type, r);
+      if (picture) ctx.drawImage(picture, -side / 2, -side / 2, side, side);
+      else this.style.drawGem(ctx, type, r);
     }
     const entry = { canvas, size };
     this.cache.set(key, entry);
