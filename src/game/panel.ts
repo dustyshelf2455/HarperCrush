@@ -1,8 +1,8 @@
 /**
  * The parent panel (DESIGN.md 3.9 "What is on the panel", 3.6, 3.8, 3.11,
  * 3.12): a full-height sheet over the game for a grown-up, reached through the
- * gate. Text is fine here and nowhere else. The mode tiles and the Finish
- * buttons, the two things a parent reaches for in a car (3.6), are pinned at
+ * gate. Text is fine here and nowhere else. The Calm switch and the Finish
+ * buttons, the two things a parent reaches for in a car (3.6, 2d), are pinned at
  * the bottom in thumb reach; the home-indicator inset below them is left
  * empty so a thumb reaching for a button cannot swipe the app away (3.9).
  * Everything else scrolls above. The sheet closes itself after 30 s with no
@@ -12,20 +12,26 @@
  * the app owns everything else (mode, finish, lantern, reset) through
  * PanelActions and keeps the panel current with update().
  */
-import type { Mode } from '../core/journey';
 import type { Settings, SettingsStore } from './settings';
 import './panel.css';
 
 export interface PanelContext {
-  mode: Mode;
-  /** A Calm-to-Play switch waiting for the next lantern (3.6), or null. */
-  pendingMode: Mode | null;
+  /** Calm is on: the gentle board over her one game (DESIGN.md 2d). */
+  calm: boolean;
+  /** A Calm change waiting for the next lantern (3.6): true for on, false for off, null for none. */
+  calmPending: boolean | null;
   level: number;
+  /** A lit lantern being played again, or null. */
+  replay: number | null;
   areaName: string;
   /** The resting scene is showing (3.8): "New session" replaces the Finish buttons. */
   resting: boolean;
   /** "Finish after this level" has been pressed. */
   finishing: boolean;
+  /** The timer's sleepy stretch is on. */
+  windingDown: boolean;
+  /** Time left in the session, or null with no timer. */
+  sessionLeftMs: number | null;
   buildDate: string;
   offlineReady: boolean;
   /** A short word on the audio engine's state, for the About line. */
@@ -33,7 +39,7 @@ export interface PanelContext {
 }
 
 export interface PanelActions {
-  setMode(mode: Mode): void;
+  setCalm(on: boolean): void;
   finishAfterLevel(): void;
   cancelFinish(): void;
   finishNow(): void;
@@ -64,8 +70,8 @@ export class Panel {
   private readonly confirmSlot: HTMLDivElement;
   private readonly statusMain: HTMLDivElement;
   private readonly statusSub: HTMLDivElement;
-  private readonly modeCalm: HTMLButtonElement;
-  private readonly modePlay: HTMLButtonElement;
+  private readonly calmTile: HTMLButtonElement;
+  private readonly calmNote: HTMLDivElement;
   private readonly finishBlock: HTMLDivElement;
   private readonly lanternNumber: HTMLDivElement;
   private readonly goButton: HTMLButtonElement;
@@ -109,27 +115,26 @@ export class Panel {
     // Middle: everything that scrolls.
     this.scroll = div('gf-scroll');
     this.scroll.append(
+      this.sectionSession(),
       this.sectionSound(),
       this.sectionFeel(),
-      this.sectionLaunch(),
       this.sectionDifficulty(),
       this.sectionMap(),
       this.sectionReset(),
       this.sectionAbout(),
-      div('gf-footnote', 'Session length, wind-down and rest-until arrive in Stage 5.'),
     );
     this.about = this.scroll.querySelector('.gf-about') as HTMLDivElement;
     this.lanternNumber = this.scroll.querySelector('.gf-lantern-number') as HTMLDivElement;
     this.goButton = this.scroll.querySelector('.gf-go') as HTMLButtonElement;
 
-    // Foot, pinned in thumb reach (3.6, 3.9): the mode tiles, then the Finish buttons.
+    // Foot, pinned in thumb reach (3.6, 3.9): the Calm switch, then the Finish buttons.
     const foot = div('gf-foot');
     const modes = div('gf-mode-tiles');
-    this.modeCalm = button('gf-mode-tile', 'Calm', () => this.pickMode('calm'));
-    this.modePlay = button('gf-mode-tile', 'Play', () => this.pickMode('play'));
-    modes.append(this.modeCalm, this.modePlay);
+    this.calmTile = button('gf-mode-tile gf-calm-tile', 'Calm', () => this.actions.setCalm(!(this.ctx?.calmPending ?? this.ctx?.calm ?? false)));
+    modes.append(this.calmTile);
+    this.calmNote = div('gf-mode-note');
     this.finishBlock = div('gf-finish');
-    foot.append(modes, div('gf-mode-note', 'Calm is for hard moments. Play has puzzles to work out.'), this.finishBlock);
+    foot.append(modes, this.calmNote, this.finishBlock);
 
     this.root.append(head, this.scroll, foot);
     host.appendChild(this.root);
@@ -234,10 +239,13 @@ export class Panel {
     return s;
   }
 
-  private sectionLaunch(): HTMLElement {
-    const s = section('Launch');
-    // DESIGN.md 3.6 launch rule: after a long gap, Calm mode unless this says to remember the last mode.
-    s.append(this.row('After a long break, open in', this.segmented([['calm', 'Calm'], ['remember', 'The last mode']], (v) => this.settings.set({ launch: v as Settings['launch'] }), (st) => st.launch), true));
+  private sectionSession(): HTMLElement {
+    const s = section('Session');
+    // DESIGN.md 3.8 and 2d: a timed session gets sleepy over its last four minutes, then the level ends at the map.
+    s.append(
+      this.row('', this.segmented([['0', 'Off'], ['5', '5'], ['10', '10'], ['15', '15'], ['20', '20'], ['30', '30']], (v) => this.settings.set({ sessionMinutes: Number(v) as Settings['sessionMinutes'] }), (st) => String(st.sessionMinutes)), true),
+      div('gf-note', 'Minutes of play. The clock starts when you set it. The last four minutes get sleepy, then her level ends at the map and her companion falls asleep. "Keep playing" at the bottom waves it off.'),
+    );
     return s;
   }
 
@@ -286,16 +294,21 @@ export class Panel {
     const ctx = this.ctx;
     if (!ctx) return;
     this.statusMain.textContent = `Lantern ${ctx.level} · ${ctx.areaName}`;
-    const modeName = ctx.mode === 'calm' ? 'Calm' : 'Play';
-    let sub = ctx.resting ? `Resting after ${modeName} mode` : `${modeName} mode`;
-    if (ctx.pendingMode && ctx.pendingMode !== ctx.mode) sub += ` · ${ctx.pendingMode === 'play' ? 'Play' : 'Calm'} from the next lantern`;
-    this.statusSub.textContent = sub;
+    const parts: string[] = [];
+    if (ctx.resting) parts.push('Resting');
+    else if (ctx.replay !== null) parts.push(`Playing lantern ${ctx.replay} again`);
+    parts.push(ctx.calm ? 'Calm on' : 'Calm off');
+    if (ctx.calmPending !== null && ctx.calmPending !== ctx.calm) parts.push(`Calm ${ctx.calmPending ? 'on' : 'off'} from the next lantern`);
+    if (ctx.sessionLeftMs !== null) parts.push(ctx.windingDown ? 'Getting sleepy' : `${Math.max(1, Math.ceil(ctx.sessionLeftMs / 60_000))} min left`);
+    this.statusSub.textContent = parts.join(' · ');
 
-    const lit = ctx.pendingMode ?? ctx.mode;
-    this.modeCalm.setAttribute('aria-pressed', String(lit === 'calm'));
-    this.modePlay.setAttribute('aria-pressed', String(lit === 'play'));
-    this.modeCalm.classList.toggle('is-pending', ctx.pendingMode === 'calm' && ctx.mode !== 'calm');
-    this.modePlay.classList.toggle('is-pending', ctx.pendingMode === 'play' && ctx.mode !== 'play');
+    const lit = ctx.calmPending ?? ctx.calm;
+    this.calmTile.textContent = lit ? 'Calm is on' : 'Calm is off';
+    this.calmTile.setAttribute('aria-pressed', String(lit));
+    this.calmTile.classList.toggle('is-pending', ctx.calmPending !== null && ctx.calmPending !== ctx.calm);
+    this.calmNote.textContent = lit
+      ? 'Her same game, made gentle: a cosier board, more powers, quicker hints. Turning it off waits for the next lantern.'
+      : 'For hard moments: a cosier board, more powers, quicker hints, straight away. Her progress still counts.';
 
     this.renderFinish(ctx);
     this.lanternNumber.textContent = String(this.lanternDraft);
@@ -333,10 +346,6 @@ export class Panel {
   }
 
   // ----------------------------------------------------------------- actions
-
-  private pickMode(mode: Mode): void {
-    this.actions.setMode(mode);
-  }
 
   private stepLantern(delta: number): void {
     this.lanternDraft = Math.max(1, this.lanternDraft + delta);

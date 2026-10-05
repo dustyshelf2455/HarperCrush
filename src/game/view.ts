@@ -235,6 +235,9 @@ export class GameView {
   private motionScale: number;
   /** Speed of the resolution being played: game time runs at this rate while steps play. */
   private timeScale = 1;
+  /** Wind-down (DESIGN.md 3.8): 0..1, eased over a minute; slows the motion a little and dims the scene. */
+  private windDown = 0;
+  private windDownTarget = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -301,6 +304,12 @@ export class GameView {
   setReducedMotion(on: boolean): void {
     this.motionScale = on ? 0.6 : 1;
     if (on) this.timeScale = 1;
+  }
+
+  /** Wind-down on or off: the softening eases in and out over about a minute, never announced. */
+  setWindDown(on: boolean): void {
+    this.windDownTarget = on ? 1 : 0;
+    this.wake();
   }
 
   /** The vignette breathes at a calm pace (DESIGN.md 3.8); off, it is a static faint vignette. */
@@ -551,10 +560,15 @@ export class GameView {
 
   /** Returns true while anything needs full frame rate. */
   private update(dt: number): boolean {
+    // Wind-down eases in over about a minute (and out in a few seconds); it slows everything by up to a fifth.
+    if (this.windDown !== this.windDownTarget) {
+      const rate = this.windDownTarget > this.windDown ? dt / 60_000 : dt / 4_000;
+      this.windDown = this.windDownTarget > this.windDown ? Math.min(1, this.windDown + rate) : Math.max(0, this.windDown - rate);
+    }
     // Game time runs at timeScale while a resolution plays: every duration, fall and sparkle slows together.
-    const gdt = dt * this.timeScale;
+    const gdt = dt * this.timeScale * (1 - 0.2 * this.windDown);
     const seconds = gdt / 1000;
-    let moving = false;
+    let moving = this.windDown !== this.windDownTarget;
     this.ripples = this.ripples.filter((r) => (r.t += dt) < 480);
     if (this.ripples.length > 0) moving = true;
     this.rings = this.rings.filter((r) => (r.t += gdt) < r.duration);
@@ -1373,6 +1387,11 @@ export class GameView {
       ctx.globalCompositeOperation = 'lighter';
       glowDisc(ctx, lanternPos.x, lanternPos.y, 60 + 90 * Math.sin(celebrate * Math.PI), '#fff2c8', 0.45 * Math.sin(celebrate * Math.PI));
       ctx.restore();
+    }
+    if (this.windDown > 0) {
+      // The night deepens: a soft dim over everything (DESIGN.md 3.8, about 15 to 20 percent at full).
+      ctx.fillStyle = rgba('#05070f', 0.18 * this.windDown);
+      ctx.fillRect(0, 0, w, h);
     }
   }
 

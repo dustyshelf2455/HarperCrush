@@ -40,6 +40,8 @@ export interface MapShowOptions {
   onTwinkle?(): void;
   /** The scene is finished (never called in rest). */
   onDone(): void;
+  /** She tapped a lit lantern behind her: play that level again (the journey does not move). */
+  onReplay?(level: number): void;
 }
 
 // Timings from DESIGN.md 3.5 and the Stage 3 brief.
@@ -387,6 +389,12 @@ export class MapScene {
       this.finish();
       return;
     }
+    const earlier = this.litTo && this.phase === 'linger' && opts.onReplay ? this.earlierLanternAt(x, y) : null;
+    if (earlier !== null && opts.onReplay) {
+      this.phase = 'done';
+      opts.onReplay(earlier);
+      return;
+    }
     this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
     opts.onTwinkle?.();
     this.wake();
@@ -400,6 +408,35 @@ export class MapScene {
     const layout = postLayout(base.x, base.y, this.lanternSizeAt(base));
     const targets = [base, layout.lantern, layout.perch];
     return targets.some((p) => Math.hypot(p.x - x, p.y - y) <= LANTERN_HIT);
+  }
+
+  /** A lit lantern behind her under the tap (its post or light), nearest first, or null. */
+  private earlierLanternAt(x: number, y: number): number | null {
+    const opts = this.opts;
+    if (!opts) return null;
+    const { nLo } = this.lanternRange();
+    let best: number | null = null;
+    let bestD = LANTERN_HIT;
+    for (let n = nLo; n < opts.to; n++) {
+      const base = this.toScreen(lanternPoint(n));
+      if (this.fog(base) <= 0.01 || base.y > this.h + 40) continue;
+      const light = postLayout(base.x, base.y, this.lanternSizeAt(base)).lantern;
+      const d = Math.min(Math.hypot(base.x - x, base.y - y), Math.hypot(light.x - x, light.y - y));
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  /** The lanterns in view, plus one each side so the curve has its neighbours. */
+  private lanternRange(): { nLo: number; nHi: number } {
+    const { h } = this;
+    const span = this.spacing;
+    const nLo = Math.max(1, Math.floor(this.camera - (h - h * BASELINE) / span) - 1);
+    const nHi = Math.ceil(this.camera + (h * BASELINE - this.horizonY) / span) + 1;
+    return { nLo, nHi };
   }
 
   /** Called by the app for a continue it owes elsewhere (the debug hook); same as a tap on the lantern. */
@@ -675,10 +712,7 @@ export class MapScene {
     const pal = { ...this.style.palette, path: colors.path, pathLit: colors.pathLit };
     const walkedTo = this.litTo ? opts.to : opts.from;
 
-    // Lanterns in view, plus one each side so the curve has its neighbours.
-    const span = this.spacing;
-    const nLo = Math.max(1, Math.floor(this.camera - (h - h * BASELINE) / span) - 1);
-    const nHi = Math.ceil(this.camera + (h * BASELINE - this.horizonY) / span) + 1;
+    const { nLo, nHi } = this.lanternRange();
     const pts: Pt[] = [];
     for (let n = nLo; n <= nHi; n++) pts.push(this.toScreen(lanternPoint(n)));
     const smooth = smoothPolyline(pts, SPLINE_PER);

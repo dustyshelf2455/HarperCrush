@@ -1,11 +1,17 @@
 # Status
 
-Updated 4 October 2026, end of Stage 3 (powers, journey and the gate).
+Updated 5 October 2026, after the Stage 3 play-test (notes and the plan in the project's `playtest/` folder; decisions in DESIGN.md 2d).
+
+## After the play-test (5 October)
+
+- **Batch 1, deployed (run 14):** the moon gate accepts a real thumb (it rejected any touch over 28 px as a palm; an iPhone thumb is about 40 px), tolerates a wobble and shows its ring from the start, and the moon brightens while held. The map stays after the lantern lights until she taps the lit lantern or her companion; the lantern breathes as the invitation; other taps twinkle.
+- **Batch 2, built:** one game that opens as it was left (no launch rule), fresh journeys start in Play, Calm is a switch on the panel over the same game and progress; the session timer (off, 5 to 30 min) with its four-minute sleepy wind-down ending at the resting scene; replaying a lit lantern from the map. Save schema v3; v2 saves carry across and open in Play. Verified in Chromium at phone size: Play default, Calm on and off, the wind-down at half of a five-minute session, the gentle ending into rest, New session, replay of lantern 2 from lantern 3 and the return, exact resume after a relaunch, the v2 migration.
+- **Still to do from the play-test:** batch 3 (level-win shimmer, power gems that look special and call to be used, a haptics attempt for swipes) and batch 4 (the art pass: map, firefly, gems).
 
 ## Where things are
 
 - **Live:** `https://dustyshelf2455.github.io/HarperCrush/` (game) and `/mockups/` (Stage 1 mockups). Deploys from `main`. Repository still to be renamed `glimmerfall` before Harper's real install (the Pages address does not redirect after a rename, and an installed app keeps its save inside itself).
-- **Decided:** look = Deep Night Garden; music = music-box lullaby; board 6 wide by 9 tall in Calm mode; Calm goal = twelve matches shown as a row of stars, then the lantern lights and the map plays. Sound plays regardless of Silent mode by default (the panel offers "follow Silent"). Haptic tick experiment on by default (panel toggle). The Stage 3 decisions made while building are in DESIGN.md 2c.
+- **Decided:** look = Deep Night Garden; music = music-box lullaby; board 6 wide by 9 tall with Calm on (7 by 8 otherwise); Calm goal = twelve matches shown as a row of stars, then the lantern lights and the map plays. Sound plays regardless of Silent mode by default (the panel offers "follow Silent"). Haptic tick experiment on by default (panel toggle). The Stage 3 decisions made while building are in DESIGN.md 2c.
 - **Built (Stages 2 and 3):**
   - Core: all seven powers (Comet, Prism Orb, Bloom, Lantern Sprite, Starburst, Moonrise, Aurora), every two-power combination from the table in DESIGN.md 3.4, shapes that only count once their power has unlocked, gifts placed one swap from going off, the finishing light that sets an unfired gift off, square-aware fresh boards, refills and reshuffles, cascades, hints by strength. Over two hundred tests, including thousands of random moves replayed through their own steps.
   - The journey: seven areas of ten lanterns that cycle forever, each with its own sky, scenery, ambient life and music voice; the unlock schedule from DESIGN.md 3.4 (Comet at 1, Orb at 5, Bloom at 8, a Comet beside a Bloom at 11, Sprite at 15, and so on to the Aurora at 51); from the second pass on, the first lantern of each area gifts the combination she has fired least.

@@ -15,8 +15,11 @@ export interface Settings {
   /** The tap-time haptic tick experiment (DESIGN.md 3.12). */
   haptics: boolean;
   reducedMotion: 'follow' | 'on' | 'off';
-  /** What a launch after a long gap does: Calm mode, or the mode she was last in. */
-  launch: 'calm' | 'remember';
+  /**
+   * Session length in minutes, or 0 for no timer (DESIGN.md 3.8, as decided in the Stage 3 play-test:
+   * the last four minutes get sleepy, then the level ends at the map). Counts foreground play only.
+   */
+  sessionMinutes: 0 | 5 | 10 | 15 | 20 | 30;
   /** Play mode's overall level; used by the Stage 4 level generator. */
   playDifficulty: 'gentle' | 'medium' | 'bigger';
   /** The soft breathing vignette around the board. */
@@ -31,7 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hintDelay: 'normal',
   haptics: true,
   reducedMotion: 'follow',
-  launch: 'calm',
+  sessionMinutes: 0,
   playDifficulty: 'gentle',
   breathingGlow: true,
 };

@@ -177,6 +177,12 @@
   flex: 1 0 100%;
 }
 
+/* A control with many short choices (the session minutes) shares the width evenly instead of overflowing. */
+.gf-row.is-wide .gf-seg .gf-seg-item {
+  min-width: 0;
+  padding: 0 6px;
+}
+
 .gf-row-label {
   flex: 1 1 auto;
   font-size: 16px;
@@ -362,7 +368,11 @@
   gap: 12px;
 }
 
-/* The mode switch, the first and biggest control (3.6): two tiles, the active one lit. */
+/* The Calm switch, the first and biggest control (3.6, 2d): one wide tile, lit while Calm is on. */
+.gf-calm-tile {
+  grid-column: 1 / -1;
+}
+
 .gf-mode-tile {
   appearance: none;
   -webkit-appearance: none;

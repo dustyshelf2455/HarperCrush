@@ -2,7 +2,10 @@
  * The app shell: owns her journey (lantern, area, mode), the board, the view,
  * the map between levels, input, sound, saving, the grown-up gate and the
  * parent panel. Stage 3: powers and their gifts, the map, companions, areas,
- * modes, the launch rule, and the Finish buttons in their provisional form.
+ * modes, the Finish buttons in their provisional form; after the Stage 3
+ * play-test (DESIGN.md 2d): one game that opens as it was left, Calm as a
+ * switch over it, the session timer with its sleepy wind-down, and replaying
+ * a lit lantern from the map.
  */
 import { AudioEngine } from '../audio/engine';
 import { MusicPlayer } from '../audio/player';
@@ -50,12 +53,16 @@ import { type Settings, SettingsStore, hintDelayMs } from './settings';
 import { GameSounds } from './sounds';
 import { GameView } from './view';
 
-const SAVE_KEY = 'glimmerfall.save.v2';
+const SAVE_KEY = 'glimmerfall.save.v3';
+const SAVE_KEY_V2 = 'glimmerfall.save.v2';
 const LEGACY_SAVE_KEY = 'glimmerfall.save.v1';
-/** DESIGN.md 3.6, launch rule: a relaunch within this long resumes the exact board and mode. */
-const RESUME_WITHIN_MS = 10 * 60 * 1000;
 /** DESIGN.md 3.8, rest-until default: a relaunch within this long after an ending shows the sleeping scene. Stage 5 makes it a setting. */
 const REST_UNTIL_MS = 30 * 60 * 1000;
+/** A session's clock carries across a relaunch within this long (she closed and reopened the app); after longer it starts afresh. */
+const SESSION_CARRY_MS = REST_UNTIL_MS;
+/** The sleepy stretch at the end of a timed session (DESIGN.md 2d: the parent's four minutes). */
+const WIND_DOWN_MS = 4 * 60 * 1000;
+const SESSION_TICK_MS = 1000;
 /** The hint points at a gift's swap from the first pause (DESIGN.md 3.4). */
 const GIFT_HINT_MS = 2500;
 /** The first firing of a power runs at this speed (DESIGN.md 3.4). */
@@ -71,7 +78,7 @@ interface ParkedBoard {
 }
 
 interface Save {
-  v: 2;
+  v: 3;
   mode: Mode;
   pendingMode: Mode | null;
   level: number;
@@ -85,6 +92,24 @@ interface Save {
   parkedPlay: ParkedBoard | null;
   phase: Phase;
   finishing: boolean;
+  restingSince: number | null;
+  /** A lit lantern being played again from the map (DESIGN.md 2d); her own lantern is `level`. */
+  replay: number | null;
+  /** Foreground play time this session, for the timer. */
+  sessionElapsedMs: number;
+  savedAt: number;
+}
+
+/** The Stage 3 save. Read once and carried into v3: the game then opens in Play on a fresh board (DESIGN.md 2d). */
+interface SaveV2 {
+  v: 2;
+  mode: Mode;
+  level: number;
+  companion: CompanionId;
+  companionOffered: boolean;
+  seen: PowerFamily[];
+  comboCounts: Record<string, number>;
+  phase: Phase;
   restingSince: number | null;
   savedAt: number;
 }
@@ -119,9 +144,18 @@ export function optionsFromUrl(): AppOptions {
 
 export class App {
   // Journey
-  private mode: Mode = 'calm';
+  private mode: Mode = 'play';
   private pendingMode: Mode | null = null;
   private level = 1;
+  /** The lantern being played again, or null when she is playing her own (DESIGN.md 2d). */
+  private replay: number | null = null;
+  private sessionElapsedMs = 0;
+  /** The timer's sleepy stretch has begun. */
+  private windingDown = false;
+  /** The timer has done its work (or was waved off) for this session; it runs again from New session. */
+  private sessionSpent = false;
+  private sessionTimer: ReturnType<typeof setInterval> | null = null;
+  private appliedSessionMinutes = 0;
   private state: GameState;
   private matches = 0;
   private companion: CompanionId = 'firefly';
@@ -166,7 +200,7 @@ export class App {
     const loaded = opts.reset || opts.level !== null ? null : this.load();
     if (opts.level !== null) {
       this.level = opts.level;
-      this.mode = 'calm';
+      this.mode = 'play';
       this.phase = 'playing';
       this.finishing = false;
       this.restingSince = null;
@@ -215,7 +249,7 @@ export class App {
 
     // The grown-up gate and the parent panel (DESIGN.md 3.9).
     this.panel = new Panel(stage, this.settings, {
-      setMode: (mode) => this.setMode(mode),
+      setCalm: (on) => this.setMode(on ? 'calm' : 'play'),
       finishAfterLevel: () => this.finishAfterLevel(true),
       cancelFinish: () => this.finishAfterLevel(false),
       finishNow: () => this.finishNow(),
@@ -247,7 +281,13 @@ export class App {
       // A save written at the moment the lantern filled: finish that level now.
       if (this.matches >= boardFor(this.mode).goal) this.levelComplete();
     }
+    this.sessionTimer = setInterval(() => this.sessionTick(), SESSION_TICK_MS);
     this.save();
+  }
+
+  /** The lantern whose level is on the board: a replay's, or her own. */
+  private get boardLevel(): number {
+    return this.replay ?? this.level;
   }
 
   // ------------------------------------------------------------- the board
@@ -260,7 +300,7 @@ export class App {
 
   /** A fresh board for the current lantern, with that lantern's gift if it has one. */
   private startBoard(): void {
-    this.state = this.freshState(this.level, this.mode);
+    this.state = this.freshState(this.boardLevel, this.mode);
     this.matches = 0;
     this.placeLevelGift();
     this.view.setState(this.state);
@@ -269,7 +309,7 @@ export class App {
   }
 
   private placeLevelGift(): void {
-    const gift = giftAt(this.level, this.comboCounts);
+    const gift = giftAt(this.boardLevel, this.comboCounts);
     this.gift = gift;
     if (gift) this.state = placeGift(this.state, gift, createRng(deriveSeed(this.state.seed, 99))).state;
   }
@@ -287,7 +327,7 @@ export class App {
 
   /** The area's look and music follow the lantern. */
   private applyArea(): void {
-    const area = areaForLevel(this.level);
+    const area = areaForLevel(this.boardLevel);
     this.view.setArea(areaTheme(area));
     this.view.setGift(this.giftFamilies());
     this.view.setCompanion(this.companion);
@@ -296,10 +336,10 @@ export class App {
   }
 
   private startMusic(): void {
-    const area = areaForLevel(this.level);
+    const area = areaForLevel(this.boardLevel);
     this.musicArea = area;
     if (!this.settings.get().music || !this.engine.isRunning) return;
-    void this.player.start(sketchForArea(area), 4242 + this.level, this.phase === 'resting', null);
+    void this.player.start(sketchForArea(area), 4242 + this.boardLevel, this.phase === 'resting' || this.windingDown, null);
     this.player.setLevel(this.settings.get().musicLevel);
   }
 
@@ -380,7 +420,8 @@ export class App {
     const result = applySwap(this.state, a, b);
     this.state = result.state;
     const groups = result.steps.reduce((n, st) => n + (st.kind === 'clear' ? st.groups.length : 0), 0);
-    this.matches = Math.min(goal, this.matches + groups);
+    // In the sleepy stretch the lantern fills twice as fast, so the level ends within the window (DESIGN.md 3.8).
+    this.matches = Math.min(goal, this.matches + groups * (this.windingDown ? 2 : 1));
     this.playSteps(result.steps);
   }
 
@@ -463,9 +504,11 @@ export class App {
 
   /** Between levels: the lantern is lit, so the save already stands on the next one. */
   private toMap(): void {
-    const from = this.level;
     const rest = this.finishing;
-    this.level += 1;
+    // A replay does not move her on: the map comes back to her own lantern, which simply glows again.
+    const from = this.level;
+    if (this.replay === null) this.level += 1;
+    this.replay = null;
     this.phase = rest ? 'resting' : 'map';
     if (rest) this.restingSince = Date.now();
     this.pending = null;
@@ -492,8 +535,26 @@ export class App {
       onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.sounds.twinkle(),
       onDone: () => this.leaveMap(),
+      onReplay: (n) => this.startReplay(n),
     });
     if (rest) this.player.setWindDown(true);
+  }
+
+  /** A lit lantern tapped on the map: play that level again; her own lantern stays where it is (DESIGN.md 2d). */
+  private startReplay(n: number): void {
+    if (this.phase !== 'map' || n < 1 || n >= this.level) return;
+    if (this.pendingMode) {
+      this.mode = this.pendingMode;
+      this.pendingMode = null;
+    }
+    this.replay = n;
+    this.pending = null;
+    this.map.hide();
+    this.phase = 'playing';
+    this.startBoard();
+    this.view.start();
+    this.save();
+    this.armHint();
   }
 
   /** The board must belong to the mode she is in: a switch made on the map or in rest takes effect here. */
@@ -504,7 +565,7 @@ export class App {
     }
     const spec = boardFor(this.mode);
     if (this.state.rows !== spec.rows || this.state.cols !== spec.cols) {
-      this.state = this.freshState(this.level, this.mode);
+      this.state = this.freshState(this.boardLevel, this.mode);
       this.matches = 0;
       this.placeLevelGift();
     }
@@ -548,12 +609,15 @@ export class App {
   private panelContext(): PanelContext {
     const s = this.engine.status;
     return {
-      mode: this.mode,
-      pendingMode: this.pendingMode,
+      calm: this.mode === 'calm',
+      calmPending: this.pendingMode === 'calm' ? true : this.pendingMode === 'play' ? false : null,
       level: this.level,
+      replay: this.replay,
       areaName: AREA_NAMES[areaForLevel(this.level)],
       resting: this.phase === 'resting',
       finishing: this.finishing,
+      windingDown: this.windingDown,
+      sessionLeftMs: this.sessionLeftMs(),
       buildDate: __BUILD_DATE__,
       offlineReady: !!navigator.serviceWorker?.controller,
       audio: `${s.state}${this.player.current ? ', music' : ''}`,
@@ -576,7 +640,7 @@ export class App {
       this.pendingMode = null;
     } else if (mode === 'calm') {
       if (this.phase === 'playing') {
-        this.parkedPlay = { level: this.level, state: serialize(this.state), matches: this.matches, gift: this.gift };
+        this.parkedPlay = { level: this.boardLevel, state: serialize(this.state), matches: this.matches, gift: this.gift };
         this.mode = 'calm';
         this.pendingMode = null;
         this.pending = null;
@@ -586,7 +650,7 @@ export class App {
         this.mode = 'calm';
         this.pendingMode = null;
       }
-    } else if (this.parkedPlay && this.parkedPlay.level === this.level && this.phase === 'playing') {
+    } else if (this.parkedPlay && this.parkedPlay.level === this.boardLevel && this.phase === 'playing') {
       const parked = this.parkedPlay;
       this.parkedPlay = null;
       const state = deserialize(parked.state);
@@ -613,6 +677,69 @@ export class App {
 
   private finishAfterLevel(on: boolean): void {
     this.finishing = on;
+    // "Keep playing" during the timer's sleepy stretch waves the timer off until the next session.
+    if (!on && this.windingDown) this.endWindDown(true);
+    this.save();
+    this.panel.update(this.panelContext());
+  }
+
+  // ------------------------------------------------------------ the timer
+
+  private sessionTotalMs(): number {
+    return this.settings.get().sessionMinutes * 60 * 1000;
+  }
+
+  /** Time left in a timed session, or null when there is no timer (or it has done its work). */
+  private sessionLeftMs(): number | null {
+    const total = this.sessionTotalMs();
+    if (total <= 0 || this.sessionSpent) return null;
+    return Math.max(0, total - this.sessionElapsedMs);
+  }
+
+  /**
+   * The session timer (DESIGN.md 3.8, 2d). Time counts only while she is actually playing in the
+   * foreground. The sleepy stretch (the last four minutes, or half of a short session) softens the
+   * game and makes the current level the last; when the time is up the level ends gently. A relaunch
+   * within half an hour carries the clock on; New session starts it again.
+   */
+  private sessionTick(): void {
+    const total = this.sessionTotalMs();
+    if (total <= 0 || this.sessionSpent || this.phase !== 'playing' || document.hidden || this.panel.isOpen) return;
+    this.sessionElapsedMs += SESSION_TICK_MS;
+    const windDownAt = total - Math.min(WIND_DOWN_MS, total / 2);
+    if (!this.windingDown && this.sessionElapsedMs >= windDownAt) this.beginWindDown();
+    if (this.sessionElapsedMs >= total) {
+      this.sessionSpent = true;
+      this.finishNow();
+    }
+    if (this.sessionElapsedMs % 10_000 === 0) this.save();
+  }
+
+  private beginWindDown(): void {
+    this.windingDown = true;
+    this.finishing = true;
+    this.view.setWindDown(true);
+    this.player.setWindDown(true);
+    this.save();
+    this.panel.update(this.panelContext());
+  }
+
+  /** The softening lifts (she is resting, or a grown-up waved it off). */
+  private endWindDown(spent: boolean): void {
+    this.windingDown = false;
+    if (spent) this.sessionSpent = true;
+    this.view.setWindDown(false);
+    if (this.phase !== 'resting') this.player.setWindDown(false);
+  }
+
+  /** The session length changed on the panel: the clock starts again from now. */
+  private restartSession(): void {
+    this.sessionElapsedMs = 0;
+    this.sessionSpent = false;
+    if (this.windingDown) {
+      this.finishing = false;
+      this.endWindDown(false);
+    }
     this.save();
     this.panel.update(this.panelContext());
   }
@@ -631,6 +758,10 @@ export class App {
     this.finishing = false;
     this.finishNowWanted = false;
     this.restingSince = null;
+    this.sessionElapsedMs = 0;
+    this.sessionSpent = false;
+    this.windingDown = false;
+    this.view.setWindDown(false);
     this.player.setWindDown(false);
     this.panel.close();
     if (this.phase === 'resting') this.leaveMap();
@@ -639,6 +770,7 @@ export class App {
   /** Map position: the recovery tool if the phone ever loses the save (DESIGN.md 3.9). */
   private goToLantern(n: number): void {
     this.level = Math.max(1, Math.floor(n));
+    this.replay = null;
     this.parkedPlay = null;
     this.pendingMode = null;
     this.pending = null;
@@ -658,6 +790,7 @@ export class App {
   private resetProgress(): void {
     try {
       localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SAVE_KEY_V2);
       localStorage.removeItem(LEGACY_SAVE_KEY);
     } catch {
       /* nothing to remove */
@@ -666,7 +799,7 @@ export class App {
     this.companionOffered = false;
     this.seen.clear();
     this.comboCounts = {};
-    this.mode = 'calm';
+    this.mode = 'play';
     this.goToLantern(1);
   }
 
@@ -677,6 +810,10 @@ export class App {
   }
 
   private applySettings(s: Settings): void {
+    if (s.sessionMinutes !== this.appliedSessionMinutes) {
+      this.appliedSessionMinutes = s.sessionMinutes;
+      this.restartSession();
+    }
     this.engine.setSilentMode(s.playOnSilent ? 'ignore' : 'follow');
     this.sounds.enabled = s.chimes;
     if (s.music) {
@@ -695,8 +832,8 @@ export class App {
   private load(): GameState | null {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      const save = raw ? (JSON.parse(raw) as Save) : this.migrateLegacy();
-      if (!save || save.v !== 2) return null;
+      const save = raw ? (JSON.parse(raw) as Save) : this.migrateV2() ?? this.migrateLegacy();
+      if (!save || save.v !== 3) return null;
       const now = Date.now();
       const gap = now - save.savedAt;
       this.level = Number.isFinite(save.level) ? Math.max(1, Math.floor(save.level)) : 1;
@@ -705,9 +842,13 @@ export class App {
       this.seen = new Set(save.seen ?? []);
       this.comboCounts = save.comboCounts ?? {};
       this.parkedPlay = save.parkedPlay ?? null;
-      this.mode = save.mode ?? 'calm';
+      this.mode = save.mode ?? 'play';
       this.pendingMode = save.pendingMode ?? null;
       this.finishing = !!save.finishing;
+      this.replay = Number.isFinite(save.replay) && save.replay !== null && save.replay >= 1 && save.replay < this.level ? Math.floor(save.replay) : null;
+      // The session clock carries across a short break (she closed and reopened the app), not a long one.
+      this.sessionElapsedMs = gap <= SESSION_CARRY_MS && Number.isFinite(save.sessionElapsedMs) ? Math.max(0, save.sessionElapsedMs) : 0;
+      this.appliedSessionMinutes = this.settings.get().sessionMinutes;
 
       // Resting comes first (DESIGN.md 3.8): the sleeping scene stays until the rest-until time has passed.
       if (save.phase === 'resting' && save.restingSince !== null && now - save.restingSince < REST_UNTIL_MS) {
@@ -721,22 +862,45 @@ export class App {
       this.phase = 'playing';
       if (this.opts.seed !== null) return null;
 
-      // Launch rule (DESIGN.md 3.6): a longer gap starts in Calm (or the remembered mode) on a fresh board.
-      if (gap > RESUME_WITHIN_MS) {
-        const wanted: Mode = this.settings.get().launch === 'remember' ? save.mode : 'calm';
-        if (save.mode === 'play' && wanted === 'calm' && save.phase === 'playing') {
-          this.parkedPlay = { level: save.level, state: save.state, matches: save.matches, gift: save.gift ?? null };
-        }
-        this.mode = wanted;
-        this.pendingMode = null;
-        return null;
-      }
+      // The game opens as it was left (DESIGN.md 2d): the same board, mode and place on the path, however long the gap.
       const state = deserialize(save.state);
       const spec = boardFor(this.mode);
       if (!state || state.rows !== spec.rows || state.cols !== spec.cols) return null;
       this.matches = save.matches ?? 0;
       this.gift = save.gift ?? null;
       return ensurePlayable(state).state;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A Stage 3 save: keep her journey, companion and discoveries; the game now opens in Play on a fresh board (DESIGN.md 2d). */
+  private migrateV2(): Save | null {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY_V2);
+      if (!raw) return null;
+      const old = JSON.parse(raw) as SaveV2;
+      if (old.v !== 2) return null;
+      return {
+        v: 3,
+        mode: 'play',
+        pendingMode: null,
+        level: old.level,
+        state: '',
+        matches: 0,
+        companion: old.companion ?? 'firefly',
+        companionOffered: !!old.companionOffered,
+        seen: old.seen ?? [],
+        comboCounts: old.comboCounts ?? {},
+        gift: null,
+        parkedPlay: null,
+        phase: old.phase === 'resting' ? 'resting' : 'playing',
+        finishing: false,
+        restingSince: old.restingSince ?? null,
+        replay: null,
+        sessionElapsedMs: 0,
+        savedAt: old.savedAt ?? 0,
+      };
     } catch {
       return null;
     }
@@ -750,8 +914,8 @@ export class App {
       const old = JSON.parse(raw) as LegacySave;
       if (old.v !== 1) return null;
       return {
-        v: 2,
-        mode: 'calm',
+        v: 3,
+        mode: 'play',
         pendingMode: null,
         level: old.level,
         state: '',
@@ -765,6 +929,8 @@ export class App {
         phase: 'playing',
         finishing: false,
         restingSince: null,
+        replay: null,
+        sessionElapsedMs: 0,
         savedAt: 0,
       };
     } catch {
@@ -775,7 +941,7 @@ export class App {
   private save(): void {
     try {
       const save: Save = {
-        v: 2,
+        v: 3,
         mode: this.mode,
         pendingMode: this.pendingMode,
         level: this.level,
@@ -790,9 +956,12 @@ export class App {
         phase: this.phase,
         finishing: this.finishing,
         restingSince: this.restingSince,
+        replay: this.replay,
+        sessionElapsedMs: this.sessionElapsedMs,
         savedAt: Date.now(),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+      localStorage.removeItem(SAVE_KEY_V2);
       localStorage.removeItem(LEGACY_SAVE_KEY);
     } catch {
       /* storage can be unavailable in private mode; the game still plays */
@@ -833,6 +1002,15 @@ export class App {
         if (!this.view.busy) this.levelComplete();
       },
       pendingMode: () => this.pendingMode,
+      mode: () => this.mode,
+      replay: () => this.replay,
+      sessionLeft: () => this.sessionLeftMs(),
+      windingDown: () => this.windingDown,
+      /** Testing: pretend this much foreground play has passed. */
+      elapse: (ms: number) => {
+        this.sessionElapsedMs += ms - SESSION_TICK_MS;
+        this.sessionTick();
+      },
       goTo: (n: number) => this.goToLantern(n),
       continueMap: () => (this.phase === 'map' ? this.map.continueNow() : undefined),
     };
@@ -848,7 +1026,8 @@ export class App {
         `build ${__BUILD_DATE__}`,
         `audio ${s.state} unlocked ${s.unlocked} session ${s.session} keepalive ${s.keepAlive}`,
         `music ${this.player.current?.id ?? 'off'} sr ${s.sampleRate}`,
-        `lantern ${this.level} ${areaForLevel(this.level)} ${this.mode}${this.pendingMode ? ' -> ' + this.pendingMode : ''} ${this.phase}`,
+        `lantern ${this.level}${this.replay !== null ? ' replaying ' + this.replay : ''} ${areaForLevel(this.boardLevel)} ${this.mode}${this.pendingMode ? ' -> ' + this.pendingMode : ''} ${this.phase}${this.windingDown ? ' winding down' : ''}`,
+        `session ${this.sessionLeftMs() === null ? 'off' : Math.ceil((this.sessionLeftMs() ?? 0) / 1000) + 's left'}`,
         `matches ${this.matches}/${boardFor(this.mode).goal} moves ${this.state.moves} gift ${gift}`,
         `unlocked ${this.state.unlocked.join(',')} seen ${[...this.seen].join(',')}`,
         `standalone ${String(nav.standalone ?? 'n/a')} sw ${navigator.serviceWorker?.controller ? 'yes' : 'no'} update ${document.documentElement.dataset.update ?? '-'}`,
@@ -911,6 +1090,7 @@ export class App {
   }
 
   destroy(): void {
+    if (this.sessionTimer !== null) clearInterval(this.sessionTimer);
     this.input.destroy();
     this.gate.destroy();
     this.panel.destroy();
