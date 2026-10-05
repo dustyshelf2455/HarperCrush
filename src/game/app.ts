@@ -223,7 +223,7 @@ export class App {
       setLantern: (n) => this.goToLantern(n),
       resetProgress: () => this.resetProgress(),
     });
-    this.gate = new Gate(stage, { onOpen: () => this.openPanel() });
+    this.gate = new Gate(stage, { onOpen: () => this.openPanel(), onHoldProgress: (p) => this.view.setMoonHold(p) });
     this.panel.onClose(() => {
       this.gate.setEnabled(true);
       this.armHint();
@@ -834,7 +834,7 @@ export class App {
       },
       pendingMode: () => this.pendingMode,
       goTo: (n: number) => this.goToLantern(n),
-      continueMap: () => (this.phase === 'map' ? this.leaveMap() : undefined),
+      continueMap: () => (this.phase === 'map' ? this.map.continueNow() : undefined),
     };
     const el = document.createElement('div');
     el.id = 'debug';

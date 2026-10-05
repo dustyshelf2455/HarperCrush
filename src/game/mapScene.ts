@@ -1,9 +1,12 @@
 /**
  * The map between levels (DESIGN.md 3.5): a winding vertical path of lanterns
  * through the current area. Her companion sits on the lantern she just lit,
- * hops to the next one, that lantern lights with a small bloom, the view
- * lingers, and the app moves on. On offered visits the other two creatures
- * wait by the path and a tap on one makes it her companion. In rest
+ * hops to the next one, that lantern lights with a small bloom, and the map
+ * stays until she taps the lit lantern (or her companion on it); the lantern
+ * breathes gently after a moment as the invitation. Nothing moves on by
+ * itself (a Stage 3 play-test decision: the four-second linger went by too
+ * fast to see). On offered visits the other two creatures wait by the path
+ * and a tap on one makes it her companion. In rest
  * (DESIGN.md 3.8) the companion curls up and sleeps on the new lantern and the
  * scene stays until the app hides it.
  *
@@ -44,10 +47,12 @@ const ENTER_MS = 500;
 const HOP_MS = 900;
 const BLOOM_MS = 700;
 const LAND_MS = 280;
-const LINGER_MS = 4000;
-const OFFER_LINGER_MS = 8000;
-/** After a pick the view stays at least this much longer. */
-const PICK_LINGER_MS = 3500;
+/** After the lantern lights, it starts to breathe as the invitation to tap it. */
+const INVITE_AFTER_MS = 2500;
+/** Breathing pace of the invitation (DESIGN.md 3.8: about eight breaths a minute). */
+const INVITE_PERIOD_MS = 7500;
+/** Generous target around the lit lantern and the companion on it, in CSS px. */
+const LANTERN_HIT = 64;
 const WAVE_AFTER_HOP_MS = 2200;
 const SLEEP_AFTER_MS = 1500;
 const SLEEP_MS = 2200;
@@ -135,7 +140,6 @@ export class MapScene {
   private opts: MapShowOptions | null = null;
   private phase: Phase = 'idle';
   private phaseT = 0;
-  private lingerT = 0;
   private companion: CompanionId = 'firefly';
   private litTo = false;
   private bloomT = -1;
@@ -183,7 +187,6 @@ export class MapScene {
     this.companion = opts.companion;
     this.phase = 'enter';
     this.phaseT = 0;
-    this.lingerT = 0;
     this.litTo = false;
     this.bloomT = -1;
     this.landT = -1;
@@ -378,7 +381,29 @@ export class MapScene {
       if (this.phase === 'linger' && !this.swap) this.pick(friend);
       return;
     }
-    // Empty sky: continue at once. A tap mid-hop finishes the hop first so the lantern still lights.
+    // The lit lantern (or her companion on it) starts the next level. Anywhere else twinkles,
+    // so a tap never feels dead, and the map stays.
+    if (this.litTo && this.phase === 'linger' && this.lanternAt(x, y)) {
+      this.finish();
+      return;
+    }
+    this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
+    opts.onTwinkle?.();
+    this.wake();
+  }
+
+  /** Whether a tap lands on the new lantern: its post, its light, or the companion perched on it. */
+  private lanternAt(x: number, y: number): boolean {
+    const opts = this.opts;
+    if (!opts) return false;
+    const base = this.toScreen(lanternPoint(opts.to));
+    const layout = postLayout(base.x, base.y, this.lanternSizeAt(base));
+    const targets = [base, layout.lantern, layout.perch];
+    return targets.some((p) => Math.hypot(p.x - x, p.y - y) <= LANTERN_HIT);
+  }
+
+  /** Called by the app for a continue it owes elsewhere (the debug hook); same as a tap on the lantern. */
+  continueNow(): void {
     if (!this.litTo) this.light();
     this.finish();
   }
@@ -403,14 +428,8 @@ export class MapScene {
     this.swap = { incoming: friend.id, outgoing: this.companion, slot: friend.slot, t: 0 };
     this.friends = this.friends.filter((f) => f !== friend);
     this.companion = friend.id;
-    // The view stays at least a few seconds more after a pick.
-    this.lingerT = Math.min(this.lingerT, this.lingerMs() - PICK_LINGER_MS);
     opts.onPick?.(friend.id);
     this.wake();
-  }
-
-  private lingerMs(): number {
-    return this.opts?.offerCompanions ? OFFER_LINGER_MS : LINGER_MS;
   }
 
   private light(): void {
@@ -490,10 +509,9 @@ export class MapScene {
             this.sleepiness = clamp01((this.phaseT - SLEEP_AFTER_MS) / SLEEP_MS);
             moving = true;
           }
-        } else if (!(opts.offerCompanions && this.pointers.size > 0)) {
-          // The scene does not move on while a finger is on the screen on offered visits.
-          this.lingerT += dt;
-          if (this.lingerT >= this.lingerMs()) this.finish();
+        } else if (this.phaseT >= INVITE_AFTER_MS) {
+          // The map waits for her tap; the lantern breathes as the invitation, which needs frames.
+          moving = true;
         }
         break;
       case 'idle':
@@ -694,6 +712,18 @@ export class MapScene {
         if (k < 1) bloomAt = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
       }
       drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
+    }
+    if (!opts.rest && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
+      // The invitation: a slow breath of light around the new lantern until she taps it.
+      const p = this.toScreen(lanternPoint(opts.to));
+      const at = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
+      const rise = clamp01((this.phaseT - INVITE_AFTER_MS) / 1200);
+      const breathK = 0.5 - 0.5 * Math.cos(((this.phaseT - INVITE_AFTER_MS) / INVITE_PERIOD_MS) * Math.PI * 2);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, at.x, at.y, 34 + 26 * breathK, '#fff2cf', rise * (0.1 + 0.22 * breathK));
+      glowDisc(ctx, at.x, at.y, 18 + 10 * breathK, colors.pathLit, rise * (0.08 + 0.18 * breathK));
+      ctx.restore();
     }
     if (bloomAt) {
       const k = clamp01(this.bloomT / BLOOM_MS);

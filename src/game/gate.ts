@@ -1,9 +1,10 @@
 /**
  * The grown-up gate (DESIGN.md 3.9 and 2c): two deliberate steps, the second
  * needing reading. Step 1 is a 1.5 s hold on the dim moon the view draws in
- * the top-left corner; a thin ring draws itself around the moon, almost
- * invisible until the last half second. Step 2 is a small panel of eight
- * word tiles with an instruction such as "Tap STAR, then MOON". Every
+ * the top-left corner; a thin ring draws itself around the moon as the hold
+ * goes on. Step 2 is a small panel of eight
+ * word tiles with an instruction such as "Tap STAR, then MOON". The ring is
+ * visible from the first moment of the hold (a Stage 3 play-test change). Every
  * failure is quiet: the ring or the panel fades, no sound, and after a wrong
  * tap the gate ignores the moon for a while (GateCooldown).
  *
@@ -19,12 +20,24 @@ export const GATE_WORDS: readonly string[] = ['MOON', 'STAR', 'LEAF', 'FISH', 'S
 
 /** The hold on the moon (DESIGN.md 3.9: "Hold it for 1.5 seconds"). */
 export const HOLD_MS = 1500;
-/** The ring stays very faint until the last half second (3.9), so a casual hold shows almost nothing. */
-const FAINT_UNTIL = (HOLD_MS - 500) / HOLD_MS;
-/** A finger that drifts this far is a swipe, not a hold. */
-const MOVE_CANCEL_PX = 8;
-/** A fingertip reports well under this; a palm or a flat finger reports more (3.9: "large contact area"). */
-const BIG_CONTACT_PX = 28;
+/**
+ * The ring is visible from the first moment and brightens over the hold. The design (3.9) asked for a
+ * ring that stays faint until the last half second, but in the Stage 3 play-test the holder could not
+ * tell whether the hold had started and let go; a child still cannot pass the word step, so the ring
+ * can afford to be seen.
+ */
+const RING_MIN_ALPHA = 0.4;
+/**
+ * A finger that drifts this far is a swipe, not a hold. A thumb pressing for a second and a half
+ * wobbles by a good deal more than the 8 px the Stage 3 build allowed.
+ */
+const MOVE_CANCEL_PX = 24;
+/**
+ * A contact wider than this is a palm or the flat of a hand (3.9: "large contact area"). An iPhone
+ * reports an ordinary thumb press at around 40 px, so the Stage 3 cut-off of 28 px rejected most
+ * real holds; a palm reports well over 100 px.
+ */
+const BIG_CONTACT_PX = 80;
 /** The tiles arm only once the panel has been fully visible for half a second (3.9). */
 const ARM_DELAY_MS = 500;
 const PANEL_FADE_MS = 250;
@@ -258,6 +271,9 @@ export class Gate {
   // ---------------------------------------------------------- finger count
 
   private readonly anyDown = (e: PointerEvent): void => {
+    // A primary pointer means no other touch is down, so any ids still in the set are stale (a release
+    // the page never saw). Start the count afresh rather than let a stale count block the moon.
+    if (e.isPrimary) this.active.clear();
     this.active.add(e.pointerId);
     // A second finger landing anywhere cancels the hold and dirties a tap in progress (3.9).
     if (this.hold && e.pointerId !== this.hold.id) this.cancelHold();
@@ -318,10 +334,10 @@ export class Gate {
     this.hold.raf = requestAnimationFrame(this.tick);
   };
 
-  /** The ring: a thin arc that grows with the hold, faint for the first second and clear in the last half (3.9). */
+  /** The ring: a thin arc that grows with the hold, clearly visible from the start and bright at the end. */
   private drawRing(p: number): void {
     this.ring.setAttribute('stroke-dasharray', `${(p * RING_C).toFixed(2)} ${RING_C.toFixed(2)}`);
-    const alpha = p <= FAINT_UNTIL ? 0.1 + 0.08 * (p / FAINT_UNTIL) : 0.18 + 0.72 * ((p - FAINT_UNTIL) / (1 - FAINT_UNTIL));
+    const alpha = RING_MIN_ALPHA + (1 - RING_MIN_ALPHA) * p;
     this.ringSvg.style.opacity = alpha.toFixed(3);
   }
 

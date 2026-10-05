@@ -1851,13 +1851,25 @@ export class GameView {
     drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
     this.drawGoal(t);
     // Moon (the grown-up gate, Stage 3), dim, top-left; baked so the cut-out never touches the canvas beneath.
+    // While a grown-up holds it, it brightens and a soft glow gathers, so the hold visibly "takes".
     ctx.save();
-    ctx.globalAlpha = 0.3;
+    if (this.moonHold > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, 24, 26, 18 + 14 * this.moonHold, '#ffe6b0', 0.35 * this.moonHold);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.globalAlpha = 0.3 + 0.65 * this.moonHold;
     ctx.drawImage(this.moonSprite(), 12, 14, 24, 24);
     ctx.restore();
   }
 
   private moon: HTMLCanvasElement | null = null;
+  private moonHold = 0;
+
+  /** Hold progress 0..1 on the moon (the gate reports it); 0 when no hold is in progress. */
+  setMoonHold(p: number): void {
+    this.moonHold = Math.max(0, Math.min(1, p));
+  }
 
   private moonSprite(): HTMLCanvasElement {
     if (this.moon) return this.moon;

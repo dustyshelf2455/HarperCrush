@@ -70,6 +70,13 @@ Made while building Stage 3, where the design above left room. Say if any of the
 - **Area voices** (3.11): celesta in Twinkle Meadow, a struck-crystal "glass" voice in Crystal Cave, a softened under-water tone in Mermaid Lagoon, a gentle horn in Cloud Castle, a harp in Star Garden, a shimmering bell on Aurora Peak, a warm kalimba in Dragon Hollow. The tune stays the music-box lullaby in every area with small variations.
 - **The grown-up gate** opens from the dim moon in the top-left corner exactly as 3.9 describes: a 1.5-second hold, then "Tap STAR, then MOON" style word tiles. Wrong taps make the gate quiet for 20 seconds, twice for a minute.
 
+## 2d. Stage 3 play-test decisions (5 October 2026)
+
+Made after the parent's first full play-test of Stage 3 on the phone. The play-test notes and the plan are in the project's `playtest/` folder.
+
+- **The map stays until she taps the lit lantern.** The four-second (eight on companion visits) linger in 3.5 went by too fast to see. Now the companion hops, the lantern lights, and the map waits; after a couple of seconds the new lantern breathes softly as the invitation. A tap on the lantern, its light or her companion starts the next level; a tap anywhere else twinkles and the map stays. The creature offer no longer has a timer either.
+- **The moon gate was rejecting real thumbs.** It treated any touch wider than 28 px as a palm, and an iPhone reports an ordinary thumb at around 40 px, so most holds failed at once; a drift of more than 8 px during the hold also cancelled it, and the ring was nearly invisible for the first second. Now a touch over 80 px is a palm, a thumb may wobble by 24 px, the ring is visible from the first moment, and the moon itself brightens with the hold. A child still cannot pass the word step, so the hold can afford to be seen.
+
 ---
 
 ## 3. The game
