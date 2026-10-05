@@ -4,7 +4,7 @@
  */
 import type { GemType } from '../../core/grid';
 import { darken, lighten, rgba } from '../color';
-import { gemShape, shapePath } from '../shapes';
+import { gemShape, shapePath, shapePoints } from '../shapes';
 import { Layers, Motes, glowDisc, highlight, roundRect } from './common';
 import type { Ambient, GemColor, GemStyle, Palette } from './types';
 
@@ -48,21 +48,58 @@ export const nightGarden: GemStyle = {
   haloPad: 0.45,
   gemColor: color,
 
+  /**
+   * A gem (the Stage 3 play-test art pass: "artisanal, as if made by hand"): a deeper body with a
+   * bright heart off centre, cut facets that catch the light (a smaller inner shape and fine lines
+   * to the corners), a crisp rim, a bottom bounce of its own colour, and a four-point glint.
+   */
   drawGem(ctx, type, r) {
     const c = color(type);
     const path = shapePath(type, r);
     glowDisc(ctx, 0, 0, r * 1.3, c.glow, 0.3);
 
-    const body = ctx.createRadialGradient(-0.32 * r, -0.38 * r, r * 0.05, 0, 0, r * 1.15);
-    body.addColorStop(0, c.light);
-    body.addColorStop(0.42, c.base);
-    body.addColorStop(1, c.dark);
+    const body = ctx.createRadialGradient(-0.3 * r, -0.36 * r, r * 0.04, 0.05 * r, 0.1 * r, r * 1.2);
+    body.addColorStop(0, lighten(c.light, 0.25));
+    body.addColorStop(0.3, c.light);
+    body.addColorStop(0.62, c.base);
+    body.addColorStop(1, darken(c.dark, 0.2));
     ctx.fillStyle = body;
     ctx.fill(path);
 
     ctx.save();
     ctx.clip(path);
     glowDisc(ctx, 0, r * 0.28, r * 0.9, c.light, 0.36);
+    // Facets: the table (a smaller inner shape) and fine lines from its corners to the outer corners.
+    const inner = shapePath(type, r * 0.6);
+    ctx.save();
+    ctx.translate(-0.04 * r, -0.08 * r);
+    ctx.strokeStyle = rgba(c.light, 0.5);
+    ctx.lineWidth = Math.max(0.8, r * 0.035);
+    ctx.stroke(inner);
+    const table = ctx.createRadialGradient(-0.15 * r, -0.2 * r, 0, 0, 0, r * 0.62);
+    table.addColorStop(0, rgba('#ffffff', 0.22));
+    table.addColorStop(1, rgba(c.light, 0));
+    ctx.fillStyle = table;
+    ctx.fill(inner);
+    ctx.restore();
+    const outer = shapePoints(type, r);
+    const innerPts = shapePoints(type, r * 0.6);
+    ctx.strokeStyle = rgba(c.light, 0.3);
+    ctx.lineWidth = Math.max(0.6, r * 0.025);
+    ctx.beginPath();
+    for (let i = 0; i < outer.length; i += Math.max(1, Math.floor(outer.length / 8))) {
+      const o = outer[i] as { x: number; y: number };
+      const n = innerPts[i] as { x: number; y: number };
+      ctx.moveTo(o.x, o.y);
+      ctx.lineTo(n.x - 0.04 * r, n.y - 0.08 * r);
+    }
+    ctx.stroke();
+    // A bounce of light along the lower edge, as if the gem sits on something lit.
+    const bounce = ctx.createLinearGradient(0, r * 0.2, 0, r * 0.95);
+    bounce.addColorStop(0, rgba(c.light, 0));
+    bounce.addColorStop(1, rgba(lighten(c.light, 0.3), 0.45));
+    ctx.fillStyle = bounce;
+    ctx.fill(path);
     if (type === 'leaf') {
       const a = -0.38;
       const tx = Math.sin(a) * 0.82 * r * gemShape('leaf').scale;
@@ -77,13 +114,31 @@ export const nightGarden: GemStyle = {
     }
     ctx.restore();
 
-    ctx.lineWidth = r * 0.06;
+    ctx.lineWidth = r * 0.07;
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = rgba(c.light, 0.82);
+    ctx.strokeStyle = rgba(c.light, 0.9);
+    ctx.stroke(path);
+    ctx.lineWidth = r * 0.03;
+    ctx.strokeStyle = rgba('#ffffff', 0.35);
     ctx.stroke(path);
 
     highlight(ctx, -0.33 * r, -0.4 * r, r * 0.26, r * 0.14, -0.65, 0.9);
     highlight(ctx, 0.28 * r, 0.32 * r, r * 0.12, r * 0.07, 0.8, 0.35);
+    // The glint: a small four-point star at the brightest spot.
+    ctx.save();
+    ctx.strokeStyle = rgba('#ffffff', 0.85);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(0.8, r * 0.04);
+    const gx = -0.42 * r;
+    const gy = -0.46 * r;
+    const gl = r * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(gx - gl, gy);
+    ctx.lineTo(gx + gl, gy);
+    ctx.moveTo(gx, gy - gl);
+    ctx.lineTo(gx, gy + gl);
+    ctx.stroke();
+    ctx.restore();
   },
 
   createAmbient(w, h, seed): Ambient {

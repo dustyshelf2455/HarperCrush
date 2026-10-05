@@ -165,29 +165,59 @@ function drawFirefly(ctx: CanvasRenderingContext2D, s: number, t: number, pose: 
   ctx.translate(0, bob);
   glowDisc(ctx, 0, s * 0.2, s * 1.05, '#ffd27a', 0.42 * glow);
 
-  // Wings: two translucent petals behind the body, fluttering softly; folded when asleep.
+  // Wings (the art pass): two lobes each, like a fairy's, translucent with a cool-to-warm sheen,
+  // fine veins and a glint, fluttering softly; folded when asleep.
   const flutter = sleep ? 0 : Math.sin(t * 7.5) * 0.12 * motion;
   const spread = sleep ? 0.35 : 0.95 + pose.wave * 0.25;
   for (const side of [-1, 1]) {
     ctx.save();
     ctx.translate(side * s * 0.1, -s * 0.06);
     ctx.rotate(side * (spread + flutter));
+    const sheen = ctx.createLinearGradient(0, -s * 0.55, 0, s * 0.1);
+    sheen.addColorStop(0, 'rgba(214,236,255,0.5)');
+    sheen.addColorStop(0.6, 'rgba(190,226,255,0.36)');
+    sheen.addColorStop(1, 'rgba(255,214,170,0.3)');
+    for (const [cx, cy, rx, ry, rot] of [[0, -s * 0.24, s * 0.17, s * 0.34, 0], [side * s * 0.1, s * 0.02, s * 0.11, s * 0.19, side * 0.5]] as const) {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fillStyle = sheen;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = s * 0.025;
+      ctx.stroke();
+    }
+    // Veins: three fine lines fanning from the wing root.
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = Math.max(0.6, s * 0.012);
+    for (const k of [-0.35, 0, 0.35]) {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(k * s * 0.1, -s * 0.3, k * s * 0.14, -s * 0.54);
+      ctx.stroke();
+    }
+    // A glint near the tip.
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.beginPath();
-    ctx.ellipse(0, -s * 0.2, s * 0.15, s * 0.3, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(190,226,255,0.42)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = s * 0.025;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, -s * 0.22, s * 0.06, s * 0.16, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.arc(-s * 0.05, -s * 0.42, s * 0.025, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // The glowing belly: a round lantern of a body.
+  // The glowing belly: a round lantern of a body, with three tiny sparks of light drifting around it.
   glowDisc(ctx, 0, s * 0.2, s * 0.5, '#ffe28a', 0.85 * glow);
+  if (!sleep) {
+    for (let k = 0; k < 3; k++) {
+      const a = t * 0.7 + (k * Math.PI * 2) / 3;
+      const sx = Math.cos(a) * s * 0.42;
+      const sy = s * 0.2 + Math.sin(a) * s * 0.24;
+      const twinkle = 0.5 + 0.5 * Math.sin(t * 2.1 + k * 1.3);
+      glowDisc(ctx, sx, sy, s * 0.06, '#fff3c4', 0.6 * twinkle * glow);
+      ctx.fillStyle = `rgba(255,250,230,${(0.9 * twinkle).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, s * 0.016, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   const belly = ctx.createRadialGradient(-s * 0.06, s * 0.1, s * 0.02, 0, s * 0.2, s * 0.3);
   belly.addColorStop(0, '#fff6cf');
   belly.addColorStop(0.55, '#ffd76a');
@@ -222,6 +252,17 @@ function drawFirefly(ctx: CanvasRenderingContext2D, s: number, t: number, pose: 
   ctx.beginPath();
   ctx.arc(0, headY, s * 0.27, 0, Math.PI * 2);
   ctx.fill();
+  // A warm rim of light along the underside of the head, thrown up by the belly.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, headY, s * 0.27, 0, Math.PI * 2);
+  ctx.clip();
+  const rim = ctx.createRadialGradient(0, headY + s * 0.3, s * 0.05, 0, headY + s * 0.3, s * 0.42);
+  rim.addColorStop(0, 'rgba(255,220,140,0.45)');
+  rim.addColorStop(1, 'rgba(255,220,140,0)');
+  ctx.fillStyle = rim;
+  ctx.fillRect(-s * 0.3, headY - s * 0.3, s * 0.6, s * 0.6);
+  ctx.restore();
   // Antennae with glowing tips, drooping a little when asleep.
   const droop = sleep ? s * 0.08 : 0;
   ctx.strokeStyle = '#2b5f78';
