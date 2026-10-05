@@ -177,6 +177,8 @@ const TRANSFORM_MS = 350;
 const SPRITE_LIFT_MS = 140;
 const SPRITE_FLIGHT_MS = 700;
 const SPRITE_POP_MS = 300;
+/** The level-win rise and shimmer (lengthened after the Stage 3 play-test so the moment reads). */
+const CELEBRATE_MS = 2200;
 const MOON_RISE_MS = 350;
 const MOON_BEAM_MS = 1100;
 const MOON_FADE_MS = 250;
@@ -616,7 +618,7 @@ export class GameView {
     if (this.celebrating) {
       this.celebrating.t += dt;
       moving = true;
-      if (this.celebrating.t > 1900) {
+      if (this.celebrating.t > CELEBRATE_MS + 400) {
         const done = this.celebrating.done;
         this.celebrating = null;
         this.pieces.clear();
@@ -846,6 +848,14 @@ export class GameView {
     this.events.onFire?.(step);
     const origin = this.pieces.get(key(step.at));
     const cell = this.layout.cell;
+    // A little flourish of delight as a power goes off (Stage 3 play-test): a soft ring and a handful
+    // of sparkles in the gem's light at the origin, under every effect; flowing, never a bang.
+    if (f.leader) {
+      const { x, y } = this.centre(step.at.col, step.at.row);
+      const light = origin?.piece.type ? this.style.gemColor(origin.piece.type).light : '#fff2c8';
+      this.rings.push({ x, y, t: 0, duration: 520, radius: cell * 1.4, color: light, alpha: 0.35 });
+      this.spawnSparkles(x, y, light, 10, 0.9);
+    }
     switch (f.fx) {
       case 'bloom':
         if (origin) {
@@ -1307,7 +1317,7 @@ export class GameView {
     ctx.rect(0, boardY - 2, w, this.state.rows * cell + 4 + 20);
     ctx.clip();
     const radius = cell * 0.41;
-    const celebrate = this.celebrating ? clamp01(this.celebrating.t / 1500) : 0;
+    const celebrate = this.celebrating ? clamp01(this.celebrating.t / CELEBRATE_MS) : 0;
     const lanternPos = { x: w / 2 - 30, y: this.layout.hudY + 4 };
     // The gift halo breathes slowly (period 2.8 s, alpha 0.25 to 0.45), DESIGN.md 3.4.
     const giftAlpha = 0.25 + 0.2 * slowPulse(t, 2.8);
@@ -1387,6 +1397,7 @@ export class GameView {
       ctx.globalCompositeOperation = 'lighter';
       glowDisc(ctx, lanternPos.x, lanternPos.y, 60 + 90 * Math.sin(celebrate * Math.PI), '#fff2c8', 0.45 * Math.sin(celebrate * Math.PI));
       ctx.restore();
+      this.drawWinShimmer(celebrate);
     }
     if (this.windDown > 0) {
       // The night deepens: a soft dim over everything (DESIGN.md 3.8, about 15 to 20 percent at full).
@@ -1433,15 +1444,30 @@ export class GameView {
     }
     if (!piece.type) return;
     const gemScale = power === 'bloom' && o.ornament ? 0.76 : 1;
-    this.sprites.draw(ctx, piece.type, x, y, radius, { alpha: o.alpha, scaleX: o.scale * o.scaleX * gemScale, scaleY: o.scale * o.scaleY * gemScale, brighten: o.brighten });
+    // A power on the board calls to be used (Stage 3 play-test): an aura in its own colour breathes
+    // beneath it and the gem itself swells very slightly at breathing pace. Calm, never a flicker.
+    let call = 1;
+    if (power && o.ornament) {
+      const phase = (x * 0.013 + y * 0.007) % 1;
+      const breathe = slowPulse(t, 3.4, phase * 3.4);
+      call = 1 + 0.045 * breathe;
+      const light = this.style.gemColor(piece.type).light;
+      ctx.save();
+      ctx.globalAlpha = o.alpha;
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, x, y, radius * (1.9 + 0.3 * breathe) * o.scale, light, 0.42 + 0.3 * breathe);
+      glowDisc(ctx, x, y, radius * 1.15 * o.scale, '#ffffff', 0.12 + 0.16 * breathe);
+      ctx.restore();
+    }
+    this.sprites.draw(ctx, piece.type, x, y, radius, { alpha: o.alpha, scaleX: o.scale * o.scaleX * gemScale * call, scaleY: o.scale * o.scaleY * gemScale * call, brighten: o.brighten + (power && o.ornament ? 0.06 : 0) });
     if (!power || !o.ornament) return;
     ctx.save();
     ctx.globalAlpha = o.alpha;
-    const r = radius * o.scale;
+    const r = radius * o.scale * call;
     switch (power) {
       case 'cometRow':
       case 'cometCol':
-        this.drawStreak(x, y, r, power === 'cometRow', 1, t);
+        this.drawStreak(x, y, r, power === 'cometRow', 1, t, this.style.gemColor(piece.type).light);
         break;
       case 'bloom':
         // The closed bud over the gem; it glows softly, and fully once it has opened and rides the fall.
@@ -1460,21 +1486,110 @@ export class GameView {
     ctx.restore();
   }
 
-  private drawStreak(x: number, y: number, r: number, horizontal: boolean, alpha: number, t: number): void {
+  /**
+   * The comet's streak (Stage 3 play-test: "the line is too subtle"): a wide soft band in the gem's
+   * own light under a bright white core, running well past the gem, with a spark at each tip that
+   * drifts outward, so a comet reads as a comet at a glance.
+   */
+  /**
+   * The level-win shimmer (Stage 3 play-test): as the gems rise, the board's edge lights up and two
+   * points of light run around it, one each way, leaving soft tails, while the whole rim glows and
+   * then fades with the gems. Soft and flowing; no flash.
+   */
+  private drawWinShimmer(celebrate: number): void {
     const { ctx } = this;
-    const pulse = 0.55 + 0.25 * Math.sin(t * 2.2);
+    const { cell, boardX, boardY } = this.layout;
+    const w = this.state.cols * cell;
+    const h = this.state.rows * cell;
+    const pad = cell * 0.12;
+    const x0 = boardX - pad;
+    const y0 = boardY - pad;
+    const rw = w + pad * 2;
+    const rh = h + pad * 2;
+    const rr = cell * 0.35;
+    const rim = Math.sin(clamp01(celebrate / 0.9) * Math.PI);
+    const fade = 1 - clamp01((celebrate - 0.75) / 0.25);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = alpha * pulse;
+    ctx.lineCap = 'round';
+    // The rim glows: a few soft strokes, wide and faint to narrow and bright.
+    for (const [width, alpha] of [[cell * 0.7, 0.1], [cell * 0.3, 0.2], [4, 0.8]] as const) {
+      ctx.strokeStyle = rgba('#ffe9b8', alpha * rim * fade);
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.roundRect(x0, y0, rw, rh, rr);
+      ctx.stroke();
+    }
+    // Two runners circle the rim in opposite directions, each with a tail of fading dots.
+    const perimeter = 2 * (rw + rh);
+    const pointAt = (s: number): { x: number; y: number } => {
+      let d = ((s % perimeter) + perimeter) % perimeter;
+      if (d < rw) return { x: x0 + d, y: y0 };
+      d -= rw;
+      if (d < rh) return { x: x0 + rw, y: y0 + d };
+      d -= rh;
+      if (d < rw) return { x: x0 + rw - d, y: y0 + rh };
+      d -= rw;
+      return { x: x0, y: y0 + rh - d };
+    };
+    const travel = easeInOutSine(clamp01(celebrate / 0.95)) * perimeter * 1.25;
+    for (const dir of [1, -1]) {
+      const start = dir === 1 ? 0 : rw + rh;
+      for (let i = 0; i < 9; i++) {
+        const back = i * cell * 0.3;
+        const p = pointAt(start + dir * (travel - back));
+        const a = (1 - i / 9) * fade;
+        glowDisc(ctx, p.x, p.y, (i === 0 ? cell * 0.7 : cell * 0.38) * (1 - i / 12), '#fff6dc', (i === 0 ? 1 : 0.6) * a);
+      }
+    }
+    // A few twinkles along the rim as the light passes.
+    for (let i = 0; i < 12; i++) {
+      const s = (i / 12) * perimeter;
+      const near = Math.abs(((s - travel) % perimeter + perimeter) % perimeter);
+      const k = clamp01(1 - Math.min(near, perimeter - near) / (cell * 1.5));
+      if (k <= 0) continue;
+      const p = pointAt(s);
+      ctx.strokeStyle = rgba('#ffffff', 0.8 * k * fade);
+      ctx.lineWidth = 1.4;
+      const r = cell * 0.18 * k;
+      ctx.beginPath();
+      ctx.moveTo(p.x - r, p.y);
+      ctx.lineTo(p.x + r, p.y);
+      ctx.moveTo(p.x, p.y - r);
+      ctx.lineTo(p.x, p.y + r);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private drawStreak(x: number, y: number, r: number, horizontal: boolean, alpha: number, t: number, tint = '#fff6dc'): void {
+    const { ctx } = this;
+    const pulse = 0.7 + 0.3 * Math.sin(t * 2.2);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha;
     ctx.translate(x, y);
     if (!horizontal) ctx.rotate(Math.PI / 2);
-    const g = ctx.createLinearGradient(-r * 1.6, 0, r * 1.6, 0);
-    g.addColorStop(0, 'rgba(255,246,220,0)');
-    g.addColorStop(0.5, 'rgba(255,250,235,0.9)');
-    g.addColorStop(1, 'rgba(255,246,220,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(-r * 1.6, -r * 0.09, r * 3.2, r * 0.18);
-    glowDisc(ctx, 0, 0, r * 0.55, '#fff6dc', 0.55);
+    const len = r * 2.1;
+    const band = ctx.createLinearGradient(-len, 0, len, 0);
+    band.addColorStop(0, rgba(tint, 0));
+    band.addColorStop(0.5, rgba(tint, 0.75 * pulse));
+    band.addColorStop(1, rgba(tint, 0));
+    ctx.fillStyle = band;
+    ctx.fillRect(-len, -r * 0.26, len * 2, r * 0.52);
+    const core = ctx.createLinearGradient(-len * 0.85, 0, len * 0.85, 0);
+    core.addColorStop(0, 'rgba(255,255,255,0)');
+    core.addColorStop(0.5, `rgba(255,255,255,${(0.95 * pulse).toFixed(3)})`);
+    core.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = core;
+    ctx.fillRect(-len * 0.85, -r * 0.1, len * 1.7, r * 0.2);
+    // Two sparks slide out along the streak and fade, a few times a breath.
+    const slide = (t * 0.45) % 1;
+    for (const side of [-1, 1]) {
+      const d = len * (0.35 + 0.65 * slide) * side;
+      glowDisc(ctx, d, 0, r * 0.22, '#ffffff', 0.9 * (1 - slide));
+    }
+    glowDisc(ctx, 0, 0, r * 0.6, '#ffffff', 0.4 * pulse);
     ctx.restore();
   }
 

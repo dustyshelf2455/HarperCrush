@@ -186,6 +186,8 @@ export class App {
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeLock: { release(): Promise<void> } | null = null;
   private hapticArmed = false;
+  /** A valid swipe happened under this touch: tick on its release (see setupHaptics). */
+  private hapticPending = false;
   private discovering = false;
   private musicArea: string | null = null;
 
@@ -245,7 +247,18 @@ export class App {
     });
     this.setupHaptics(surface);
     // A second chance at the audio unlock on the release of the touch, which every browser counts as a gesture.
-    surface.addEventListener('pointerup', () => this.unlockAudio(), { passive: true });
+    surface.addEventListener('pointerup', () => {
+      this.unlockAudio();
+      // A swipe never produces a click of its own, so the tick for a swipe is asked for here, inside the
+      // release, which still counts as her gesture (DESIGN.md 3.12; a Stage 3 play-test attempt).
+      if (this.hapticPending) {
+        this.hapticPending = false;
+        if (surface.tagName === 'LABEL' && this.settings.get().haptics) {
+          this.hapticArmed = true;
+          surface.click();
+        }
+      }
+    }, { passive: true });
 
     // The grown-up gate and the parent panel (DESIGN.md 3.9).
     this.panel = new Panel(stage, this.settings, {
@@ -353,6 +366,7 @@ export class App {
     this.view.ripple(x, y);
     this.clearHint();
     // A tap that will complete a valid tap-tap swap may tick (see setupHaptics).
+    this.hapticPending = false;
     const cell = this.view.cellAt(x, y);
     this.hapticArmed =
       this.settings.get().haptics &&
@@ -411,6 +425,7 @@ export class App {
       this.view.play(applySwap(this.state, a, b).steps, this.state, () => this.settled());
       return;
     }
+    this.hapticPending = true;
     const pa = at(this.state.board, a.row, a.col);
     const pb = at(this.state.board, b.row, b.col);
     if (pa?.power && pb?.power) {
