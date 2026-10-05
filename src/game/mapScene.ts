@@ -21,6 +21,8 @@ import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion } from 
 import { drawLanternPost, drawPathRibbon, drawSteppingLights, lanternPoint, type LanternPos, pathPoint, postLayout, smoothPolyline } from '../render/map';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
+import { mix, rgba } from '../render/color';
+import { createRng, deriveSeed } from '../shared/rng';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
 export interface MapShowOptions {
@@ -54,7 +56,7 @@ const INVITE_AFTER_MS = 2500;
 /** Breathing pace of the invitation (DESIGN.md 3.8: about eight breaths a minute). */
 const INVITE_PERIOD_MS = 7500;
 /** Generous target around the lit lantern and the companion on it, in CSS px. */
-const LANTERN_HIT = 64;
+const LANTERN_HIT = 72;
 const WAVE_AFTER_HOP_MS = 2200;
 const SLEEP_AFTER_MS = 1500;
 const SLEEP_MS = 2200;
@@ -78,12 +80,27 @@ const FRAME_LANTERNS = 5.6;
 const BASELINE = 0.58;
 const HORIZON = 0.17;
 const PATH_HALF = 0.3;
-const LANTERN_S = 30;
-const COMPANION_S = 46;
-const FRIEND_S = 40;
-const HOP_HEIGHT = 64;
-const PATH_WIDTH = 24;
+// Sizes after the Stage 3 play-test art pass: a wider road, bigger lanterns and creatures.
+const LANTERN_S = 40;
+const COMPANION_S = 58;
+const FRIEND_S = 50;
+const HOP_HEIGHT = 78;
+const PATH_WIDTH = 48;
 const SPLINE_PER = 12;
+/** Flora beside the path: items per lantern stretch, placed by a seeded rng so the same stretch always looks the same. */
+const FLORA_PER_LANTERN = 7;
+const FLORA_SEED = 0x666c6f72;
+
+type FloraKind = 'tuft' | 'flower' | 'stone' | 'mushroom';
+
+interface Flora {
+  kind: FloraKind;
+  /** In lantern units (x across the path's width, y along the path). */
+  x: number;
+  y: number;
+  size: number;
+  phase: number;
+}
 
 type Phase = 'idle' | 'enter' | 'hop' | 'linger' | 'done';
 
@@ -153,6 +170,8 @@ export class MapScene {
 
   private readonly ambients = new Map<AreaId, Ambient>();
   private restStars: Stars | null = null;
+  private skyStars: Stars | null = null;
+  private readonly flora = new Map<number, Flora[]>();
   private readonly pointers = new Map<number, Tracked>();
   private primary: number | null = null;
 
@@ -634,6 +653,10 @@ export class MapScene {
       ctx.restore();
     }
 
+    // A field of slow stars over every area's sky (the art pass): small, faint, twinkling over seconds.
+    if (!this.skyStars) this.skyStars = new Stars(w, h * 0.55, 31, Math.max(40, Math.round((w * h) / 5200)), '#eef2ff', 0.55);
+    this.skyStars.draw(ctx, w, h, t);
+
     // Horizon glow behind the scenery.
     const hy = this.horizonY;
     ctx.save();
@@ -652,6 +675,7 @@ export class MapScene {
       a.drawScenery(ctx, w, h, t, hy);
       ctx.restore();
     }
+    this.drawHills(colors);
     this.drawVignette();
 
     if (!opts) return;
@@ -688,6 +712,156 @@ export class MapScene {
     this.ctx.globalAlpha = 0.3;
     this.ctx.drawImage(this.moon, 12, 14, 24, 24);
     this.ctx.restore();
+  }
+
+  /**
+   * Rolling ground between the horizon and her feet (the art pass): three soft hill bands in the
+   * area's ground colours, each a little lighter and bluer with distance, with a faint crest of the
+   * area's light, drifting slowly against the camera so the land feels deep.
+   */
+  private drawHills(colors: ReturnType<typeof blendThemeColors>): void {
+    const { ctx, w, h } = this;
+    const hy = this.horizonY;
+    const drift = this.camera * 18;
+    const bands: Array<[number, number, number, number, number]> = [
+      // base (fraction of the way from horizon to the bottom), amplitude, frequency, phase, distance 0..1
+      [0.08, 26, 0.0075, 0.4, 1],
+      [0.27, 36, 0.0058, 2.3, 0.6],
+      [0.5, 44, 0.0046, 4.1, 0.25],
+    ];
+    for (const [base, amp, k, phase, far] of bands) {
+      const y0 = hy + (h - hy) * base;
+      const color = mix(colors.ground, mix(colors.groundFar, colors.bgBottom, 0.5), far * 0.75);
+      const crest = rgba(colors.accent, 0.05 + 0.05 * (1 - far));
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w + 8; x += 8) ctx.lineTo(x, this.ridge(x + drift * (1 - far), y0, amp, k, phase));
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = crest;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let x = 0; x <= w + 8; x += 8) {
+        const y = this.ridge(x + drift * (1 - far), y0, amp, k, phase) + 1;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  private ridge(x: number, base: number, amp: number, k: number, phase: number): number {
+    return base + Math.sin(x * k + phase) * amp + Math.sin(x * k * 2.3 + phase * 1.7) * amp * 0.35;
+  }
+
+  /** The flora beside lantern stretch n, made once from a seed so the same stretch always looks the same. */
+  private floraFor(n: number): Flora[] {
+    let list = this.flora.get(n);
+    if (list) return list;
+    const rng = createRng(deriveSeed(FLORA_SEED, n));
+    list = [];
+    for (let i = 0; i < FLORA_PER_LANTERN; i++) {
+      const f = rng.range(0.05, 0.95);
+      const along = pathPoint(n, f);
+      const side = rng.next() < 0.5 ? -1 : 1;
+      const r = rng.next();
+      const kind: FloraKind = r < 0.4 ? 'tuft' : r < 0.65 ? 'flower' : r < 0.85 ? 'mushroom' : 'stone';
+      list.push({ kind, x: along.x + side * rng.range(0.22, 0.7), y: along.y, size: rng.range(0.8, 1.3), phase: rng.range(0, Math.PI * 2) });
+    }
+    list.sort((a, b) => a.y - b.y);
+    this.flora.set(n, list);
+    return list;
+  }
+
+  /** Glowing tufts, flowers, mushrooms and stones beside the path, in the area's light (the art pass). */
+  private drawFlora(ctx: CanvasRenderingContext2D, items: readonly Flora[], t: number, colors: ReturnType<typeof blendThemeColors>): void {
+    for (const it of items) {
+      const p = this.toScreen({ x: Math.max(-1.05, Math.min(1.05, it.x)), y: it.y });
+      const alpha = this.fog(p);
+      if (alpha <= 0.02 || p.y > this.h + 40) continue;
+      const s = 11 * it.size * this.sizeAt(p.y);
+      const glow = 0.6 + 0.4 * Math.sin(t * 0.7 + it.phase);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      switch (it.kind) {
+        case 'tuft': {
+          ctx.strokeStyle = rgba(mix(colors.ground, colors.accent, 0.45), 0.9);
+          ctx.lineWidth = Math.max(1, s * 0.12);
+          ctx.lineCap = 'round';
+          for (let b = -2; b <= 2; b++) {
+            const lean = b * 0.35 + Math.sin(t * 0.8 + it.phase + b) * 0.08;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.quadraticCurveTo(p.x + lean * s * 0.6, p.y - s * 0.9, p.x + lean * s * 1.3, p.y - s * (1.4 + 0.2 * Math.abs(b)));
+            ctx.stroke();
+          }
+          glowDisc(ctx, p.x, p.y - s * 0.6, s * 1.4, colors.accent, 0.1 * glow);
+          break;
+        }
+        case 'flower': {
+          const cy = p.y - s * 0.9;
+          ctx.strokeStyle = rgba(mix(colors.ground, colors.accent, 0.35), 0.9);
+          ctx.lineWidth = Math.max(1, s * 0.1);
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.quadraticCurveTo(p.x + s * 0.15, p.y - s * 0.5, p.x, cy);
+          ctx.stroke();
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          glowDisc(ctx, p.x, cy, s * 1.6, colors.accent, 0.28 * glow);
+          ctx.restore();
+          for (let k = 0; k < 5; k++) {
+            const a = (k / 5) * Math.PI * 2 + it.phase;
+            ctx.fillStyle = rgba(mix(colors.accent, '#ffffff', 0.35), 0.95);
+            ctx.beginPath();
+            ctx.ellipse(p.x + Math.cos(a) * s * 0.32, cy + Math.sin(a) * s * 0.32, s * 0.22, s * 0.14, a, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#fff6d6';
+          ctx.beginPath();
+          ctx.arc(p.x, cy, s * 0.16, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'mushroom': {
+          const capY = p.y - s * 0.75;
+          ctx.fillStyle = rgba(mix(colors.groundFar, '#ffffff', 0.35), 0.95);
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y - s * 0.35, s * 0.18, s * 0.42, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          glowDisc(ctx, p.x, capY, s * 1.5, colors.accent, 0.22 * glow);
+          ctx.restore();
+          ctx.fillStyle = mix(colors.accent, colors.path, 0.3);
+          ctx.beginPath();
+          ctx.ellipse(p.x, capY, s * 0.62, s * 0.42, 0, Math.PI, Math.PI * 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = rgba('#ffffff', 0.55);
+          for (const [dx, dy, r] of [[-0.25, -0.12, 0.09], [0.18, -0.2, 0.07], [0.32, 0, 0.05]] as const) {
+            ctx.beginPath();
+            ctx.arc(p.x + dx * s, capY + dy * s, r * s, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        }
+        case 'stone': {
+          ctx.fillStyle = mix(colors.groundFar, colors.path, 0.4);
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y - s * 0.2, s * 0.6, s * 0.38, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = rgba('#ffffff', 0.12);
+          ctx.beginPath();
+          ctx.ellipse(p.x - s * 0.15, p.y - s * 0.32, s * 0.3, s * 0.14, -0.4, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+      }
+      ctx.restore();
+    }
   }
 
   private drawVignette(): void {
@@ -731,6 +905,9 @@ export class MapScene {
       if (mid) drawSteppingLights(ctx, seg, colors.pathLit, t, n, fade(mid));
     }
     ctx.restore();
+
+    // Flora beside the path, far to near so nearer plants overlap farther ones.
+    for (let n = nHi; n >= nLo; n--) this.drawFlora(ctx, this.floraFor(n), t, colors);
 
     // Lanterns: lit behind her, a faint cool glow ahead, never greyed out.
     let bloomAt: Pt | null = null;

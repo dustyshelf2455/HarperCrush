@@ -157,10 +157,10 @@ export function drawSteppingLights(ctx: CanvasRenderingContext2D, segment: reado
     const p = segment[i];
     if (!p) continue;
     const a = (0.32 + 0.14 * Math.sin(t * 0.9 + phase + k * 1.7)) * alpha;
-    glowDisc(ctx, p.x, p.y, 9, color, a);
+    glowDisc(ctx, p.x, p.y, 13, color, a);
     ctx.fillStyle = rgba('#fff4d6', a * 0.9);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
