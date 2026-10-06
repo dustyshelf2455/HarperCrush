@@ -489,7 +489,7 @@ export class GameView {
     const width = Math.max(280, Math.floor(rect.width || window.innerWidth));
     const height = Math.max(400, Math.floor(rect.height || window.innerHeight));
     const pad = 8;
-    const hud = 108; // lantern and companion row plus the goal stars
+    const hud = 154; // lantern and companion row plus the goal stars, with air above and below (parent, 6 October: the top felt packed)
     // The canvas runs under the home indicator; the board itself stays above that strip.
     const inset = bottomInset();
     const cell = Math.min((width - pad * 2) / this.state.cols, (height - inset - hud - 24) / this.state.rows);
@@ -499,7 +499,7 @@ export class GameView {
     const spare = height - inset - hud - boardH;
     // The board sits at the top under the lantern row (art summit, DESIGN.md 2e), so the painted landscape shows beneath it.
     const boardY = hud + Math.max(6, spare * 0.15 - 8);
-    const hudY = boardY - 70;
+    const hudY = boardY - 90;
     this.layout = { width, height, cell, boardX, boardY, hudY };
     this.canvas.width = Math.round(width * this.dpr);
     this.canvas.height = Math.round(height * this.dpr);
@@ -1984,7 +1984,7 @@ export class GameView {
     if (n <= 0) return;
     const gap = Math.min(30, (w - 48) / n);
     const x0 = w / 2 - ((n - 1) * gap) / 2;
-    const y = hudY + 42;
+    const y = hudY + 54;
     for (let i = 0; i < n; i++) {
       const lit = i < this.goal.done;
       const pulse = this.goalPulse[i];
@@ -2047,8 +2047,8 @@ export class GameView {
     const bob = Math.sin(t * 1.3) * 1.5;
     const hop = pokeC ? -14 * Math.sin(clamp01(pokeC.t / 700) * Math.PI) : 0;
     const painted = this.companionArt[this.companion];
-    if (painted) drawPaintedCompanion(ctx, painted.awake, cx + 46, hudY - 4 + bob + hop, 62, t, { glow: pokeC ? 1.5 : 1 }, painted.asleep);
-    else drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
+    if (painted) drawPaintedCompanion(ctx, painted.awake, cx + 46, hudY + 12 + bob + hop, 62, t, { glow: pokeC ? 1.5 : 1 }, painted.asleep);
+    else drawCompanion(ctx, this.companion, cx + 40, hudY + 8 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
     this.drawGoal(t);
     // Moon (the grown-up gate, Stage 3), dim, top-left; baked so the cut-out never touches the canvas beneath.
     // While a grown-up holds it, it brightens and a soft glow gathers, so the hold visibly "takes".
