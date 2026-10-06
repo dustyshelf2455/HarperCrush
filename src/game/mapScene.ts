@@ -15,7 +15,7 @@
  * idle tick otherwise (DESIGN.md 4.4). No text, ever.
  */
 import './mapScene.css';
-import { areaForLevel, type AreaId } from '../core/journey';
+import { areaForLevel, LANTERNS_PER_AREA, type AreaId } from '../core/journey';
 import { areaTheme, blendThemeColors, paintSky, type AreaTheme } from '../render/areas';
 import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
 import { drawLanternPost, drawPathRibbon, drawSteppingLights, lanternPoint, type LanternPos, pathPoint, postLayout, smoothPolyline } from '../render/map';
@@ -45,6 +45,8 @@ export interface MapShowOptions {
   onDone(): void;
   /** She tapped a lit lantern behind her: play that level again (the journey does not move). */
   onReplay?(level: number): void;
+  /** Review mode (development only, see review.ts): every lantern is lit and tappable, the map can be dragged. */
+  review?: { onOpen(level: number): void };
 }
 
 // Timings from DESIGN.md 3.5 and the Stage 3 brief.
@@ -63,6 +65,8 @@ const SLEEP_AFTER_MS = 1500;
 const SLEEP_MS = 2200;
 const TWINKLE_MS = 1400;
 const HIDE_MS = 450;
+/** Review mode (review.ts): the farthest lantern the map shows, two passes through the seven areas. */
+const REVIEW_TOP = 140;
 /** Taps during the fade-in are the tail of a board tap, not a wish to move on. */
 const TAP_GUARD_MS = 400;
 
@@ -216,6 +220,12 @@ export class MapScene {
     this.twinkles = [];
     this.sleepiness = 0;
     this.camera = lanternPoint(opts.from).y;
+    this.panTarget = null;
+    if (opts.review) {
+      // Review mode (review.ts): no hop and no waiting, the whole map is simply there.
+      this.phase = 'linger';
+      this.litTo = true;
+    }
     this.friends = opts.offerCompanions && !opts.rest ? this.layoutFriends(opts.to, opts.companion) : [];
     this.pointers.clear();
     this.primary = null;
@@ -275,6 +285,8 @@ export class MapScene {
   // ---------------------------------------------------------------- layout
 
   private camera = 1;
+  /** Review mode: where a glide between areas is heading (a lantern number), or null. */
+  private panTarget: number | null = null;
 
   private get spacing(): number {
     return this.h / FRAME_LANTERNS;
@@ -358,9 +370,16 @@ export class MapScene {
   private readonly move = (e: PointerEvent): void => {
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
+    const dy = e.clientY - p.y;
     p.x = e.clientX;
     p.y = e.clientY;
     if (Math.hypot(p.x - p.x0, p.y - p.y0) > TAP_MAX_PX) p.moved = true;
+    if (this.opts?.review && p.moved && this.primary === e.pointerId) {
+      // Review mode: dragging the map moves the camera along the path.
+      this.panTarget = null;
+      this.camera = Math.min(lanternPoint(REVIEW_TOP).y, Math.max(lanternPoint(1).y, this.camera - dy / this.spacing));
+      this.wake();
+    }
   };
 
   private readonly up = (e: PointerEvent): void => {
@@ -391,6 +410,17 @@ export class MapScene {
     const opts = this.opts;
     if (!opts || !this.shown || this.phase === 'idle' || this.phase === 'done') return;
     if (this.phase === 'enter' && this.phaseT < TAP_GUARD_MS) return;
+    if (opts.review) {
+      const n = this.earlierLanternAt(x, y, REVIEW_TOP + 1);
+      if (n !== null) {
+        opts.review.onOpen(n);
+        return;
+      }
+      this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
+      opts.onTwinkle?.();
+      this.wake();
+      return;
+    }
     if (opts.rest) {
       if (!this.litTo) return;
       this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
@@ -431,13 +461,14 @@ export class MapScene {
   }
 
   /** A lit lantern behind her under the tap (its post or light), nearest first, or null. */
-  private earlierLanternAt(x: number, y: number): number | null {
+  private earlierLanternAt(x: number, y: number, below?: number): number | null {
     const opts = this.opts;
     if (!opts) return null;
+    const top = below ?? opts.to;
     const { nLo } = this.lanternRange();
     let best: number | null = null;
     let bestD = LANTERN_HIT;
-    for (let n = nLo; n < opts.to; n++) {
+    for (let n = nLo; n < top; n++) {
       const base = this.toScreen(lanternPoint(n));
       if (this.fog(base) <= 0.01 || base.y > this.h + 40) continue;
       const light = postLayout(base.x, base.y, this.lanternSizeAt(base)).lantern;
@@ -457,6 +488,16 @@ export class MapScene {
     const nLo = Math.max(1, Math.floor(this.camera - (h - h * BASELINE) / span) - 1);
     const nHi = Math.ceil(this.camera + (h * BASELINE - this.horizonY) / span) + 1;
     return { nLo, nHi };
+  }
+
+  /** Review mode: glide the camera to the first lantern of the next (1) or previous (-1) area. */
+  panArea(dir: 1 | -1): void {
+    if (!this.opts?.review) return;
+    const here = Math.round(this.camera);
+    const start = Math.floor((here - 1) / LANTERNS_PER_AREA) * LANTERNS_PER_AREA + 1;
+    const target = dir > 0 ? start + LANTERNS_PER_AREA : here > start ? start : start - LANTERNS_PER_AREA;
+    this.panTarget = Math.min(REVIEW_TOP, Math.max(1, target));
+    this.wake();
   }
 
   /** Called by the app for a continue it owes elsewhere (the debug hook); same as a tap on the lantern. */
@@ -561,7 +602,19 @@ export class MapScene {
         break;
       }
       case 'linger':
-        if (opts.rest) {
+        if (opts.review) {
+          if (this.panTarget !== null) {
+            const goal = lanternPoint(this.panTarget).y;
+            const gap = goal - this.camera;
+            if (Math.abs(gap) < 0.01) {
+              this.camera = goal;
+              this.panTarget = null;
+            } else {
+              this.camera += gap * Math.min(1, dt / 220);
+              moving = true;
+            }
+          }
+        } else if (opts.rest) {
           if (this.phaseT > SLEEP_AFTER_MS && this.sleepiness < 1) {
             this.sleepiness = clamp01((this.phaseT - SLEEP_AFTER_MS) / SLEEP_MS);
             moving = true;
@@ -615,8 +668,10 @@ export class MapScene {
   /** The area the camera is in, and how far it has crossed into the next one. */
   private areasNow(): { a: AreaTheme; b: AreaTheme; f: number } {
     const opts = this.opts;
-    const from = opts ? opts.from : 1;
-    const to = opts ? opts.to : 1;
+    // Review mode: the area follows the camera, blending across each border as a hop would.
+    const free = opts?.review ? Math.max(1, Math.min(REVIEW_TOP - 1, Math.floor(this.camera))) : 0;
+    const from = free || (opts ? opts.from : 1);
+    const to = free ? free + 1 : opts ? opts.to : 1;
     const span = lanternPoint(to).y - lanternPoint(from).y;
     const k = span !== 0 ? clamp01((this.camera - lanternPoint(from).y) / span) : 1;
     const a = areaTheme(areaForLevel(from));
@@ -993,7 +1048,7 @@ export class MapScene {
   private drawWorld(t: number, opts: MapShowOptions, colors: ReturnType<typeof blendThemeColors>): void {
     const { ctx, h } = this;
     const pal = { ...this.style.palette, path: colors.path, pathLit: colors.pathLit };
-    const walkedTo = this.litTo ? opts.to : opts.from;
+    const walkedTo = opts.review ? REVIEW_TOP : this.litTo ? opts.to : opts.from;
 
     const { nLo, nHi } = this.lanternRange();
     const pts: Pt[] = [];
@@ -1027,8 +1082,8 @@ export class MapScene {
       const p = this.toScreen(lanternPoint(n));
       const alpha = this.fog(p);
       if (alpha <= 0.01 || p.y > h + 80) continue;
-      let lit = n < opts.to ? 1 : 0.1;
-      if (n === opts.to && this.litTo) {
+      let lit = opts.review || n < opts.to ? 1 : 0.1;
+      if (!opts.review && n === opts.to && this.litTo) {
         // The new light rises over the bloom, with a brief soft overshoot that settles.
         const k = clamp01(this.bloomT / BLOOM_MS);
         lit = 0.1 + 0.9 * easeOutCubic(k) + 0.25 * Math.sin(k * Math.PI);
@@ -1036,7 +1091,7 @@ export class MapScene {
       }
       if (!this.drawPaintedLantern(p.x, p.y, this.lanternSizeAt(p), lit, alpha, t + n * 0.7)) drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
     }
-    if (!opts.rest && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
+    if (!opts.rest && !opts.review && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
       // The invitation: a slow breath of light around the new lantern until she taps it.
       const p = this.toScreen(lanternPoint(opts.to));
       const at = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
