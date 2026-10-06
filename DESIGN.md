@@ -86,6 +86,19 @@ Made after the parent's first full play-test of Stage 3 on the phone. The play-t
 - **The scene fills the screen to the bottom edge.** The phone showed a black band under the board and the map because the whole canvas was padded in from the home-indicator strip. The sky and ground now run to the edge; only the top inset is padded, and the board itself is laid out above the strip so no gem or tappable sits under it. Full-bleed is the rule for scenery from here on.
 - **The moon gate was rejecting real thumbs.** It treated any touch wider than 28 px as a palm, and an iPhone reports an ordinary thumb at around 40 px, so most holds failed at once; a drift of more than 8 px during the hold also cancelled it, and the ring was nearly invisible for the first second. Now a touch over 80 px is a palm, a thumb may wobble by 24 px, the ring is visible from the first moment, and the moon itself brightens with the hold. A child still cannot pass the word step, so the hold can afford to be seen.
 
+## 2e. Art summit decisions (6 October 2026)
+
+Settled with the parent as five picture choices, one at a time (samples and prompts in the project's `art/style/` folder; the full guide is `STYLE.md`).
+
+- **One hand for everything: hand-painted storybook** (gouache and watercolour, soft brushwork, rich jewel colours), chosen over polished glossy and stained glass. The painted gems, the Meadow mockup and the firefly had each been in a different hand; from here every piece is made against the same style paragraph.
+- **The companions are now a fairy, a kid dragon and a little hooded hero**, extra-cute proportions. Harper loves fairies above all, so the fairy is the default. The firefly and the glow fish are retired (the code's ids stay for saved games).
+- **The board moves to the top of the screen and gains a row** (seven by nine in Play), the gems a tenth bigger, the companion beside the lantern half again as big, and a soft still glow under every gem; the landscape shows beneath the board. Painted cells (a gilded jewel box, a flower frame, a ring of stars) were tried and the glass cells kept.
+- **The seven areas** were approved from one painted strip, so they read as siblings.
+- **The map becomes a scrolling storybook**: tall painted sections per area with the path painted into the landscape, chaining top to bottom; the code places lanterns and companions on points along the painted path and keeps drawing all the light. The perspective stage and the code-drawn road ribbon go. The parent's words: the old road "just drifts oddly into the mountains".
+- **Stage 4's pieces** (frost, vines, cloud puffs, moonstone, star-seeds, bubbles, hidden pictures) were approved painted, so Play levels are built with their real art from the first day.
+- **Reskins later**: each theme is a folder of same-named pictures chosen from the panel, so a superhero or birthday version is pictures only.
+- **The rule that protects the feel**: pictures are the body, code is the light (STYLE.md). Glows, auras, pulses and the win shimmer stay code-drawn on top; every picture sits on the code-drawn anchor; the code-drawn piece stays as the fallback.
+
 ---
 
 ## 3. The game
