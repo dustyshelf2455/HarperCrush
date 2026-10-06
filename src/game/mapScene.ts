@@ -721,8 +721,8 @@ export class MapScene {
 
   /** The companion: painted when a picture exists for it, else drawn in code. */
   private drawAnyCompanion(ctx: CanvasRenderingContext2D, id: CompanionId, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
-    const picture = id === 'firefly' ? this.art?.firefly : undefined;
-    if (picture) drawPaintedCompanion(ctx, picture, x, y, s, t, opts);
+    const picture = this.art?.companions[id];
+    if (picture) drawPaintedCompanion(ctx, picture.awake, x, y, s, t, opts, picture.asleep);
     else drawCompanion(ctx, id, x, y, s, t, opts);
   }
 

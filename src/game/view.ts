@@ -14,11 +14,14 @@ import { createRng } from '../shared/rng';
 import { type AreaTheme, paintSky } from '../render/areas';
 import { lighten, rgba } from '../render/color';
 import { type CompanionId, drawCompanion, drawLantern, drawPaintedCompanion } from '../render/creatures';
+import type { CompanionArt } from '../render/mapArt';
+import { loadBoardArt, type BoardArt } from '../render/boardArt';
 import { drawBud, drawOrb } from '../render/board';
 import { drawAuroraPiece, drawCometHead, drawMoonPearl, drawSpriteCreature, drawStarburstRays, slowPulse } from '../render/powers';
 import { shapePath } from '../render/shapes';
 import { GemSprites } from '../render/sprites';
 import type { GemArt } from '../render/gemArt';
+import { POWER_ART_SCALE, type PowerArt, type PowerArtName } from '../render/powerArt';
 import { breath, clamp01, easeInOutSine, easeOutCubic, glowDisc, highlight, softRing } from '../render/styles/common';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
@@ -287,13 +290,33 @@ export class GameView {
     this.wake();
   }
 
-  private companionArt: HTMLImageElement | null = null;
+  private powerArt: PowerArt = {};
 
-  /** The painted firefly for the board's lantern row (art round two). */
-  setCompanionArt(picture: HTMLImageElement | null): void {
-    this.companionArt = picture;
+  /** A painted power piece has loaded: stamp it over its code-drawn version from now on. */
+  setPowerArt(art: PowerArt): void {
+    this.powerArt = art;
     this.wake();
   }
+
+  /** Stamps a painted power piece centred on (x, y) with its body spanning the given radius. */
+  private stampPower(name: PowerArtName, x: number, y: number, radius: number): boolean {
+    const img = this.powerArt[name];
+    if (!img) return false;
+    const size = radius * 2 * POWER_ART_SCALE;
+    this.ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+    return true;
+  }
+
+  private companionArt: Partial<Record<CompanionId, CompanionArt>> = {};
+
+  /** The painted companions for the board's lantern row (STYLE.md). */
+  setCompanionArt(art: Partial<Record<CompanionId, CompanionArt>>): void {
+    this.companionArt = art;
+    this.wake();
+  }
+
+  /** The painted backdrop behind the board, one per area, loaded as the area is entered. */
+  private boardArt: BoardArt = loadBoardArt(() => this.wake());
 
   setSelected(cell: Cell | null): void {
     this.selected = cell;
@@ -474,8 +497,8 @@ export class GameView {
     const boardH = cell * this.state.rows;
     const boardX = (width - boardW) / 2;
     const spare = height - inset - hud - boardH;
-    // Board a little below centre so it sits under her thumbs; the HUD rides just above it.
-    const boardY = hud + Math.max(6, spare * 0.6 - 8);
+    // The board sits at the top under the lantern row (art summit, DESIGN.md 2e), so the painted landscape shows beneath it.
+    const boardY = hud + Math.max(6, spare * 0.15 - 8);
     const hudY = boardY - 70;
     this.layout = { width, height, cell, boardX, boardY, hudY };
     this.canvas.width = Math.round(width * this.dpr);
@@ -1440,6 +1463,14 @@ export class GameView {
     if (!this.ambient) return;
     if (this.theme) {
       paintSky(ctx, w, h, this.theme);
+      // The painted sky and scenery for this area (STYLE.md "The board"), scaled to cover and anchored to the bottom edge.
+      const picture = this.boardArt.get(this.theme.id);
+      if (picture) {
+        const k = Math.max(w / picture.naturalWidth, h / picture.naturalHeight);
+        const dw = picture.naturalWidth * k;
+        const dh = picture.naturalHeight * k;
+        ctx.drawImage(picture, (w - dw) / 2, h - dh, dw, dh);
+      }
       this.ambient.draw(ctx, w, h, t);
     } else this.style.drawBackground(ctx, w, h, t, this.ambient);
   }
@@ -1463,8 +1494,11 @@ export class GameView {
     if (power === 'orb' || power === 'aurora') {
       ctx.save();
       ctx.globalAlpha = o.alpha;
-      if (power === 'orb') drawOrb(ctx, x, y, radius * 0.95 * o.scale, t);
-      else drawAuroraPiece(ctx, x, y, radius * 0.95 * o.scale, t);
+      const pr = radius * 0.95 * o.scale;
+      if (power === 'orb') drawOrb(ctx, x, y, pr, t);
+      else drawAuroraPiece(ctx, x, y, pr, t);
+      // The painted piece over the drawing (STYLE.md: pictures are the body, code is the light).
+      this.stampPower(power, x, y, pr);
       if (o.brighten > 0) glowDisc(ctx, x, y, radius * 1.3 * o.scale, '#ffffff', o.brighten * 0.6);
       ctx.restore();
       return;
@@ -1499,15 +1533,18 @@ export class GameView {
       case 'bloom':
         // The closed bud over the gem; it glows softly, and fully once it has opened and rides the fall.
         drawBud(ctx, x, y - r * 0.08, r * 0.52, t, o.opened ? 1 : 0.1 + 0.3 * slowPulse(t, 3));
+        this.stampPower('bud', x, y - r * 0.08, r * 0.52);
         break;
       case 'sprite':
         drawSpriteCreature(ctx, x + r * 0.5, y - r * 0.8, r * 0.17, t);
+        this.stampPower('sprite', x + r * 0.5, y - r * 0.8, r * 0.3);
         break;
       case 'starburst':
         drawStarburstRays(ctx, x, y, r, t);
         break;
       case 'moonrise':
         drawMoonPearl(ctx, x + r * 0.42, y - r * 0.62, r * 0.3, t);
+        this.stampPower('moon', x + r * 0.42, y - r * 0.62, r * 0.3);
         break;
     }
     ctx.restore();
@@ -2009,7 +2046,8 @@ export class GameView {
     drawLantern(ctx, cx - 34, hudY, lanternSize, Math.min(1, this.lanternFill + 0.02 * Math.sin(t * 0.55) + (pokeL ? 0.25 * Math.sin(clamp01(pokeL.t / 700) * Math.PI) : 0)), this.style.palette, t);
     const bob = Math.sin(t * 1.3) * 1.5;
     const hop = pokeC ? -14 * Math.sin(clamp01(pokeC.t / 700) * Math.PI) : 0;
-    if (this.companion === 'firefly' && this.companionArt) drawPaintedCompanion(ctx, this.companionArt, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
+    const painted = this.companionArt[this.companion];
+    if (painted) drawPaintedCompanion(ctx, painted.awake, cx + 46, hudY - 4 + bob + hop, 62, t, { glow: pokeC ? 1.5 : 1 }, painted.asleep);
     else drawCompanion(ctx, this.companion, cx + 40, hudY - 2 + bob + hop, 44, t, { glow: pokeC ? 1.5 : 1 });
     this.drawGoal(t);
     // Moon (the grown-up gate, Stage 3), dim, top-left; baked so the cut-out never touches the canvas beneath.

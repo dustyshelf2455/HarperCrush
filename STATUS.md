@@ -69,12 +69,24 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
 - **Stage 5 remainder, then Stage 6 polish and Batch D** (icon, launch picture, panel art), then the full-draft deploy for the parent to play end to end.
 
-Spent on pictures so far: roughly $5 of the $10 credit (proof of concept plus the summit).
+Spent on pictures so far: the whole $10 credit (proof of concept, the summit, batch A).
+
+### Batch A built (6 October, afternoon)
+
+On the branch, checked (typecheck, 210 tests, build) and screenshotted at phone size; waiting on the parent's "Deploy?".
+
+- **Theme folder:** every picture now lives under `public/art/default/` (gems, powers, companions, board, map). `src/render/artPath.ts` picks the folder from the `glimmerfall.theme` key in local storage, so a second skin is a second folder with the same file names. The service worker's asset list is now walked from the folder (`vite.config.ts`), so new pictures need no hand-listing.
+- **Gems:** the storybook set from the summit, drawn a tenth bigger, with the soft still glow baked into the sprite under the picture.
+- **Powers:** painted Orb, Aurora, bud, sprite and moon pearl stamped over their code-drawn versions (`src/render/powerArt.ts`); comet streak, starburst rays and all auras stay code-drawn.
+- **Companions:** fairy, dragon and hero, each with an asleep picture, on the board (62 px) and the map; the asleep picture replaces the code squash when it exists (`src/render/mapArt.ts`, `creatures.ts`). The code still calls them firefly, fish and hero so saves keep working; `COMPANION_FILES` maps the ids to the picture names.
+- **Board:** Play is seven by nine, at the top of the screen, with the area's painted backdrop behind it (`src/render/boardArt.ts`, loaded per area when first needed).
+- **Backdrops:** six of seven painted. Dragon Hollow failed because the credit ran out; it falls back to the code-drawn sky until it is painted (about 20 cents). Crystal Cave, Mermaid Lagoon and Star Garden came back with characters in the bottom strip (crystal creatures, a mermaid, a bunny and an owl) although the prompt asked for scenery only; the mermaid reaches up under the lowest rows. The parent decides whether to keep them or repaint those three scenery-only (about 60 cents).
+- The old map (perspective stage, code road) is unchanged until batch B.
 
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
-2. **Batch A** of the painted art (see the summit section), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
+2. **Deploy batch A** once the parent says so (the branch `claude/art-style-and-roadmap-vi4nkp` carries it), paint Dragon Hollow's backdrop when credit is topped up, then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
 3. **Stage 5** endings and wind-down (3.8): session timer, softening, the resting scene's timing and dimming, rest-until and New session as designed, the breathing glow controls, the night dimmer.
 4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
 

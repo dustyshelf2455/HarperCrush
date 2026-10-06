@@ -5,6 +5,7 @@
 import type { GemType } from '../core/grid';
 import type { GemStyle } from './styles/types';
 import { GEM_ART_SCALE, type GemArt } from './gemArt';
+import { glowDisc } from './styles/common';
 
 export interface DrawOpts {
   alpha?: number;
@@ -49,7 +50,11 @@ export class GemSprites {
     if (ctx) {
       ctx.scale(this.dpr, this.dpr);
       ctx.translate(size / 2, size / 2);
-      if (picture) ctx.drawImage(picture, -side / 2, -side / 2, side, side);
+      if (picture) {
+        // A soft, still glow in the gem's own light under the painted body (STYLE.md: pictures are the body, code is the light).
+        glowDisc(ctx, 0, 0, r * 1.42, this.style.gemColor(type).light, 0.34);
+        ctx.drawImage(picture, -side / 2, -side / 2, side, side);
+      }
       else this.style.drawGem(ctx, type, r);
     }
     const entry = { canvas, size };

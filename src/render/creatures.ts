@@ -61,16 +61,19 @@ const BLINK_OFFSET: Record<CompanionId, number> = { firefly: 0, fish: 1.7, hero:
  * and sleep cues, so hops and landings feel the same. Its glow is drawn in
  * code so it can breathe.
  */
-export function drawPaintedCompanion(ctx: CanvasRenderingContext2D, picture: HTMLImageElement, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
+export function drawPaintedCompanion(ctx: CanvasRenderingContext2D, awake: HTMLImageElement, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}, asleep?: HTMLImageElement): void {
   const sleep = opts.sleep ?? false;
+  const picture = sleep && asleep ? asleep : awake;
+  const curl = sleep && !asleep;
   const glow = (opts.glow ?? 1) * glowPulse(t, sleep);
-  const squash = sleep ? Math.min(opts.squash ?? 0.92, 0.92) : (opts.squash ?? 1);
+  const squash = curl ? Math.min(opts.squash ?? 0.92, 0.92) : (opts.squash ?? 1);
   const feet = s * 0.46;
-  const dh = s * 1.55;
+  // An asleep picture is wider than tall; keep its width to the awake one's so she stays the same size curled up.
+  const dh = sleep && asleep ? s * 1.55 * Math.min(1, (picture.naturalHeight / picture.naturalWidth) / (awake.naturalHeight / awake.naturalWidth)) : s * 1.55;
   const dw = dh * (picture.naturalWidth / picture.naturalHeight);
   ctx.save();
   ctx.translate(x, y + feet);
-  ctx.rotate((opts.tilt ?? 0) + (sleep ? 0.12 : 0));
+  ctx.rotate((opts.tilt ?? 0) + (curl ? 0.12 : 0));
   ctx.scale((opts.facing ?? 1) / Math.sqrt(squash), squash);
   ctx.translate(0, -feet);
   ctx.save();
