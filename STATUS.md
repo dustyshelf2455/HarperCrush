@@ -105,7 +105,7 @@ The parent asked for a splash screen on load; it is the Stage 6 "launch picture"
 
 ### Stage 4 built (7 October, early morning): real Play levels
 
-On the branch, checked, awaiting the parent's "Deploy?". Decisions in DESIGN.md 2h; screenshots in the project's `art/batchC/` folder.
+Deployed as run 31, green 04:42 UTC on 7 October, on the parent's "Deploy. Terrific work." Decisions in DESIGN.md 2h; screenshots in the project's `art/batchC/` folder.
 
 - **Core** (`src/core/game.ts`): pieces can be items (seed, puff, moonstone, bubble with a sleeper), the state carries a terrain (holes, frost layers, vines, the picture window) and goals (uncover, seeds, free, gather), and the resolution emits four new steps (frost thinned, vine released, creature freed, seed out). Holes and fixed pieces are floors for the fall; every run of cells between floors refills from its own top. Reshuffles move only loose gems; gifts sit only on loose gems.
 - **Generator** (`src/core/levels.ts`): `levelFor(lantern, difficulty, seed)` builds the ten shapes with the heat ramp and the static check; `newLevel` deals the gems around the items. Tests (`tests/levels.test.ts`): every lantern 1 to 70 at every setting passes the static check, and the solver bot finishes each within 160 moves (the whole run takes about 14 s).
