@@ -36,6 +36,7 @@ import {
 import type { Cell } from '../core/grid';
 import {
   AREA_NAMES,
+  type AreaId,
   type Gift,
   type Mode,
   areaForLevel,
@@ -78,6 +79,8 @@ const REST_DEEP_MS = 10 * 60 * 1000;
 /** The sleepy stretch at the end of a timed session (DESIGN.md 2d: the parent's four minutes). */
 const WIND_DOWN_MS = 4 * 60 * 1000;
 const SESSION_TICK_MS = 1000;
+/** The theme's twinkles and tiny timing are seeded once, so the song opens the same way every time. */
+const THEME_SEED = 7777;
 /** The hint points at a gift's swap from the first pause (DESIGN.md 3.4). */
 const GIFT_HINT_MS = 2500;
 /** The first firing of a power runs at this speed (DESIGN.md 3.4). */
@@ -100,7 +103,8 @@ interface Save {
   state: string;
   matches: number;
   companion: CompanionId;
-  companionOffered: boolean;
+  /** Stage 3 wrote this (the companion offer); the friends now travel with her, so it is ignored. */
+  companionOffered?: boolean;
   seen: PowerFamily[];
   comboCounts: Record<string, number>;
   gift: Gift | null;
@@ -177,7 +181,6 @@ export class App {
   private state: GameState;
   private matches = 0;
   private companion: CompanionId = 'firefly';
-  private companionOffered = false;
   private seen = new Set<PowerFamily>();
   private comboCounts: Record<string, number> = {};
   private gift: Gift | null = null;
@@ -215,7 +218,8 @@ export class App {
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeLock: { release(): Promise<void> } | null = null;
   private discovering = false;
-  private musicArea: string | null = null;
+  /** The area the map's view is in (the theme plays in its voice); null until the map reports one. */
+  private mapArea: AreaId | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -239,8 +243,17 @@ export class App {
     }
     this.state = loaded ?? this.freshState(this.level, this.mode);
     if (!loaded) this.placeLevelGift();
-    // The launch picture goes up before the board is built, so it is the first frame she sees.
-    const splash = opts.splash ? new Splash(this.reducedMotion(settings), this.companion) : null;
+    // The launch picture goes up before the board is built, so it is the first frame she sees. Her tap
+    // on the fairy door is the first touch of the launch, so sound unlocks there (DESIGN.md 2f).
+    if (opts.splash) {
+      new Splash(this.reducedMotion(settings), this.companion, {
+        onEnter: () => this.doorOpened(),
+        onTwinkle: () => {
+          this.unlockAudio();
+          this.sounds.twinkle();
+        },
+      });
+    }
 
     this.view = new GameView(
       canvas,
@@ -259,16 +272,7 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
-    // The launch picture lets go once the gems and the map's pictures are both on screen.
-    let artPending = 2;
-    const artReady = (): void => {
-      artPending -= 1;
-      if (artPending === 0) splash?.ready();
-    };
-    loadGemArt((art) => {
-      this.view.setGemArt(art);
-      artReady();
-    });
+    loadGemArt((art) => this.view.setGemArt(art));
     loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);
@@ -281,7 +285,6 @@ export class App {
     loadMapArt((art) => {
       this.map.setArt(art);
       this.view.setCompanionArt(art.companions);
-      artReady();
     });
 
     const surface = canvas;
@@ -294,6 +297,9 @@ export class App {
     });
     // A second chance at the audio unlock on the release of the touch, which every browser counts as a gesture.
     surface.addEventListener('pointerup', () => this.unlockAudio(), { passive: true });
+    // Any first touch anywhere (the launch picture, the map) may start the sound: the theme begins the moment
+    // she opens the game and flows into the map (an iPhone allows no sound before the first touch).
+    document.addEventListener('pointerdown', () => this.unlockAudio(), { passive: true, capture: true });
 
     // The grown-up gate and the parent panel (DESIGN.md 3.9).
     this.panel = new Panel(stage, this.settings, {
@@ -398,17 +404,33 @@ export class App {
     this.view.setGift(this.giftFamilies());
     this.view.setCompanion(this.companion);
     this.sounds.setArea(area);
-    if (this.musicArea !== null && this.musicArea !== area) this.startMusic();
+    this.syncMusic();
   }
 
-  private startMusic(): void {
-    const area = areaForLevel(this.boardLevel);
-    this.musicArea = area;
+  /**
+   * Start or move the music to what the moment calls for, and nothing if it already plays: the Glimmerfall
+   * theme on the map (and so under the launch picture, which opens on the map), in the voice of the area the
+   * view is in, crossing to the next area's voice as she scrolls; the area's lullaby under a level and in rest.
+   */
+  private syncMusic(): void {
     if (!this.settings.get().music || !this.engine.isRunning) return;
-    // The lullaby has already faded in a long rest: the night stays silent until New session.
-    if (this.phase === 'resting' && this.restAge() >= LULLABY_MS + LULLABY_FADE_S * 1000) return;
-    void this.player.start(sketchForArea(area), 4242 + this.boardLevel, this.musicSoft(), null);
+    // The lullaby has already begun its fade in a rest: the night stays silent until New session.
+    if (this.phase === 'resting' && this.restAge() >= LULLABY_MS) return;
+    if (this.phase === 'map') {
+      const area = this.mapArea ?? areaForLevel(this.level);
+      if (this.player.isTheme) this.player.setThemeArea(area);
+      else void this.player.startTheme(area, THEME_SEED);
+    } else {
+      const spec = sketchForArea(areaForLevel(this.boardLevel));
+      if (this.player.current !== spec) void this.player.start(spec, 4242 + this.boardLevel, this.musicSoft(), null);
+    }
     this.player.setLevel(this.settings.get().musicLevel);
+  }
+
+  /** The map's view has crossed into another area: the theme follows. */
+  private mapAreaChanged(area: AreaId): void {
+    this.mapArea = area;
+    this.syncMusic();
   }
 
   // ------------------------------------------------------------------ input
@@ -425,9 +447,7 @@ export class App {
 
   /** Idempotent: creates the context on the first touch, resumes it after interruptions, starts the music once it runs. */
   private unlockAudio(): void {
-    void this.engine.unlock().then(() => {
-      if (this.engine.isRunning && this.settings.get().music && !this.player.current) this.startMusic();
-    });
+    void this.engine.unlock().then(() => this.syncMusic());
   }
 
   private tapped(cell: Cell | null, x: number, y: number): void {
@@ -603,25 +623,24 @@ export class App {
       this.state = this.freshState(this.level, this.mode);
     }
     this.placeLevelGift();
-    const offer = (!this.companionOffered && this.level === 2) || isFirstLanternOfArea(this.level);
-    if (offer) this.companionOffered = true;
     this.save();
     this.view.stop();
     this.map.show({
       from,
       to: this.level,
       companion: this.companion,
-      offerCompanions: offer,
       rest,
       restSince: this.restingSince ?? undefined,
       onLight: () => (isFirstLanternOfArea(this.level) ? this.sounds.areaArrive(areaForLevel(this.level)) : this.sounds.lanternLit()),
       onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.twinkle(),
+      onArea: rest ? undefined : (a) => this.mapAreaChanged(a),
       onDone: () => this.leaveMap(),
       onReplay: (n) => this.startReplay(n),
     });
     this.applySoftening();
     if (rest) this.scheduleRest();
+    else this.syncMusic();
   }
 
   // ------------------------------------------------------------------ rest
@@ -722,6 +741,15 @@ export class App {
     this.armHint();
   }
 
+  /**
+   * She opened the fairy door on the launch picture: the moment the game begins. The first touch of
+   * the launch, so this is where sound may start (a warm chord now; the theme music hooks in here).
+   */
+  private doorOpened(): void {
+    this.unlockAudio();
+    this.sounds.lanternLit();
+  }
+
   /** At launch: the map waits at her lantern, already lit, until she taps it; the board she left comes back as it was. */
   private openLaunchMap(): void {
     this.phase = 'map';
@@ -731,13 +759,15 @@ export class App {
       from: this.level,
       to: this.level,
       companion: this.companion,
-      offerCompanions: false,
       rest: false,
       arrive: false,
+      onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.sounds.twinkle(),
+      onArea: (a) => this.mapAreaChanged(a),
       onDone: () => this.leaveMap(),
       onReplay: (n) => this.startReplay(n),
     });
+    this.syncMusic();
   }
 
   /** The resting scene on a relaunch while she is still "asleep". */
@@ -747,7 +777,6 @@ export class App {
       from: this.level,
       to: this.level,
       companion: this.companion,
-      offerCompanions: false,
       rest: true,
       restSince: this.restingSince ?? undefined,
       onTwinkle: () => this.twinkle(),
@@ -780,7 +809,7 @@ export class App {
       sessionLeftMs: this.sessionLeftMs(),
       buildDate: __BUILD_DATE__,
       offlineReady: !!navigator.serviceWorker?.controller,
-      audio: `${s.state}${this.player.current ? ', music' : ''}`,
+      audio: `${s.state}${this.player.currentId ? ', music' : ''}`,
       review: this.review,
     };
   }
@@ -926,7 +955,7 @@ export class App {
     this.panel.close();
     if (this.phase === 'resting') this.leaveMap();
     this.applySoftening();
-    if (!this.player.current) this.startMusic();
+    this.syncMusic();
   }
 
   // ------------------------------------------------------ review mode
@@ -961,12 +990,14 @@ export class App {
       from: at,
       to: at,
       companion: this.companion,
-      offerCompanions: false,
       rest: false,
+      onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.sounds.twinkle(),
+      onArea: (a) => this.mapAreaChanged(a),
       onDone: () => undefined,
       review: { onOpen: (n) => this.openReviewLevel(n) },
     });
+    this.syncMusic();
   }
 
   private openReviewLevel(n: number): void {
@@ -1010,7 +1041,6 @@ export class App {
       /* nothing to remove */
     }
     this.companion = 'firefly';
-    this.companionOffered = false;
     this.seen.clear();
     this.comboCounts = {};
     this.mode = 'play';
@@ -1030,12 +1060,8 @@ export class App {
     }
     this.engine.setSilentMode(s.playOnSilent ? 'ignore' : 'follow');
     this.sounds.enabled = s.chimes;
-    if (s.music) {
-      if (!this.player.current) this.startMusic();
-      else this.player.setLevel(s.musicLevel);
-    } else if (this.player.current) {
-      this.player.stop(1.2);
-    }
+    if (s.music) this.syncMusic();
+    else if (this.player.currentId) this.player.stop(1.2);
     this.view.setReducedMotion(this.reducedMotion(s));
     this.view.setBreathing(s.breathingGlow);
     this.dimmer.style.opacity = String(Math.max(0, Math.min(0.75, s.nightDim)));
@@ -1060,7 +1086,6 @@ export class App {
       const gap = now - save.savedAt;
       this.level = Number.isFinite(save.level) ? Math.max(1, Math.floor(save.level)) : 1;
       this.companion = save.companion ?? 'firefly';
-      this.companionOffered = !!save.companionOffered;
       this.seen = new Set(save.seen ?? []);
       this.comboCounts = save.comboCounts ?? {};
       this.parkedPlay = save.parkedPlay ?? null;
@@ -1112,7 +1137,6 @@ export class App {
         state: '',
         matches: 0,
         companion: old.companion ?? 'firefly',
-        companionOffered: !!old.companionOffered,
         seen: old.seen ?? [],
         comboCounts: old.comboCounts ?? {},
         gift: null,
@@ -1144,7 +1168,6 @@ export class App {
         state: '',
         matches: 0,
         companion: old.companion ?? 'firefly',
-        companionOffered: false,
         seen: ['comet', 'orb'],
         comboCounts: {},
         gift: null,
@@ -1172,7 +1195,6 @@ export class App {
         state: serialize(this.state),
         matches: this.matches,
         companion: this.companion,
-        companionOffered: this.companionOffered,
         seen: [...this.seen],
         comboCounts: this.comboCounts,
         gift: this.gift,
@@ -1209,6 +1231,7 @@ export class App {
       openPanel: () => this.openPanel(),
       completeLevel: () => {
         this.matches = boardFor(this.mode).goal;
+        if (this.state.goals) this.state = { ...this.state, goals: this.state.goals.map((g) => ({ ...g, done: g.total })) };
         if (!this.view.busy) this.levelComplete();
       },
       pendingMode: () => this.pendingMode,
@@ -1232,6 +1255,8 @@ export class App {
       },
       restAge: () => this.restAge(),
       softening: () => this.softening(),
+      music: () => this.player.currentId,
+      musicMix: () => this.player.themeMix,
     };
     const el = document.createElement('div');
     el.id = 'debug';
@@ -1244,7 +1269,7 @@ export class App {
       el.textContent = [
         `build ${__BUILD_DATE__}`,
         `audio ${s.state} unlocked ${s.unlocked} session ${s.session} keepalive ${s.keepAlive}`,
-        `music ${this.player.current?.id ?? 'off'} sr ${s.sampleRate}`,
+        `music ${this.player.currentId ?? 'off'} sr ${s.sampleRate}`,
         `lantern ${this.level}${this.replay !== null ? ' replaying ' + this.replay : ''} ${areaForLevel(this.boardLevel)} ${this.mode}${this.pendingMode ? ' -> ' + this.pendingMode : ''} ${this.phase}${this.windingDown ? ' winding down' : ''}`,
         `session ${this.sessionLeftMs() === null ? 'off' : Math.ceil((this.sessionLeftMs() ?? 0) / 1000) + 's left'}`,
         `matches ${this.matches}/${boardFor(this.mode).goal} moves ${this.state.moves} gift ${gift}`,
@@ -1290,9 +1315,7 @@ export class App {
   }
 
   private wakeUp(): void {
-    void this.engine.resume().then(() => {
-      if (this.settings.get().music && this.engine.isRunning && !this.player.current) this.startMusic();
-    });
+    void this.engine.resume().then(() => this.syncMusic());
     if (this.phase === 'playing') this.view.start();
     else this.map.start();
     if (this.phase === 'resting') this.scheduleRest();

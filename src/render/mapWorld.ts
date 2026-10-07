@@ -49,6 +49,22 @@ export function sectionAt(y: number): SectionRef {
   return sectionRef(Math.floor(Math.max(0, y) / SECTION_PITCH));
 }
 
+/**
+ * The area the view is "in" at world y, for the music (the theme changes
+ * voice as the map scrolls): the area of the page under y, until the view is
+ * past the middle of the band where that area's last page crosses into the
+ * next (the top third of the page, mirroring MapScene's colour crossfade):
+ * an area's tenth lantern, which stands at about 0.82 of that page, still
+ * belongs to its own area.
+ */
+export function areaUnderView(y: number): AreaId {
+  const ref = sectionAt(y);
+  const next = sectionRef(ref.k + 1);
+  if (ref.i < SECTIONS_PER_AREA - 1 || next.area === ref.area) return ref.area;
+  const within = (Math.max(0, y) - ref.k * SECTION_PITCH) / SECTION_PITCH;
+  return within >= 0.9 ? next.area : ref.area;
+}
+
 /** The painted path of page k in world pixels, bottom to top. */
 export function sectionPath(k: number): Pt[] {
   const ref = sectionRef(k);

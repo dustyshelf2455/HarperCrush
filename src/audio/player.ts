@@ -5,15 +5,34 @@
  */
 import { createRng } from '../shared/rng';
 import { CHORDS, type Chord, chordTones } from '../shared/scale';
-import { Composer, type SketchSpec } from './composer';
+import type { AreaId } from '../core/journey';
+import { Composer, type MusicEvent, type SketchSpec } from './composer';
 import type { AudioEngine, Channel, MusicLevel, PadVoice } from './engine';
+import { ThemeComposer, type VoiceWeights } from './theme';
 
 const LOOKAHEAD_SECONDS = 0.5;
 const TICK_MS = 100;
+/** Seconds the theme takes to move from one area's voice to the next as the map crosses a border. */
+export const THEME_CROSS_SECONDS = 3;
+
+/** What the player plays: a sketch's composer under a level, or the theme on the splash and the map. */
+interface MusicSource {
+  readonly bpm: number;
+  chordAt(beat: number): Chord;
+  next(upTo: number): MusicEvent[];
+}
 
 export class MusicPlayer {
+  private source: MusicSource | null = null;
   private composer: Composer | null = null;
+  private theme: ThemeComposer | null = null;
   private spec: SketchSpec | null = null;
+  /** The theme's voice weights, eased toward `themeTarget` a little every tick. */
+  private themeWeights: VoiceWeights = {};
+  private themeTarget: AreaId | null = null;
+  private lastTick = 0;
+  /** What is playing, for the debug overlay and the app: a sketch's id, or theme-<area>. */
+  private playing: string | null = null;
   private channel: Channel | null = null;
   private generation = 0;
   private pad: PadVoice | null = null;
@@ -26,8 +45,18 @@ export class MusicPlayer {
 
   constructor(private readonly engine: AudioEngine) {}
 
+  /** The sketch playing under a level, or null (also null while the theme plays). */
   get current(): SketchSpec | null {
     return this.spec;
+  }
+
+  /** The id of whatever plays: a sketch's id, `theme-<area>` for the theme, or null. */
+  get currentId(): string | null {
+    return this.playing;
+  }
+
+  get isTheme(): boolean {
+    return this.theme !== null;
   }
 
   get isWindDown(): boolean {
@@ -45,13 +74,54 @@ export class MusicPlayer {
     const generation = ++this.generation;
     // Announce the sketch at once so a second tap on its button stops it, even while unlocking.
     this.spec = spec;
+    this.playing = spec.id;
     this.emit();
     const ctx = await this.engine.unlock();
     if (!ctx || generation !== this.generation) return;
+    const composer = new Composer(spec, createRng(seed));
+    composer.setWindDown(windDown);
+    this.composer = composer;
+    this.begin(ctx, composer, autoStopSeconds);
+  }
+
+  /**
+   * The Glimmerfall theme (theme.ts) in an area's voice, for the launch picture and the map. It plays until
+   * stopped; `setThemeArea` moves it into another area's voice without a break as the view crosses a border.
+   */
+  async startTheme(area: AreaId, seed: number): Promise<void> {
+    this.stop(1.2);
+    const generation = ++this.generation;
+    this.playing = `theme-${area}`;
+    this.themeWeights = { [area]: 1 };
+    this.themeTarget = area;
+    this.emit();
+    const ctx = await this.engine.unlock();
+    if (!ctx || generation !== this.generation) return;
+    const theme = new ThemeComposer(createRng(seed), this.themeWeights);
+    this.theme = theme;
+    this.lastTick = ctx.currentTime;
+    this.begin(ctx, theme, null);
+  }
+
+  /** The area whose voice the theme should move to; no-op when the theme is not playing or already heading there. */
+  setThemeArea(area: AreaId): void {
+    if (this.themeTarget === area) return;
+    this.themeTarget = area;
+    if (this.theme) {
+      this.playing = `theme-${area}`;
+      this.emit();
+    }
+  }
+
+  /** The theme's current voice weights (tests and the debug overlay). */
+  get themeMix(): Readonly<VoiceWeights> {
+    return this.themeWeights;
+  }
+
+  private begin(ctx: AudioContext, source: MusicSource, autoStopSeconds: number | null): void {
     this.channel = this.engine.createChannel();
-    this.composer = new Composer(spec, createRng(seed));
-    this.composer.setWindDown(windDown);
-    this.bpm = this.composer.bpm;
+    this.source = source;
+    this.bpm = source.bpm;
     this.anchorBeat = 0;
     this.anchorTime = ctx.currentTime + 0.15;
     this.stopAt = autoStopSeconds === null ? null : ctx.currentTime + autoStopSeconds;
@@ -113,19 +183,24 @@ export class MusicPlayer {
         channel.wet.disconnect();
       }, (fadeSeconds + 4) * 1000);
     }
-    const wasPlaying = this.spec !== null;
+    const wasPlaying = this.playing !== null;
     this.channel = null;
     this.pad = null;
     this.composer = null;
+    this.theme = null;
+    this.source = null;
     this.spec = null;
+    this.playing = null;
+    this.themeTarget = null;
+    this.themeWeights = {};
     this.stopAt = null;
     if (wasPlaying) this.emit();
   }
 
   /** The chord sounding now (the home chord, G, when nothing plays), so every chime and phrase agrees with the tune (DESIGN.md 3.11). */
   get chord(): Chord {
-    if (!this.composer) return CHORDS.G;
-    return this.composer.chordAt(this.beatAt(this.engine.now));
+    if (!this.source) return CHORDS.G;
+    return this.source.chordAt(this.beatAt(this.engine.now));
   }
 
   /** MIDI notes of the chord sounding now, in the given degree window, for chimes. */
@@ -153,15 +228,20 @@ export class MusicPlayer {
 
   private tick(): void {
     const ctx = this.engine.context;
-    const composer = this.composer;
+    const source = this.source;
     const channel = this.channel;
-    if (!ctx || !composer || !channel) return;
+    if (!ctx || !source || !channel) return;
     const now = ctx.currentTime;
     if (this.stopAt !== null && now > this.stopAt) {
       this.stop(3);
       return;
     }
-    const events = composer.next(this.beatAt(now + LOOKAHEAD_SECONDS));
+    if (this.theme && this.themeTarget) {
+      this.themeWeights = crossWeights(this.themeWeights, this.themeTarget, (now - this.lastTick) / THEME_CROSS_SECONDS);
+      this.theme.setWeights(this.themeWeights);
+    }
+    this.lastTick = now;
+    const events = source.next(this.beatAt(now + LOOKAHEAD_SECONDS));
     for (const ev of events) {
       const t = Math.max(now + 0.03, this.timeAt(ev.beat));
       switch (ev.kind) {
@@ -188,4 +268,26 @@ export class MusicPlayer {
   private emit(): void {
     this.listeners.forEach((l) => l());
   }
+}
+
+/**
+ * One step of the theme's crossing: the target voice gains `step` of the
+ * weight (a share of the crossing time), taken evenly from the voices that
+ * are leaving, so the weights always sum to one and a flick through several
+ * areas simply retargets mid-way. Pure, for the tests.
+ */
+export function crossWeights(weights: Readonly<VoiceWeights>, target: AreaId, step: number): VoiceWeights {
+  const k = Math.max(0, Math.min(1, step));
+  const have = weights[target] ?? 0;
+  const others = (Object.keys(weights) as AreaId[]).filter((id) => id !== target && (weights[id] ?? 0) > 0);
+  if (others.length === 0) return { [target]: 1 };
+  const gain = Math.min(1 - have, k);
+  const leaving = 1 - have;
+  const out: VoiceWeights = { [target]: have + gain };
+  for (const id of others) {
+    const w = (weights[id] ?? 0) * (1 - gain / leaving);
+    if (w > 0.002) out[id] = w;
+  }
+  if (Object.keys(out).length === 1) out[target] = 1;
+  return out;
 }
