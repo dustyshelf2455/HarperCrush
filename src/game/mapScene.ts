@@ -184,6 +184,8 @@ export class MapScene {
   private h = 874;
   private shown = false;
   private running = false;
+  /** Reduce Motion (DESIGN.md 4.4): the hop, the bloom and the landing run shorter. */
+  private motion = 1;
   private active = false;
   private raf = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -322,6 +324,10 @@ export class MapScene {
     this.idleTimer = null;
   }
 
+  setReducedMotion(on: boolean): void {
+    this.motion = on ? 0.6 : 1;
+  }
+
   setArt(art: MapArt): void {
     this.art = art;
     this.wake();
@@ -434,9 +440,9 @@ export class MapScene {
     const f = this.friends[i] as Friend;
     const lag = FRIEND_LAG_MS * (i + 1);
     if (!opts || this.travelT < 0 || opts.from === opts.to) return { at: this.friendWorld(f, this.groupAnchor()), k: 1, sinceLand: -1 };
-    const k = clamp01((this.travelT - lag) / HOP_MS);
+    const k = clamp01((this.travelT - lag) / (HOP_MS * this.motion));
     const anchor = k <= 0 ? lanternWorld(opts.from) : k >= 1 ? lanternWorld(opts.to) : pathBetween(opts.from, opts.to, easeInOutSine(k));
-    return { at: this.friendWorld(f, anchor), k, sinceLand: this.travelT - lag - HOP_MS };
+    return { at: this.friendWorld(f, anchor), k, sinceLand: this.travelT - lag - (HOP_MS * this.motion) };
   }
 
   // ------------------------------------------------------------------ input
@@ -638,7 +644,7 @@ export class MapScene {
 
   /** The friends have all landed (a tap on one mid-hop would send it off again). */
   private travelDone(): boolean {
-    return this.travelT < 0 || this.travelT >= HOP_MS + FRIEND_LAG_MS * this.friends.length + LAND_MS;
+    return this.travelT < 0 || this.travelT >= (HOP_MS * this.motion) + FRIEND_LAG_MS * this.friends.length + (LAND_MS * this.motion);
   }
 
   private friendAt(x: number, y: number): Friend | null {
@@ -733,7 +739,7 @@ export class MapScene {
         break;
       case 'hop': {
         moving = true;
-        const k = clamp01(this.phaseT / HOP_MS);
+        const k = clamp01(this.phaseT / (HOP_MS * this.motion));
         this.camera = this.floored(lanternWorld(opts.from).y + (lanternWorld(opts.to).y - lanternWorld(opts.from).y) * easeInOutSine(k));
         if (k >= 1) this.light();
         break;
@@ -761,18 +767,18 @@ export class MapScene {
     }
     if (this.bloomT >= 0) {
       this.bloomT += dt;
-      if (this.bloomT < BLOOM_MS) moving = true;
-      else this.bloomT = BLOOM_MS;
+      if (this.bloomT < (BLOOM_MS * this.motion)) moving = true;
+      else this.bloomT = (BLOOM_MS * this.motion);
     }
     if (this.landT >= 0) {
       this.landT += dt;
-      if (this.landT < LAND_MS) moving = true;
+      if (this.landT < (LAND_MS * this.motion)) moving = true;
       else this.landT = -1;
     }
     if (this.swap) {
       this.swap.t += dt;
       moving = true;
-      if (this.swap.t >= HOP_MS + LAND_MS) {
+      if (this.swap.t >= (HOP_MS * this.motion) + (LAND_MS * this.motion)) {
         this.friends.push({ id: this.swap.outgoing, offset: this.swap.offset });
         this.swap = null;
       }
@@ -1146,7 +1152,7 @@ export class MapScene {
       let lit = opts.review || n < opts.to ? 1 : 0.1;
       if (!opts.review && n === opts.to && this.litTo) {
         // The new light rises over the bloom, with a brief soft overshoot that settles.
-        const k = clamp01(this.bloomT / BLOOM_MS);
+        const k = clamp01(this.bloomT / (BLOOM_MS * this.motion));
         lit = 0.1 + 0.9 * easeOutCubic(k) + 0.25 * Math.sin(k * Math.PI);
         if (k < 1) bloomAt = this.lampOf(n);
       }
@@ -1164,7 +1170,7 @@ export class MapScene {
       ctx.restore();
     }
     if (bloomAt) {
-      const k = clamp01(this.bloomT / BLOOM_MS);
+      const k = clamp01(this.bloomT / (BLOOM_MS * this.motion));
       const e = easeOutCubic(k);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -1190,10 +1196,10 @@ export class MapScene {
         y -= air * HOP_HEIGHT * FRIEND_HOP;
         Object.assign(pose, this.hopPose(tr.k, -1, dir));
       } else {
-        const land = tr.sinceLand >= 0 && tr.sinceLand < LAND_MS ? Math.sin(clamp01(tr.sinceLand / LAND_MS) * Math.PI) : 0;
+        const land = tr.sinceLand >= 0 && tr.sinceLand < (LAND_MS * this.motion) ? Math.sin(clamp01(tr.sinceLand / (LAND_MS * this.motion)) * Math.PI) : 0;
         pose.squash = 1 - 0.14 * land;
         // A wave of greeting after everyone has landed, fading out over a moment.
-        const settled = tr.sinceLand - LAND_MS;
+        const settled = tr.sinceLand - (LAND_MS * this.motion);
         if (settled >= 0 && settled < WAVE_AFTER_HOP_MS) pose.wave = 1 - easeInOutSine(clamp01((settled - WAVE_AFTER_HOP_MS + 700) / 700));
         if (asleep > 0) {
           pose.blink = asleep;
@@ -1211,16 +1217,16 @@ export class MapScene {
 
     // The companion: entering, hopping, landed, or asleep.
     if (this.swap) {
-      const k = clamp01(this.swap.t / HOP_MS);
+      const k = clamp01(this.swap.t / (HOP_MS * this.motion));
       const slotP = this.toScreen(this.swap.at);
-      const sinceLand = this.swap.t - HOP_MS;
+      const sinceLand = this.swap.t - (HOP_MS * this.motion);
       const inP = this.arc(slotP, perchTo, k);
       const outP = this.arc(perchTo, slotP, k);
       this.drawAnyCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
       this.drawAnyCompanion(ctx, this.swap.incoming, inP.x, inP.y, COMPANION_S, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
     } else if (this.phase === 'hop') {
       // Along the painted path, in the air between the two beacons.
-      const k = clamp01(this.phaseT / HOP_MS);
+      const k = clamp01(this.phaseT / (HOP_MS * this.motion));
       const ground = this.toScreen(pathBetween(opts.from, opts.to, easeInOutSine(k)));
       const y = ground.y - Math.sin(k * Math.PI) * HOP_HEIGHT;
       const dir = Math.sign(lanternWorld(opts.to).x - lanternWorld(opts.from).x) || 1;
@@ -1228,7 +1234,7 @@ export class MapScene {
     } else {
       const perch = this.litTo ? perchTo : this.perchOf(opts.from);
       const pose: CompanionOpts = { glow: 1.1 };
-      if (this.landT >= 0) pose.squash = 1 - 0.14 * Math.sin(clamp01(this.landT / LAND_MS) * Math.PI);
+      if (this.landT >= 0) pose.squash = 1 - 0.14 * Math.sin(clamp01(this.landT / (LAND_MS * this.motion)) * Math.PI);
       if (opts.rest && this.sleepiness > 0) {
         // Drifting off: eyes close, the body settles, the idle motion stills, the glow slows.
         const s = easeInOutSine(this.sleepiness);
@@ -1256,7 +1262,7 @@ export class MapScene {
       const air = Math.sin(k * Math.PI);
       return { squash: 1 + 0.16 * air, tilt: dir * 0.16 * air, facing: dir >= 0 ? 1 : -1, motion: 0.4 };
     }
-    const land = sinceLand >= 0 && sinceLand < LAND_MS ? Math.sin(clamp01(sinceLand / LAND_MS) * Math.PI) : 0;
+    const land = sinceLand >= 0 && sinceLand < (LAND_MS * this.motion) ? Math.sin(clamp01(sinceLand / (LAND_MS * this.motion)) * Math.PI) : 0;
     return { squash: 1 - 0.14 * land, facing: dir >= 0 ? 1 : -1 };
   }
 

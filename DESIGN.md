@@ -157,6 +157,18 @@ The endings of 3.8 as built, on top of the Stage 3 timer and resting scene. What
 - **The night dimmer** is a slider at the end of the panel's Session section: a black sheet over the whole game, up to three quarters dark, that takes no touches. It dims the panel too, on purpose, so a parent in a dark car sees the same screen she does.
 - The timer's default stays off and its sleepy stretch four minutes (the Stage 3 play-test decision) rather than the ten and two of 3.8; the breathing glow stays an on/off toggle at the 7.5-second pace.
 
+## 2j. Stage 6 built: polish and hardening (7 October 2026)
+
+What was done against the Stage 6 list, and what was decided:
+
+- **Performance.** The biggest effects redraw the whole screen every frame, and profiling in Chromium showed the time was in painting, not in the game's code (its own functions were under 5 percent). The dearest per-frame work was the sky gradient plus the scaled painting behind the board and the breathing vignette's gradient; both are now composed once at device resolution and copied in one draw per frame, which cut the frame time by about a quarter in the software-rendered profile. The phone has a GPU and will do better still; the parent's phone is the real test (Next in STATUS.md).
+- **Reduce Motion** already shortened the board's transitions, dropped particles and skipped the slow-motion discovery; it now also shortens the map's hop, bloom and landing. The launch picture's glimmers already held still under it.
+- **Goal sounds** (left over from Stage 4): a freed sleeper flutters upward in the chord and lands on one clear note (the dragon a little lower than the fairy); a sprouting seed is two soft rising notes on the area's voice over a breath of pad. Both follow the sleepy stretch's softening.
+- **The smoke test** (4.4): `npm run smoke` serves the built `dist/`, opens the game in Chromium at phone size, goes through the fairy door, checks the theme is playing, taps her lantern, plays four hinted moves, opens the panel, and checks the service worker's asset list names every picture under `public/art`. It needs `playwright-core` (a development dependency, nothing shipped) and a Chromium; it is run by hand before a deploy, not by the Pages workflow, to keep deploys quick.
+- **The app icon** (batch D): the fairy perched on a glowing gold star gem over the night sky, painted against STYLE.md in one try (about 25 cents); its painted rounded corners were filled with sky so iOS's own mask shows night at the edges. The three sizes replace the code-drawn star.
+- **Not built, on purpose:** the discoveries book (3.7) stays out until Play wants more sense of accumulation, as planned; area creature cameos for the second pass through the areas wait for the parent's verdict on the first pass; panel art is not needed (the panel is for grown-ups, and text is fine there).
+- **Still to do before her real install (Stage 6, the parent's side):** rename the repository to `glimmerfall`, remove review mode, and the phone setup in Section 5.
+
 ## 3. The game
 
 ### 3.1 Name and world

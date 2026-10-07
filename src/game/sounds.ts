@@ -13,7 +13,7 @@ import type { MelodyInstrument } from '../audio/composer';
 import type { AudioEngine } from '../audio/engine';
 import type { MusicPlayer } from '../audio/player';
 import { sketchForArea } from '../audio/sketches';
-import type { Combo, FireStep, Piece, PowerKind, Step } from '../core/game';
+import type { Combo, Creature, FireStep, Piece, PowerKind, Step } from '../core/game';
 import type { Cell, GemType } from '../core/grid';
 import type { AreaId } from '../core/journey';
 import { CHORDS, type Chord, chordTones } from '../shared/scale';
@@ -544,6 +544,32 @@ export class GameSounds {
     const ctx = this.ctx;
     if (!ctx) return;
     this.play(companionPhrase(this.player.chord), ctx.currentTime + 0.02);
+  }
+
+  /**
+   * A sleeper floats free of its bubble (Stage 4 goal): a quick upward flutter in the chord, then one
+   * clear note as it reaches the goal row, in the creature's own register (the dragon a little lower).
+   */
+  freed(creature: Creature): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const tones = this.player.chordNow(creature === 'dragon' ? 4 : 8, 16);
+    this.engine.arpeggio(tones.slice(0, 4).map((m) => this.shift(m)), ctx.currentTime + 0.05, this.level(0.3), 0.07, 'bell');
+    const top = tones[Math.min(tones.length - 1, 5)];
+    if (top !== undefined) this.engine.note('celesta', this.shift(top), ctx.currentTime + 0.85, this.level(0.3));
+  }
+
+  /** A seed reaches the ground and a flower sprouts (Stage 4 goal): two soft rising notes on the area's voice over a breath of pad. */
+  sprout(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const tones = this.player.chordNow(3, 10);
+    const lo = tones[0];
+    const hi = tones[Math.min(tones.length - 1, 2)];
+    if (lo !== undefined) this.engine.note(this.voice, this.shift(lo), ctx.currentTime + 0.05, this.level(0.3));
+    if (hi !== undefined) this.engine.note(this.voice, this.shift(hi), ctx.currentTime + 0.4, this.level(0.26));
+    const voice = this.engine.pad(lowPad(this.player.chord), ctx.currentTime + 0.05, this.soft ? 0.05 : 0.06, undefined, 0.8);
+    voice?.release(ctx.currentTime + 1.4, 1.6);
   }
 
   /** A tap in the resting scene: one very soft high note. */

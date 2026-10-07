@@ -131,12 +131,25 @@ Deployed as run 36, green 11:30 UTC on 7 October, on the parent's "Deploy", merg
 - **Verified in Chromium at phone size:** a frost level after "Finish after this level" (the moon helping each move), "Finish now, gently" on a fresh frost level (thaw, then the gems into the lantern, then the sleeping companion), the resting scene at 0, 3 and 11 minutes with a tap's twinkle in the deep night, the panel's new rows and the dimmer at half.
 - **Debug hooks** (`?debug=1`): `restFor(ms)` shows the resting scene as if it began that long ago; `softening()`; `restAge()`.
 
+### Stage 6 built (7 October, midday): polish and hardening
+
+On the branch, checked, awaiting the parent's "Deploy?". Decisions in DESIGN.md 2j; the icon in the project's `art/batchD/` folder.
+
+- **Performance**: the area's sky and painted scenery, and the breathing vignette's gradient, are each baked once at device resolution (`backdrop` and `vignette` in `src/game/view.ts`) and drawn with one copy per frame. Profiled with a CPU profile and a frame sampler over the Aurora, a Comet-Bloom combination and a plain level: the game's own code is a few percent of the frame; the rest is painting, which this cut by about a quarter in software rendering.
+- **Reduce Motion** on the map (`MapScene.setReducedMotion`): hop, bloom and landing at 0.6.
+- **Goal sounds**: `GameSounds.freed(creature)` and `sprout()`, from the view's new `onFree` and `onSprout` events.
+- **Smoke test**: `scripts/smoke.mjs`, `npm run smoke`, `playwright-core` as a dev dependency; run by hand after `npm run build` with `CHROME` set. Passing on this build.
+- **App icon**: `public/icons/icon-{180,192,512}.png` painted (about 25 cents; about $11.50 of the $25 used in all).
+- **README** rewritten for the full draft: what is live, the panel, the switches, the smoke test, the iPhone setup in short.
+- Verified in Chromium at phone size: the smoke test end to end; the profile before and after.
+
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
 2. Hear the parent's phone verdict on the map (batch B) and the Play levels (Stage 4), and tune the ramp from what he sees.
 3. Hear the parent's verdict on the endings (Stage 5): the sleepy stretch in a Play level, "Finish now, gently", the resting night, the dimmer in a dark car.
-4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
+4. **The full draft on the phone:** the parent plays end to end and reports; watch the biggest effects (the Aurora at lantern 51, a Comet-Bloom at 11) for stutter on the phone, since the Chromium profile cannot see the GPU.
+5. **Before Harper's install:** rename the repository to `glimmerfall` (then re-add the icon), remove review mode (`src/game/review.ts` and the lines marked "review"), the phone setup in DESIGN.md Section 5. Later, if wanted: area creature cameos for the second pass, the discoveries book.
 
 ## How to continue in a new session
 

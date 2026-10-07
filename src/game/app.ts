@@ -268,6 +268,8 @@ export class App {
         onTransform: (step) => this.sounds.transform(step),
         onLand: (n) => this.sounds.land(n),
         onReshuffle: () => this.sounds.reshuffle(),
+        onFree: (creature) => this.sounds.freed(creature),
+        onSprout: () => this.sounds.sprout(),
       },
       this.reducedMotion(settings),
     );
@@ -282,6 +284,7 @@ export class App {
 
     // The map canvas sits above the board and its touch surface; it is hidden when not in use.
     this.map = new MapScene(createMapCanvas(), nightGarden);
+    this.map.setReducedMotion(this.reducedMotion(settings));
     loadMapArt((art) => {
       this.map.setArt(art);
       this.view.setCompanionArt(art.companions);
@@ -1063,6 +1066,7 @@ export class App {
     if (s.music) this.syncMusic();
     else if (this.player.currentId) this.player.stop(1.2);
     this.view.setReducedMotion(this.reducedMotion(s));
+    this.map.setReducedMotion(this.reducedMotion(s));
     this.view.setBreathing(s.breathingGlow);
     this.dimmer.style.opacity = String(Math.max(0, Math.min(0.75, s.nightDim)));
     this.applySoftening();

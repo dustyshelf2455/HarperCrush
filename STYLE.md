@@ -61,3 +61,7 @@ How they sit on the board: frost under the gem (the picture under the frost), th
 - PNG with transparency for cut-outs, JPEG for backdrops and map pages. Keep the whole default theme under about 14 MB so launch stays instant offline, and list every new file in the service worker's asset list in `vite.config.ts`.
 - Generation: GPT Image 1.5, high quality (medium for textures), through the project's proxy with `stream: true` and `partial_images` of at least 1; one request at a time. Prompts are saved beside the pictures they made.
 - Every batch is checked before it ships: transparent background clean, one piece per cell, nothing clipped, legible on the real board at phone size and with the night dimmer on, then screenshots for Ben and a "Deploy?" question.
+
+## The icon
+
+The app icon is the fairy perched on the upper point of a large gold star gem, painted against this guide over the night sky with a few tiny glimmers in the gem colours, no text and no border; the subject stays inside the central four fifths because iOS masks the square with its own rounded shape. Prompt and the picture in the project's `art/batchD/` folder; the three sizes under `public/icons/`.

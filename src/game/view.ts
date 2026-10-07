@@ -8,7 +8,7 @@
  * blasts. Cells dissolve as the light reaches them. Brightness ramps are
  * gentle and every resting glow breathes over seconds (DESIGN.md 4.4).
  */
-import { type Board, type FireStep, type GameState, type Goal, type Piece, type PowerFamily, type Step, at, familyOf, isOpen } from '../core/game';
+import { type Board, type Creature, type FireStep, type GameState, type Goal, type Piece, type PowerFamily, type Step, at, familyOf, isOpen } from '../core/game';
 import type { Cell, GemType } from '../core/grid';
 import { createRng } from '../shared/rng';
 import { type AreaTheme, paintSky } from '../render/areas';
@@ -154,6 +154,9 @@ export interface ViewEvents {
   onLand?(count: number): void;
   onReshuffle?(): void;
   onIdle?(): void;
+  /** Stage 4 goals: a sleeper floats free of its bubble; a seed drifts out and sprouts. */
+  onFree?(creature: Creature): void;
+  onSprout?(): void;
 }
 
 export interface Layout {
@@ -279,6 +282,12 @@ export class GameView {
   private windDownTarget = 0;
   /** The ambient life's own clock, which the sleepy stretch slows. */
   private ambientTime = 0;
+  /** The area's sky and painted scenery composed once at device resolution (Stage 6, performance). */
+  private backdrop: HTMLCanvasElement | null = null;
+  private backdropKey = '';
+  /** The breathing vignette's gradient, baked once at full strength. */
+  private vignette: HTMLCanvasElement | null = null;
+  private vignetteKey = '';
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -877,6 +886,7 @@ export class GameView {
       case 'free': {
         // The bubble pops with the clear; the sleeper's light flies up to the goal row.
         const goal = this.goals.findIndex((g) => g.kind === 'free');
+        if (step.cells[0]) this.events.onFree?.(step.cells[0].creature);
         for (const f of step.cells) {
           const from = this.centre(f.cell.col, f.cell.row);
           const g = this.goals[goal];
@@ -890,6 +900,7 @@ export class GameView {
       }
       case 'exit': {
         // The seed drifts out below the board and a flower sprouts in the scene there.
+        if (step.cells.length > 0) this.events.onSprout?.();
         for (const c of step.cells) {
           const p = this.pieces.get(key(c));
           this.pieces.delete(key(c));
@@ -1637,15 +1648,30 @@ export class GameView {
     const { width: w, height: h } = this.layout;
     if (!this.ambient) return;
     if (this.theme) {
-      paintSky(ctx, w, h, this.theme);
-      // The painted sky and scenery for this area (STYLE.md "The board"), scaled to cover and anchored to the bottom edge.
+      // The sky and the painted scenery never change between frames, so they are composed once into a
+      // backdrop at device resolution and copied in one draw per frame (Stage 6: the biggest effects
+      // redraw the whole screen every frame, and the gradient plus the scaled painting were the dearest part).
       const picture = this.boardArt.get(this.theme.id);
-      if (picture) {
-        const k = Math.max(w / picture.naturalWidth, h / picture.naturalHeight);
-        const dw = picture.naturalWidth * k;
-        const dh = picture.naturalHeight * k;
-        ctx.drawImage(picture, (w - dw) / 2, h - dh, dw, dh);
+      const key = `${this.theme.id}|${this.canvas.width}x${this.canvas.height}|${picture ? 'painted' : 'plain'}`;
+      if (!this.backdrop || this.backdropKey !== key) {
+        this.backdrop = document.createElement('canvas');
+        this.backdrop.width = this.canvas.width;
+        this.backdrop.height = this.canvas.height;
+        const bctx = this.backdrop.getContext('2d');
+        if (bctx) {
+          bctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+          paintSky(bctx, w, h, this.theme);
+          // The painted sky and scenery for this area (STYLE.md "The board"), scaled to cover and anchored to the bottom edge.
+          if (picture) {
+            const k = Math.max(w / picture.naturalWidth, h / picture.naturalHeight);
+            const dw = picture.naturalWidth * k;
+            const dh = picture.naturalHeight * k;
+            bctx.drawImage(picture, (w - dw) / 2, h - dh, dw, dh);
+          }
+        }
+        this.backdropKey = key;
       }
+      ctx.drawImage(this.backdrop, 0, 0, w, h);
       this.ambient.draw(ctx, w, h, t);
     } else this.style.drawBackground(ctx, w, h, t, this.ambient);
   }
@@ -2500,11 +2526,27 @@ export class GameView {
     // Breathing at the 7.5 s pace (DESIGN.md 3.8); a still, faint vignette when breathing is off.
     // In the sleepy stretch the breath becomes the dominant rhythm: the vignette swells further (DESIGN.md 3.8).
     const a = this.breathing ? 0.05 + (0.07 + 0.09 * this.windDown) * breath(t) : 0.085;
-    const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
-    g.addColorStop(0, rgba(this.style.palette.lanternGlow, 0));
-    g.addColorStop(1, rgba(this.style.palette.lanternGlow, a));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+    // The gradient is baked once at full strength and drawn at the breath's alpha (Stage 6, one draw instead of a gradient a frame).
+    const key = `${this.canvas.width}x${this.canvas.height}`;
+    if (!this.vignette || this.vignetteKey !== key) {
+      this.vignette = document.createElement('canvas');
+      this.vignette.width = this.canvas.width;
+      this.vignette.height = this.canvas.height;
+      const vctx = this.vignette.getContext('2d');
+      if (vctx) {
+        vctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        const g = vctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
+        g.addColorStop(0, rgba(this.style.palette.lanternGlow, 0));
+        g.addColorStop(1, rgba(this.style.palette.lanternGlow, 1));
+        vctx.fillStyle = g;
+        vctx.fillRect(0, 0, w, h);
+      }
+      this.vignetteKey = key;
+    }
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.drawImage(this.vignette, 0, 0, w, h);
+    ctx.restore();
   }
 
   private drawHud(t: number): void {
