@@ -12,8 +12,6 @@ export interface Settings {
   playOnSilent: boolean;
   /** Scales each mode's own hint delay: quick halves it, slow doubles it, off never hints. */
   hintDelay: 'quick' | 'normal' | 'slow' | 'off';
-  /** The tap-time haptic tick experiment (DESIGN.md 3.12). */
-  haptics: boolean;
   reducedMotion: 'follow' | 'on' | 'off';
   /**
    * Session length in minutes, or 0 for no timer (DESIGN.md 3.8, as decided in the Stage 3 play-test:
@@ -32,7 +30,6 @@ export const DEFAULT_SETTINGS: Settings = {
   chimes: true,
   playOnSilent: true,
   hintDelay: 'normal',
-  haptics: true,
   reducedMotion: 'follow',
   sessionMinutes: 0,
   playDifficulty: 'gentle',

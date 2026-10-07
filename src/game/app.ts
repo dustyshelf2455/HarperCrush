@@ -200,9 +200,6 @@ export class App {
   private pending: { a: Cell; b: Cell } | null = null;
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeLock: { release(): Promise<void> } | null = null;
-  private hapticArmed = false;
-  /** A valid swipe happened under this touch: tick on its release (see setupHaptics). */
-  private hapticPending = false;
   private discovering = false;
   private musicArea: string | null = null;
 
@@ -268,8 +265,7 @@ export class App {
       this.view.setCompanionArt(art.companions);
     });
 
-    // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
-    const surface = (document.getElementById('touch') as HTMLElement | null) ?? canvas;
+    const surface = canvas;
     this.input = new PointerInput(surface, {
       cellAt: (x, y) => this.view.cellAt(x, y),
       cellSize: () => this.view.currentLayout.cell,
@@ -277,20 +273,8 @@ export class App {
       onTap: (cell, x, y) => this.tapped(cell, x, y),
       onSwipe: (from, to) => this.trySwap(from, to),
     });
-    this.setupHaptics(surface);
     // A second chance at the audio unlock on the release of the touch, which every browser counts as a gesture.
-    surface.addEventListener('pointerup', () => {
-      this.unlockAudio();
-      // A swipe never produces a click of its own, so the tick for a swipe is asked for here, inside the
-      // release, which still counts as her gesture (DESIGN.md 3.12; a Stage 3 play-test attempt).
-      if (this.hapticPending) {
-        this.hapticPending = false;
-        if (surface.tagName === 'LABEL' && this.settings.get().haptics) {
-          this.hapticArmed = true;
-          surface.click();
-        }
-      }
-    }, { passive: true });
+    surface.addEventListener('pointerup', () => this.unlockAudio(), { passive: true });
 
     // The grown-up gate and the parent panel (DESIGN.md 3.9).
     this.panel = new Panel(stage, this.settings, {
@@ -408,15 +392,6 @@ export class App {
     }
     this.view.ripple(x, y);
     this.clearHint();
-    // A tap that will complete a valid tap-tap swap may tick (see setupHaptics).
-    this.hapticPending = false;
-    const cell = this.view.cellAt(x, y);
-    this.hapticArmed =
-      this.settings.get().haptics &&
-      !!cell &&
-      !!this.selected &&
-      Math.abs(this.selected.row - cell.row) + Math.abs(this.selected.col - cell.col) === 1 &&
-      isValidSwap(this.state, this.selected, cell);
     this.unlockAudio();
   }
 
@@ -468,7 +443,6 @@ export class App {
       this.view.play(applySwap(this.state, a, b).steps, this.state, () => this.settled());
       return;
     }
-    this.hapticPending = true;
     const pa = at(this.state.board, a.row, a.col);
     const pb = at(this.state.board, b.row, b.col);
     if (pa?.power && pb?.power) {
@@ -1110,21 +1084,6 @@ export class App {
     } catch {
       /* storage can be unavailable in private mode; the game still plays */
     }
-  }
-
-  // ---------------------------------------------------------------- haptics
-
-  /**
-   * Haptics experiment (DESIGN.md 3.12). iOS has no vibration API for web pages, but it plays a
-   * system tick when an iOS-style switch is toggled by a real tap. The touch surface is a label
-   * for a hidden switch; a tap that is not meant to tick has its click cancelled.
-   */
-  private setupHaptics(surface: HTMLElement): void {
-    if (surface.tagName !== 'LABEL') return;
-    surface.addEventListener('click', (e) => {
-      if (!this.hapticArmed) e.preventDefault();
-      this.hapticArmed = false;
-    });
   }
 
   private setupDebug(): void {
