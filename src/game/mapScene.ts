@@ -43,6 +43,8 @@ export interface MapShowOptions {
   offerCompanions: boolean;
   /** The resting scene: she falls asleep on the new lantern and the scene never ends on its own. */
   rest: boolean;
+  /** When the rest began (Date.now()), so the night deepens at two and ten minutes however the app was relaunched (DESIGN.md 3.8). */
+  restSince?: number;
   /** The moment the new lantern lights (the app plays a warm chord). */
   onLight?(): void;
   /** She tapped a waiting creature; it is now her companion. */
@@ -77,6 +79,11 @@ const WAVE_AFTER_HOP_MS = 2200;
 const SLEEP_AFTER_MS = 1500;
 const SLEEP_MS = 2200;
 const TWINKLE_MS = 1400;
+/** The resting scene's night (DESIGN.md 3.8): the screen dims further after two minutes and settles to a near-black night after ten. */
+const REST_DIM_AT_MS = 2 * 60_000;
+const REST_DEEP_AT_MS = 10 * 60_000;
+const REST_DIM = 0.3;
+const REST_DEEP = 0.6;
 const HIDE_MS = 450;
 /** Review mode (review.ts): the farthest lantern the map shows, two passes through the seven areas. */
 const REVIEW_TOP = 140;
@@ -642,13 +649,13 @@ export class MapScene {
       this.active = true;
       this.raf = requestAnimationFrame(this.frame);
     } else {
-      // Only ambient life: a slow tick is plenty (DESIGN.md 4.4).
+      // Only ambient life: a slow tick is plenty (DESIGN.md 4.4); the deep night of a long rest ticks once a second (battery).
       this.active = false;
       this.idleTimer = setTimeout(() => {
         this.idleTimer = null;
         if (!this.running || this.active) return;
         this.frame(performance.now());
-      }, 1000 / IDLE_FPS);
+      }, this.restAge() >= REST_DEEP_AT_MS ? 1000 : 1000 / IDLE_FPS);
     }
   };
 
@@ -813,9 +820,39 @@ export class MapScene {
 
     if (!opts) return;
     this.drawWorld(t, opts, colors);
+    if (opts.rest) this.drawRestNight(w, h, t);
     this.drawTwinkles();
     // The resting scene stays up until a grown-up opens the gate (DESIGN.md 3.8), so the dim moon shows where to hold.
     if (opts.rest) this.drawMoon();
+  }
+
+  /** How long the resting scene has been up, in ms (0 outside rest). */
+  private restAge(): number {
+    const opts = this.opts;
+    if (!opts?.rest) return 0;
+    return Math.max(0, Date.now() - (opts.restSince ?? Date.now()));
+  }
+
+  /**
+   * The night of a long rest (DESIGN.md 3.8): after two minutes the screen dims further; after ten it
+   * settles to a near-black night with a few slow stars, and the loop ticks once a second.
+   */
+  private drawRestNight(w: number, h: number, t: number): void {
+    const age = this.restAge();
+    const dim = REST_DIM * easeInOutSine(clamp01((age - REST_DIM_AT_MS) / 20_000));
+    const deep = easeInOutSine(clamp01((age - REST_DEEP_AT_MS) / 40_000));
+    const a = dim + REST_DEEP * deep;
+    if (a <= 0) return;
+    const { ctx } = this;
+    ctx.fillStyle = `rgba(2, 3, 10, ${a})`;
+    ctx.fillRect(0, 0, w, h);
+    if (deep > 0 && this.restStars) {
+      // A few slow stars keep the night company, drawn over the dark at a quarter of their light.
+      ctx.save();
+      ctx.globalAlpha = 0.25 * deep;
+      this.restStars.draw(ctx, w, h, t * 0.5);
+      ctx.restore();
+    }
   }
 
   /**

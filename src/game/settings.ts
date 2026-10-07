@@ -18,6 +18,15 @@ export interface Settings {
    * the last four minutes get sleepy, then the level ends at the map). Counts foreground play only.
    */
   sessionMinutes: 0 | 5 | 10 | 15 | 20 | 30;
+  /** The sleepy stretch at the end of a timed session (and after "Finish after this level"); off, the level simply ends when the time is up. */
+  windDown: boolean;
+  /**
+   * How long the sleeping scene stays after an ending before a relaunch opens the game again
+   * (DESIGN.md 3.8), in minutes; 0 means until a grown-up opens the gate and taps New session.
+   */
+  restUntilMinutes: 0 | 15 | 30 | 60;
+  /** The night dimmer (DESIGN.md 3.9): how much of the screen's light to take away, 0 to 0.75. */
+  nightDim: number;
   /** Play mode's overall level; used by the Stage 4 level generator. */
   playDifficulty: 'gentle' | 'medium' | 'bigger';
   /** The soft breathing vignette around the board. */
@@ -32,6 +41,9 @@ export const DEFAULT_SETTINGS: Settings = {
   hintDelay: 'normal',
   reducedMotion: 'follow',
   sessionMinutes: 0,
+  windDown: true,
+  restUntilMinutes: 30,
+  nightDim: 0,
   playDifficulty: 'gentle',
   breathingGlow: true,
 };

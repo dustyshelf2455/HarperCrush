@@ -122,6 +122,7 @@ export class Panel {
     this.scroll = div('gf-scroll');
     this.scroll.append(
       this.sectionSession(),
+      this.sectionNight(),
       this.sectionSound(),
       this.sectionFeel(),
       this.sectionDifficulty(),
@@ -250,7 +251,30 @@ export class Panel {
     s.append(
       this.row('', this.segmented([['0', 'Off'], ['5', '5'], ['10', '10'], ['15', '15'], ['20', '20'], ['30', '30']], (v) => this.settings.set({ sessionMinutes: Number(v) as Settings['sessionMinutes'] }), (st) => String(st.sessionMinutes)), true),
       div('gf-note', 'Minutes of play. The clock starts when you set it. The last four minutes get sleepy, then her level ends at the map and her companion falls asleep. "Keep playing" at the bottom waves it off.'),
+      // DESIGN.md 3.8: the softening is a parent choice; off, the time simply runs out into the gentle ending.
+      this.row('Sleepy wind-down', this.segmented([['true', 'On'], ['false', 'Off']], (v) => this.settings.set({ windDown: v === 'true' }), (st) => String(st.windDown))),
+      // DESIGN.md 3.8, rest-until: how long the sleeping scene keeps on a relaunch.
+      this.row('Rest for', this.segmented([['15', '15 min'], ['30', '30 min'], ['60', '1 hour'], ['0', 'Unlock']], (v) => this.settings.set({ restUntilMinutes: Number(v) as Settings['restUntilMinutes'] }), (st) => String(st.restUntilMinutes)), true),
+      div('gf-note', 'After an ending, opening the app again shows her sleeping companion for this long. "Unlock" keeps it until you open this panel and tap New session.'),
     );
+    return s;
+  }
+
+  /** DESIGN.md 3.9: a slider that dims the whole game below the iPhone's lowest brightness, for dark cars and cabins. */
+  private sectionNight(): HTMLElement {
+    const s = section('Night dimmer');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'gf-slider';
+    slider.min = '0';
+    slider.max = '75';
+    slider.step = '5';
+    slider.setAttribute('aria-label', 'Night dimmer');
+    slider.addEventListener('input', () => this.settings.set({ nightDim: Number(slider.value) / 100 }));
+    this.segs.push((st) => { slider.value = String(Math.round(st.nightDim * 100)); });
+    const r = div('gf-row is-wide');
+    r.append(slider);
+    s.append(r, div('gf-note', 'Darker than the iPhone allows. It dims this panel too, so the moon is still where it was.'));
     return s;
   }
 
@@ -258,7 +282,7 @@ export class Panel {
     const s = section('Play difficulty');
     s.append(
       this.row('', this.segmented([['gentle', 'Gentle'], ['medium', 'Medium'], ['bigger', 'Bigger']], (v) => this.settings.set({ playDifficulty: v as Settings['playDifficulty'] }), (st) => st.playDifficulty), true),
-      div('gf-note', 'Used by Play mode levels (coming in Stage 4).'),
+      div('gf-note', 'How much the Play levels ask of her. Takes effect from her next level.'),
     );
     return s;
   }

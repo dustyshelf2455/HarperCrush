@@ -70,6 +70,28 @@ export class MusicPlayer {
     this.emit();
   }
 
+  /**
+   * The lullaby's end (DESIGN.md 3.8): keep playing but fade to silence over
+   * `seconds`, then stop. A later start cancels it.
+   */
+  fadeOut(seconds: number): void {
+    const ctx = this.engine.context;
+    const channel = this.channel;
+    if (!ctx || !channel) {
+      this.stop(0.1);
+      return;
+    }
+    const generation = this.generation;
+    const t = ctx.currentTime;
+    for (const g of [channel.dry, channel.wet]) {
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(0, t + seconds);
+    }
+    setTimeout(() => {
+      if (generation === this.generation) this.stop(0.1);
+    }, seconds * 1000);
+  }
+
   stop(fadeSeconds = 1.5): void {
     this.generation++;
     if (this.timer !== null) {

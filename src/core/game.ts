@@ -1345,35 +1345,8 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
     const cells = [...round.values()];
     // One clear group per match (the app counts them toward the lantern); a surviving bud drops out of its group's cells.
     const clearGroups: ClearGroup[] = groups.map((g) => ({ cells: g.cells.filter((c) => round.has(key(c))), type: g.type }));
-    steps.push({ kind: 'clear', cascade, groups: clearGroups.length > 0 ? clearGroups : [{ cells, type: null }], cells });
+    removeCells(ctx, cells, clearGroups, cascade);
     cleared += cells.length;
-    // Stage 4: what the clear does to the still parts of the board and to the goals.
-    const freed: Array<{ cell: Cell; creature: Creature }> = [];
-    const thinned: Array<{ cell: Cell; left: number }> = [];
-    const released: Cell[] = [];
-    for (const c of cells) {
-      const p = at(board, c.row, c.col);
-      if (p?.item === 'bubble') freed.push({ cell: c, creature: p.creature ?? 'fairy' });
-      if (p && isGem(p) && p.type) progress(ctx, 'gather', 1, p.type);
-      if (ctx.frost && (ctx.frost[c.row]?.[c.col] ?? 0) > 0) {
-        const left = (ctx.frost[c.row] as number[])[c.col] = ((ctx.frost[c.row] as number[])[c.col] as number) - 1;
-        thinned.push({ cell: c, left });
-      }
-      if (ctx.vine?.[c.row]?.[c.col]) {
-        (ctx.vine[c.row] as boolean[])[c.col] = false;
-        released.push(c);
-      }
-    }
-    for (const c of cells) set(board, c, null);
-    if (freed.length > 0) {
-      steps.push({ kind: 'free', cells: freed });
-      progress(ctx, 'free', freed.length);
-    }
-    if (thinned.length > 0) {
-      steps.push({ kind: 'frost', cells: thinned });
-      progress(ctx, 'uncover', thinned.length);
-    }
-    if (released.length > 0) steps.push({ kind: 'vine', cells: released });
     for (const cr of creations) {
       let cell: Cell | null = cr.anchor;
       if (at(board, cell.row, cell.col) !== null) {
@@ -1387,8 +1360,7 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
     round.clear();
     fired.clear();
 
-    const dropped = fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine);
-    steps.push(dropped);
+    const dropped = dropAndExit(ctx);
     // Surviving buds ride the fall: follow each to the cell it landed in.
     if (pending.size > 0) {
       const landed = new Map(dropped.moves.map((m) => [key(m.from), m.to]));
@@ -1399,18 +1371,62 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
         pending.set(key(cell), { cell, kind: bud.kind });
       }
     }
-    // Stage 4: a seed that reached the bottom of its column drifts out, and the column fills behind it.
-    const exits = seedExits(board);
-    if (exits.length > 0) {
-      for (const c of exits) set(board, c, null);
-      steps.push({ kind: 'exit', cells: exits });
-      progress(ctx, 'seeds', exits.length);
-      steps.push(fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine));
-    }
     cascade++;
     roundStart = steps.length;
   }
   return { cleared, cascades: Math.max(0, cascade - 1) };
+}
+
+/**
+ * Take `cells` off the board as one clear step, with what the clear does to
+ * the still parts of the board and to the goals (Stage 4): a bubble among
+ * them frees its sleeper, frost under them thins by a layer, vines on them
+ * go, and gems of a gathered colour count.
+ */
+function removeCells(ctx: Ctx, cells: Cell[], groups: ClearGroup[], cascade: number): void {
+  const { board, steps } = ctx;
+  steps.push({ kind: 'clear', cascade, groups: groups.length > 0 ? groups : [{ cells, type: null }], cells });
+  const freed: Array<{ cell: Cell; creature: Creature }> = [];
+  const thinned: Array<{ cell: Cell; left: number }> = [];
+  const released: Cell[] = [];
+  for (const c of cells) {
+    const p = at(board, c.row, c.col);
+    if (p?.item === 'bubble') freed.push({ cell: c, creature: p.creature ?? 'fairy' });
+    if (p && isGem(p) && p.type) progress(ctx, 'gather', 1, p.type);
+    if (ctx.frost && (ctx.frost[c.row]?.[c.col] ?? 0) > 0) {
+      const left = (ctx.frost[c.row] as number[])[c.col] = ((ctx.frost[c.row] as number[])[c.col] as number) - 1;
+      thinned.push({ cell: c, left });
+    }
+    if (ctx.vine?.[c.row]?.[c.col]) {
+      (ctx.vine[c.row] as boolean[])[c.col] = false;
+      released.push(c);
+    }
+  }
+  for (const c of cells) set(board, c, null);
+  if (freed.length > 0) {
+    steps.push({ kind: 'free', cells: freed });
+    progress(ctx, 'free', freed.length);
+  }
+  if (thinned.length > 0) {
+    steps.push({ kind: 'frost', cells: thinned });
+    progress(ctx, 'uncover', thinned.length);
+  }
+  if (released.length > 0) steps.push({ kind: 'vine', cells: released });
+}
+
+/** Fill the empties with a fall; then a seed that reached the bottom of its column drifts out, and the column fills behind it (Stage 4). */
+function dropAndExit(ctx: Ctx): FallStep {
+  const { board, state, steps } = ctx;
+  const dropped = fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine);
+  steps.push(dropped);
+  const exits = seedExits(board);
+  if (exits.length > 0) {
+    for (const c of exits) set(board, c, null);
+    steps.push({ kind: 'exit', cells: exits });
+    progress(ctx, 'seeds', exits.length);
+    steps.push(fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine));
+  }
+  return dropped;
 }
 
 /** Close a resolution: advance the move count and reshuffle if the board has no move left (DESIGN.md 3.3, dead ends). */
@@ -1465,6 +1481,127 @@ export function firePowerAt(state: GameState, cell: Cell): Resolution {
   if (!at(state.board, cell.row, cell.col)?.power) return { state, steps: [], cleared: 0, cascades: 0 };
   const ctx = makeCtx(state);
   fireAt(ctx, cell);
+  return finish(ctx, runRounds(ctx, []));
+}
+
+/**
+ * The moon's help in the sleepy stretch of a Play level (DESIGN.md 3.8): one
+ * small step toward the goal, given after each of her moves so the level
+ * resolves within the window. In turn: a layer of frost melts off the
+ * thickest cell, a bubble pops free, whatever sits under the lowest star-seed
+ * is taken so the seed drops a row, or one gem of a gathered colour is taken.
+ * Null when there is nothing left to help with (or no goals at all).
+ */
+export function moonHelp(state: GameState): Resolution | null {
+  if (!state.goals || goalsDone(state.goals)) return null;
+  const ctx = makeCtx(state);
+  const { board } = ctx;
+  const loose = (c: Cell): boolean => {
+    const p = at(board, c.row, c.col);
+    return p !== null && isGem(p) && !ctx.vine?.[c.row]?.[c.col];
+  };
+  const left = (kind: Goal['kind']): boolean => ctx.goals!.some((g) => g.kind === kind && g.done < g.total);
+
+  if (left('uncover') && ctx.frost) {
+    let best: Cell | null = null;
+    let depth = 0;
+    ctx.frost.forEach((row, r) => row.forEach((n, c) => { if (n > depth) { depth = n; best = { row: r, col: c }; } }));
+    if (best) {
+      const b: Cell = best;
+      (ctx.frost[b.row] as number[])[b.col] = depth - 1;
+      ctx.steps.push({ kind: 'frost', cells: [{ cell: b, left: depth - 1 }] });
+      progress(ctx, 'uncover', 1);
+      return finish(ctx, runRounds(ctx, []));
+    }
+  }
+  if (left('free')) {
+    const bubbles = allCells(board).filter((c) => at(board, c.row, c.col)?.item === 'bubble');
+    const b = bubbles[bubbles.length - 1];
+    if (b) {
+      removeCells(ctx, [b], [{ cells: [b], type: null }], 0);
+      dropAndExit(ctx);
+      return finish(ctx, runRounds(ctx, []));
+    }
+  }
+  if (left('seeds')) {
+    const seeds = allCells(board).filter((c) => at(board, c.row, c.col)?.item === 'seed').reverse();
+    for (const sd of seeds) {
+      const under = { row: sd.row + 1, col: sd.col };
+      const p = under.row < rowsOf(board) ? at(board, under.row, under.col) : null;
+      // Whatever sits under the seed goes, a cloud puff or a moonstone included (the moon's light clears those as a power's would).
+      if (p && p.item !== 'seed') {
+        removeCells(ctx, [under], [{ cells: [under], type: isGem(p) ? p.type : null }], 0);
+        dropAndExit(ctx);
+        return finish(ctx, runRounds(ctx, []));
+      }
+    }
+  }
+  for (const g of ctx.goals!) {
+    if (g.kind !== 'gather' || g.done >= g.total) continue;
+    const gems = allCells(board).filter((c) => loose(c) && at(board, c.row, c.col)?.type === g.type);
+    const c = gems[gems.length - 1];
+    if (!c) continue;
+    removeCells(ctx, [c], [{ cells: [c], type: g.type }], 0);
+    dropAndExit(ctx);
+    return finish(ctx, runRounds(ctx, []));
+  }
+  return null;
+}
+
+/**
+ * "Finish now, gently" in a Play level (DESIGN.md 3.8): the goal resolves
+ * first, so the level's own reward is never skipped. The frost melts off the
+ * picture layer by layer, the vines let go, every bubble floats free, the
+ * seeds drift down and sprout, the gathered colour counts as found; then the
+ * board fills behind them. A level without goals returns unchanged.
+ */
+export function resolveLevel(state: GameState): Resolution {
+  if (!state.goals || goalsDone(state.goals)) return { state, steps: [], cleared: 0, cascades: 0 };
+  const ctx = makeCtx(state);
+  const { board } = ctx;
+  if (ctx.frost) {
+    for (;;) {
+      const thinned: Array<{ cell: Cell; left: number }> = [];
+      ctx.frost.forEach((row, r) => row.forEach((n, c) => {
+        if (n > 0) {
+          row[c] = n - 1;
+          thinned.push({ cell: { row: r, col: c }, left: n - 1 });
+        }
+      }));
+      if (thinned.length === 0) break;
+      ctx.steps.push({ kind: 'frost', cells: thinned });
+      progress(ctx, 'uncover', thinned.length);
+    }
+  }
+  if (ctx.vine) {
+    const released: Cell[] = [];
+    ctx.vine.forEach((row, r) => row.forEach((v, c) => {
+      if (v) {
+        row[c] = false;
+        released.push({ row: r, col: c });
+      }
+    }));
+    if (released.length > 0) ctx.steps.push({ kind: 'vine', cells: released });
+  }
+  const bubbles = allCells(board).filter((c) => at(board, c.row, c.col)?.item === 'bubble');
+  if (bubbles.length > 0) removeCells(ctx, bubbles, [{ cells: bubbles, type: null }], 0);
+  const seeds = allCells(board).filter((c) => at(board, c.row, c.col)?.item === 'seed');
+  if (seeds.length > 0) {
+    for (const c of seeds) set(board, c, null);
+    ctx.steps.push({ kind: 'exit', cells: seeds });
+    progress(ctx, 'seeds', seeds.length);
+  }
+  // The gathered colour: the gems still wanted are taken off the board, so the icons see them counted.
+  const gathered: Cell[] = [];
+  for (const g of ctx.goals!) {
+    if (g.kind !== 'gather' || g.done >= g.total) continue;
+    const want = g.total - g.done;
+    const gems = allCells(board).filter((c) => { const p = at(board, c.row, c.col); return p !== null && isGem(p) && p.type === g.type; });
+    gathered.push(...gems.slice(-want));
+  }
+  if (gathered.length > 0) removeCells(ctx, gathered, [{ cells: gathered, type: null }], 0);
+  if (bubbles.length > 0 || seeds.length > 0 || gathered.length > 0) dropAndExit(ctx);
+  for (const g of ctx.goals!) g.done = g.total;
   return finish(ctx, runRounds(ctx, []));
 }
 

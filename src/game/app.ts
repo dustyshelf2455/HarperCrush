@@ -28,6 +28,8 @@ import {
   placeGift,
   serialize,
   goalsDone,
+  moonHelp,
+  resolveLevel,
   isOpen,
   newLevel,
 } from '../core/game';
@@ -65,10 +67,14 @@ import { GameView } from './view';
 const SAVE_KEY = 'glimmerfall.save.v3';
 const SAVE_KEY_V2 = 'glimmerfall.save.v2';
 const LEGACY_SAVE_KEY = 'glimmerfall.save.v1';
-/** DESIGN.md 3.8, rest-until default: a relaunch within this long after an ending shows the sleeping scene. Stage 5 makes it a setting. */
-const REST_UNTIL_MS = 30 * 60 * 1000;
 /** A session's clock carries across a relaunch within this long (she closed and reopened the app); after longer it starts afresh. */
-const SESSION_CARRY_MS = REST_UNTIL_MS;
+const SESSION_CARRY_MS = 30 * 60 * 1000;
+/** The resting scene (DESIGN.md 3.8): the lullaby plays this long, then fades to silence over LULLABY_FADE_S. */
+const LULLABY_MS = 12_000;
+const LULLABY_FADE_S = 30;
+/** After this long in rest the twinkle chimes stop; after REST_DEEP_MS the screen wake lock is released so the phone can lock itself. */
+const REST_QUIET_MS = 2 * 60 * 1000;
+const REST_DEEP_MS = 10 * 60 * 1000;
 /** The sleepy stretch at the end of a timed session (DESIGN.md 2d: the parent's four minutes). */
 const WIND_DOWN_MS = 4 * 60 * 1000;
 const SESSION_TICK_MS = 1000;
@@ -187,6 +193,10 @@ export class App {
   private reviewAt: number | null = null;
   private readonly reviewBar: ReviewBar;
   private restingSince: number | null = null;
+  /** The resting scene's own clock: the lullaby's fade and the wake lock's release (DESIGN.md 3.8). */
+  private restTimers: Array<ReturnType<typeof setTimeout>> = [];
+  /** The night dimmer (DESIGN.md 3.9): a black sheet over everything whose opacity is the setting. */
+  private readonly dimmer: HTMLDivElement;
 
   // Parts
   private readonly settings = new SettingsStore();
@@ -214,6 +224,10 @@ export class App {
     const settings = this.settings.get();
     this.engine.setSilentMode(settings.playOnSilent ? 'ignore' : 'follow');
     const stage = canvas.parentElement ?? document.body;
+    this.dimmer = document.createElement('div');
+    this.dimmer.id = 'gf-dim';
+    this.dimmer.style.opacity = String(settings.nightDim);
+    document.body.appendChild(this.dimmer);
 
     const loaded = opts.reset || opts.level !== null ? null : this.load();
     if (opts.level !== null) {
@@ -391,7 +405,9 @@ export class App {
     const area = areaForLevel(this.boardLevel);
     this.musicArea = area;
     if (!this.settings.get().music || !this.engine.isRunning) return;
-    void this.player.start(sketchForArea(area), 4242 + this.boardLevel, this.phase === 'resting' || this.windingDown, null);
+    // The lullaby has already faded in a long rest: the night stays silent until New session.
+    if (this.phase === 'resting' && this.restAge() >= LULLABY_MS + LULLABY_FADE_S * 1000) return;
+    void this.player.start(sketchForArea(area), 4242 + this.boardLevel, this.musicSoft(), null);
     this.player.setLevel(this.settings.get().musicLevel);
   }
 
@@ -462,11 +478,20 @@ export class App {
       this.comboCounts[id] = (this.comboCounts[id] ?? 0) + 1;
     }
     const result = applySwap(this.state, a, b);
-    this.state = result.state;
-    const groups = result.steps.reduce((n, st) => n + (st.kind === 'clear' ? st.groups.length : 0), 0);
+    let { state, steps } = result;
+    const groups = steps.reduce((n, st) => n + (st.kind === 'clear' ? st.groups.length : 0), 0);
     // In the sleepy stretch the lantern fills twice as fast, so the level ends within the window (DESIGN.md 3.8).
-    this.matches = Math.min(goal, this.matches + groups * (this.windingDown ? 2 : 1));
-    this.playSteps(result.steps);
+    this.matches = Math.min(goal, this.matches + groups * (this.softening() ? 2 : 1));
+    // In a Play level the moon helps instead: each move also melts a layer, pops a bubble or drops a seed (DESIGN.md 3.8).
+    if (this.softening() && state.goals && !goalsDone(state.goals)) {
+      const help = moonHelp(state);
+      if (help) {
+        state = help.state;
+        steps = [...steps, ...help.steps];
+      }
+    }
+    this.state = state;
+    this.playSteps(steps);
   }
 
   /** Show a resolution, noting discoveries and the gift going off, then save. */
@@ -537,6 +562,15 @@ export class App {
       }
       this.gift = null;
     }
+    // "Finish now, gently" in a Play level: the goal resolves first, so the level's own reward is never skipped (DESIGN.md 3.8).
+    if (this.state.goals && !goalsDone(this.state.goals)) {
+      const r = resolveLevel(this.state);
+      if (r.steps.length > 0) {
+        this.state = r.state;
+        this.playSteps(r.steps);
+        return;
+      }
+    }
     this.finishNowWanted = false;
     this.matches = boardFor(this.mode).goal;
     this.view.setGoal(this.matches, this.matches);
@@ -579,13 +613,69 @@ export class App {
       companion: this.companion,
       offerCompanions: offer,
       rest,
+      restSince: this.restingSince ?? undefined,
       onLight: () => (isFirstLanternOfArea(this.level) ? this.sounds.areaArrive(areaForLevel(this.level)) : this.sounds.lanternLit()),
       onPick: (id) => this.pickCompanion(id),
-      onTwinkle: () => this.sounds.twinkle(),
+      onTwinkle: () => this.twinkle(),
       onDone: () => this.leaveMap(),
       onReplay: (n) => this.startReplay(n),
     });
-    if (rest) this.player.setWindDown(true);
+    this.applySoftening();
+    if (rest) this.scheduleRest();
+  }
+
+  // ------------------------------------------------------------------ rest
+
+  /** How long the resting scene has been up, in ms (0 outside rest). */
+  private restAge(): number {
+    return this.phase === 'resting' && this.restingSince !== null ? Math.max(0, Date.now() - this.restingSince) : 0;
+  }
+
+  /**
+   * The resting scene's timing (DESIGN.md 3.8): the lullaby fades to silence over about half a
+   * minute, the twinkle chimes stop after two minutes, and after ten the screen wake lock is
+   * released so the phone can lock itself and the scene does almost no work. Timed from when the
+   * rest began, so a relaunch carries on where the night was.
+   */
+  private scheduleRest(): void {
+    this.clearRestTimers();
+    const age = this.restAge();
+    const fadeAt = LULLABY_MS - age;
+    if (fadeAt > -LULLABY_FADE_S * 1000) this.restTimers.push(setTimeout(() => this.player.fadeOut(Math.min(LULLABY_FADE_S, LULLABY_FADE_S + fadeAt / 1000)), Math.max(0, fadeAt)));
+    else this.player.stop(2);
+    this.restTimers.push(setTimeout(() => {
+      void this.wakeLock?.release().catch(() => undefined);
+      this.wakeLock = null;
+    }, Math.max(0, REST_DEEP_MS - age)));
+  }
+
+  private clearRestTimers(): void {
+    for (const t of this.restTimers) clearTimeout(t);
+    this.restTimers = [];
+  }
+
+  /** A tap on the resting scene: a star twinkles, and for the first two minutes a very soft chime. */
+  private twinkle(): void {
+    if (this.phase === 'resting' && this.restAge() >= REST_QUIET_MS) return;
+    this.sounds.twinkle();
+  }
+
+  /** The softening is on while she plays in the sleepy stretch, or after "Finish after this level", if the parent keeps wind-down on. */
+  private softening(): boolean {
+    return this.phase === 'playing' && this.settings.get().windDown && (this.windingDown || this.finishing);
+  }
+
+  /** The music's sleepy form: through the softening and the whole rest. */
+  private musicSoft(): boolean {
+    return this.softening() || this.phase === 'resting';
+  }
+
+  /** Point the board, the chimes and the music at the softening as it stands now (DESIGN.md 3.8). */
+  private applySoftening(): void {
+    const soft = this.softening();
+    this.view.setWindDown(soft);
+    this.sounds.setSoft(soft);
+    this.player.setWindDown(this.musicSoft());
   }
 
   /** A lit lantern tapped on the map: play that level again; her own lantern stays where it is (DESIGN.md 2d). */
@@ -659,9 +749,12 @@ export class App {
       companion: this.companion,
       offerCompanions: false,
       rest: true,
-      onTwinkle: () => this.sounds.twinkle(),
+      restSince: this.restingSince ?? undefined,
+      onTwinkle: () => this.twinkle(),
       onDone: () => undefined,
     });
+    this.applySoftening();
+    this.scheduleRest();
   }
 
   private pickCompanion(id: CompanionId): void {
@@ -747,6 +840,8 @@ export class App {
     this.finishing = on;
     // "Keep playing" during the timer's sleepy stretch waves the timer off until the next session.
     if (!on && this.windingDown) this.endWindDown(true);
+    // The softening begins at once, so it coincides with her finishing (DESIGN.md 3.8).
+    this.applySoftening();
     this.save();
     this.panel.update(this.panelContext());
   }
@@ -775,7 +870,7 @@ export class App {
     if (this.review || total <= 0 || this.sessionSpent || this.phase !== 'playing' || document.hidden || this.panel.isOpen) return;
     this.sessionElapsedMs += SESSION_TICK_MS;
     const windDownAt = total - Math.min(WIND_DOWN_MS, total / 2);
-    if (!this.windingDown && this.sessionElapsedMs >= windDownAt) this.beginWindDown();
+    if (!this.windingDown && this.settings.get().windDown && this.sessionElapsedMs >= windDownAt) this.beginWindDown();
     if (this.sessionElapsedMs >= total) {
       this.sessionSpent = true;
       this.finishNow();
@@ -786,8 +881,7 @@ export class App {
   private beginWindDown(): void {
     this.windingDown = true;
     this.finishing = true;
-    this.view.setWindDown(true);
-    this.player.setWindDown(true);
+    this.applySoftening();
     this.save();
     this.panel.update(this.panelContext());
   }
@@ -796,8 +890,7 @@ export class App {
   private endWindDown(spent: boolean): void {
     this.windingDown = false;
     if (spent) this.sessionSpent = true;
-    this.view.setWindDown(false);
-    if (this.phase !== 'resting') this.player.setWindDown(false);
+    this.applySoftening();
   }
 
   /** The session length changed on the panel: the clock starts again from now. */
@@ -829,10 +922,11 @@ export class App {
     this.sessionElapsedMs = 0;
     this.sessionSpent = false;
     this.windingDown = false;
-    this.view.setWindDown(false);
-    this.player.setWindDown(false);
+    this.clearRestTimers();
     this.panel.close();
     if (this.phase === 'resting') this.leaveMap();
+    this.applySoftening();
+    if (!this.player.current) this.startMusic();
   }
 
   // ------------------------------------------------------ review mode
@@ -944,7 +1038,15 @@ export class App {
     }
     this.view.setReducedMotion(this.reducedMotion(s));
     this.view.setBreathing(s.breathingGlow);
+    this.dimmer.style.opacity = String(Math.max(0, Math.min(0.75, s.nightDim)));
+    this.applySoftening();
     this.armHint();
+  }
+
+  /** The rest-until setting in ms, or null for "until a grown-up unlocks" (DESIGN.md 3.8). */
+  private restUntilMs(): number | null {
+    const minutes = this.settings.get().restUntilMinutes;
+    return minutes > 0 ? minutes * 60 * 1000 : null;
   }
 
   // ------------------------------------------------------------------- save
@@ -971,7 +1073,8 @@ export class App {
       this.appliedSessionMinutes = this.settings.get().sessionMinutes;
 
       // Resting comes first (DESIGN.md 3.8): the sleeping scene stays until the rest-until time has passed.
-      if (save.phase === 'resting' && save.restingSince !== null && now - save.restingSince < REST_UNTIL_MS) {
+      const restUntil = this.restUntilMs();
+      if (save.phase === 'resting' && save.restingSince !== null && (restUntil === null || now - save.restingSince < restUntil)) {
         this.phase = 'resting';
         this.restingSince = save.restingSince;
         this.gift = save.gift ?? null;
@@ -1120,6 +1223,15 @@ export class App {
       },
       goTo: (n: number) => this.goToLantern(n),
       continueMap: () => (this.phase === 'map' ? this.map.continueNow() : undefined),
+      /** Testing: show the resting scene as if it began this long ago. */
+      restFor: (ms: number) => {
+        this.phase = 'resting';
+        this.restingSince = Date.now() - ms;
+        this.finishing = true;
+        this.showRest();
+      },
+      restAge: () => this.restAge(),
+      softening: () => this.softening(),
     };
     const el = document.createElement('div');
     el.id = 'debug';
@@ -1183,6 +1295,7 @@ export class App {
     });
     if (this.phase === 'playing') this.view.start();
     else this.map.start();
+    if (this.phase === 'resting') this.scheduleRest();
     this.armHint();
     void this.requestWakeLock();
   }
@@ -1191,6 +1304,8 @@ export class App {
     try {
       const nav = navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } };
       if (!nav.wakeLock || document.hidden) return;
+      // Deep in a rest the phone may lock itself (DESIGN.md 3.8, battery).
+      if (this.phase === 'resting' && this.restAge() >= REST_DEEP_MS) return;
       this.wakeLock = await nav.wakeLock.request('screen');
     } catch {
       /* not available or not allowed yet; Guided Access covers it */

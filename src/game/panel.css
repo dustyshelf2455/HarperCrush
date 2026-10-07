@@ -469,3 +469,50 @@
     transition-duration: 80ms;
   }
 }
+
+/* The night dimmer's slider (DESIGN.md 3.9). */
+.gf-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  margin: 0;
+}
+.gf-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ffe9b8, #2a2f52);
+}
+.gf-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: #fff6dc;
+  box-shadow: 0 0 0 3px rgba(255, 233, 184, 0.35);
+}
+.gf-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ffe9b8, #2a2f52);
+}
+.gf-slider::-moz-range-thumb {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff6dc;
+}
+
+/* The night dimmer itself: a sheet over the whole game that never takes a touch. */
+#gf-dim {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+}

@@ -418,6 +418,8 @@ function plainStep(power: PowerKind): FireStep {
 
 export class GameSounds {
   enabled = true;
+  /** The sleepy stretch (DESIGN.md 3.8): chimes drop an octave and get quieter. */
+  private soft = false;
   /** The area's melody voice, used for the lantern and level phrases. */
   private voice: MelodyInstrument = 'celesta';
   private lastOnce: { combo: Combo; at: number } | null = null;
@@ -432,6 +434,19 @@ export class GameSounds {
     return this.enabled && this.engine.isRunning ? this.engine.context : null;
   }
 
+  /** The softening of the sleepy stretch: on, every chime sounds an octave lower and about a third quieter. */
+  setSoft(on: boolean): void {
+    this.soft = on;
+  }
+
+  private shift(midi: number): number {
+    return this.soft && midi - 12 >= 36 ? midi - 12 : midi;
+  }
+
+  private level(vel: number): number {
+    return this.soft ? vel * 0.7 : vel;
+  }
+
   /** The area she is in, so the lantern and level phrases take its voice (DESIGN.md 3.11). */
   setArea(area: AreaId): void {
     this.voice = sketchForArea(area).melody.instrument;
@@ -440,8 +455,8 @@ export class GameSounds {
   swap(valid: boolean): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (valid) this.engine.tick(ctx.currentTime, 0.14);
-    else this.engine.note('marimba', 55, ctx.currentTime + 0.12, 0.22);
+    if (valid) this.engine.tick(ctx.currentTime, this.level(0.14));
+    else this.engine.note('marimba', 55, ctx.currentTime + 0.12, this.level(0.22));
   }
 
   /** One soft note per cleared group, climbing with the cascade and the group index. */
@@ -453,7 +468,7 @@ export class GameSounds {
       const idx = Math.min(tones.length - 1, cascade * 2 + i);
       const midi = tones[idx] ?? tones[tones.length - 1] ?? 67;
       const vel = Math.min(0.75, 0.42 + g.cells.length * 0.05 + cascade * 0.04);
-      this.engine.note('celesta', midi, ctx.currentTime + 0.1 + i * 0.05, vel);
+      this.engine.note('celesta', this.shift(midi), ctx.currentTime + 0.1 + i * 0.05, this.level(vel));
     });
   }
 
@@ -462,7 +477,7 @@ export class GameSounds {
     if (!ctx) return;
     const tones = this.player.chordNow(10, 18);
     const colourless = piece.power === 'orb' || piece.power === 'aurora';
-    this.engine.arpeggio(tones.slice(0, colourless ? 5 : 3), ctx.currentTime + 0.05, 0.4, 0.06);
+    this.engine.arpeggio(tones.slice(0, colourless ? 5 : 3).map((m) => this.shift(m)), ctx.currentTime + 0.05, this.level(0.4), 0.06);
   }
 
   /**
@@ -499,7 +514,7 @@ export class GameSounds {
   reshuffle(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    this.engine.arpeggio(this.player.chordNow(5, 14).slice(0, 5), ctx.currentTime + 0.05, 0.3, 0.1);
+    this.engine.arpeggio(this.player.chordNow(5, 14).slice(0, 5).map((m) => this.shift(m)), ctx.currentTime + 0.05, this.level(0.3), 0.1);
   }
 
   /** The lantern fills: the level-complete phrase in the current area's voice. */
@@ -540,9 +555,9 @@ export class GameSounds {
 
   /** Schedule a phrase on the audio clock from `t0`, and dip the music if the phrase asks for it. */
   private play(phrase: Phrase, t0: number): void {
-    for (const n of phrase.notes) this.engine.note(n.instrument, n.midi, t0 + n.at, n.vel);
+    for (const n of phrase.notes) this.engine.note(n.instrument, this.shift(n.midi), t0 + n.at, this.level(n.vel));
     for (const p of phrase.pads) {
-      const voice = this.engine.pad(p.midis, t0 + p.at, p.level, undefined, p.attack);
+      const voice = this.engine.pad(p.midis, t0 + p.at, this.soft ? p.level * 0.8 : p.level, undefined, p.attack);
       voice?.release(t0 + p.at + p.hold, p.release);
     }
     if (phrase.duck > 0) this.player.duck(phrase.duck, t0);

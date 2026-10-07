@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type GameState, type Goal, applySwap, at, findValidSwaps, goalsDone, isFixed, newLevel, reshuffleBoard, vined } from '../src/core/game';
+import { type GameState, type Goal, applySwap, at, findValidSwaps, goalsDone, isFixed, moonHelp, newLevel, reshuffleBoard, resolveLevel, vined } from '../src/core/game';
 import type { Cell } from '../src/core/grid';
 import { unlockedAt } from '../src/core/journey';
 import { type PlayDifficulty, levelFor, levelShape, staticallyCompletable } from '../src/core/levels';
@@ -185,5 +185,78 @@ describe('items and terrain in play', () => {
     const thinned = after.steps.filter((st) => st.kind === 'frost').reduce((n, st) => n + (st.kind === 'frost' ? st.cells.length : 0), 0);
     expect(before - layers(after.state)).toBe(thinned);
     expect(after.state.goals!.find((g) => g.kind === 'uncover')!.done).toBe(thinned);
+  });
+});
+
+describe('the sleepy stretch and the gentle finish (DESIGN.md 3.8)', () => {
+  const full = (s: GameState): void => {
+    for (let row = 0; row < s.rows; row++) for (let col = 0; col < s.cols; col++) {
+      const open = s.terrain?.open[row]?.[col] ?? true;
+      if (open) expect(at(s.board, row, col), `cell ${row},${col} empty`).not.toBeNull();
+      else expect(at(s.board, row, col)).toBeNull();
+    }
+  };
+  const progressOf = (goals: readonly Goal[] | undefined): number => (goals ?? []).reduce((n, g) => n + g.done, 0);
+
+  it('the moon helps one goal step at a time, in every shape, and the board stays full', () => {
+    for (let level = 1; level <= 10; level++) {
+      const spec = levelFor(level, 'medium', 7);
+      let s = newLevel(spec, 7, unlockedAt(level));
+      let helps = 0;
+      for (let i = 0; i < 400 && !goalsDone(s.goals); i++) {
+        const before = progressOf(s.goals);
+        const r = moonHelp(s);
+        expect(r, `level ${level}: help while the goals are open`).not.toBeNull();
+        s = r!.state;
+        full(s);
+        expect(progressOf(s.goals)).toBeGreaterThanOrEqual(before);
+        expect(r!.steps.length).toBeGreaterThan(0);
+        helps++;
+      }
+      expect(goalsDone(s.goals), `level ${level} done by the moon alone after ${helps} helps`).toBe(true);
+      expect(moonHelp(s)).toBeNull();
+    }
+  });
+
+  it('a move plus the moon finishes a level sooner than moves alone', () => {
+    const spec = levelFor(3, 'medium', 21); // seeds
+    const start = newLevel(spec, 21, unlockedAt(3));
+    const alone = play(start, 160).moves;
+    let s = start;
+    let moves = 0;
+    while (!goalsDone(s.goals) && moves < 160) {
+      const mv = botMove(s);
+      if (!mv) break;
+      s = applySwap(s, mv[0], mv[1]).state;
+      moves++;
+      const help = moonHelp(s);
+      if (help) s = help.state;
+    }
+    expect(goalsDone(s.goals)).toBe(true);
+    expect(moves).toBeLessThan(alone);
+  });
+
+  it('the gentle finish resolves every goal, clears the frost, vines, bubbles and seeds, and fills the board', () => {
+    for (let level = 1; level <= 10; level++) {
+      const spec = levelFor(level, 'bigger', 5);
+      const s = newLevel(spec, 5, unlockedAt(level));
+      const r = resolveLevel(s);
+      expect(goalsDone(r.state.goals), `level ${level}`).toBe(true);
+      full(r.state);
+      for (const row of r.state.terrain?.frost ?? []) for (const n of row) expect(n).toBe(0);
+      for (const row of r.state.terrain?.vine ?? []) for (const v of row) expect(v).toBe(false);
+      for (const row of r.state.board) for (const p of row) expect(p?.item === 'bubble' || p?.item === 'seed').toBe(false);
+      const kinds = new Set(r.steps.map((st) => st.kind));
+      if (spec.goals.some((g) => g.kind === 'uncover')) expect(kinds.has('frost')).toBe(true);
+      if (spec.goals.some((g) => g.kind === 'free')) expect(kinds.has('free')).toBe(true);
+      if (spec.goals.some((g) => g.kind === 'seeds')) expect(kinds.has('exit')).toBe(true);
+    }
+  });
+
+  it('a level without goals is left alone', () => {
+    const s = newLevel(levelFor(1, 'gentle', 3), 3, unlockedAt(1));
+    const plain: GameState = { ...s, goals: undefined };
+    expect(moonHelp(plain)).toBeNull();
+    expect(resolveLevel(plain).steps).toEqual([]);
   });
 });

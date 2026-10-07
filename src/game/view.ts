@@ -277,6 +277,8 @@ export class GameView {
   /** Wind-down (DESIGN.md 3.8): 0..1, eased over a minute; slows the motion a little and dims the scene. */
   private windDown = 0;
   private windDownTarget = 0;
+  /** The ambient life's own clock, which the sleepy stretch slows. */
+  private ambientTime = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -687,6 +689,8 @@ export class GameView {
     }
     // Game time runs at timeScale while a resolution plays: every duration, fall and sparkle slows together.
     const gdt = dt * this.timeScale * (1 - 0.2 * this.windDown);
+    // The ambient life (fireflies, drifting lights) slows with the sleepy stretch too.
+    this.ambientTime += dt * (1 - 0.4 * this.windDown);
     const seconds = gdt / 1000;
     let moving = this.windDown !== this.windDownTarget;
     this.ripples = this.ripples.filter((r) => (r.t += dt) < 480);
@@ -1365,6 +1369,8 @@ export class GameView {
         return false;
       }
       case 'frost':
+        // A wave of thaw across the whole picture (the gentle finish, DESIGN.md 3.8) is given a moment; a layer off one or two cells with a clear is not.
+        return step.kind !== 'frost' || step.cells.length < 4 || cur.t >= FROST_FADE_MS * 1.2 * this.motionScale;
       case 'vine':
       case 'free':
         return true;
@@ -1507,7 +1513,7 @@ export class GameView {
     const { width: w, height: h, cell, boardX, boardY } = this.layout;
     const t = this.time / 1000;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.drawBackground(t);
+    this.drawBackground(this.ambientTime / 1000);
     this.drawVignette(t);
     this.drawHud(t);
 
@@ -2492,7 +2498,8 @@ export class GameView {
     const { ctx } = this;
     const { width: w, height: h } = this.layout;
     // Breathing at the 7.5 s pace (DESIGN.md 3.8); a still, faint vignette when breathing is off.
-    const a = this.breathing ? 0.05 + 0.07 * breath(t) : 0.085;
+    // In the sleepy stretch the breath becomes the dominant rhythm: the vignette swells further (DESIGN.md 3.8).
+    const a = this.breathing ? 0.05 + (0.07 + 0.09 * this.windDown) * breath(t) : 0.085;
     const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
     g.addColorStop(0, rgba(this.style.palette.lanternGlow, 0));
     g.addColorStop(1, rgba(this.style.palette.lanternGlow, a));

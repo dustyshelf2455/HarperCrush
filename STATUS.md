@@ -115,11 +115,21 @@ Deployed as run 31, green 04:42 UTC on 7 October, on the parent's "Deploy. Terri
 - **Pictures cost** about $2.30 (one pieces sheet, one vine sheet, seven hidden pictures); about $11 of the $25 is used in all.
 - **Not built:** the hero in a bubble (no picture), the moonstone bias rise (DESIGN.md 2h), goal-specific sounds (the freed creature and the sprouting flower reuse the twinkle and chord for now).
 
+### Stage 5 built (7 October, early morning): endings and wind-down
+
+On the branch, checked, awaiting the parent's "Deploy?". Decisions in DESIGN.md 2i; screenshots in the project's `playtest/stage5/` folder.
+
+- **Core** (`src/core/game.ts`): `moonHelp` gives one small step toward a Play goal (frost, bubble, seed, gathered gem, in that order) and `resolveLevel` resolves every goal at once for the gentle finish; the clear's side effects and the fall-then-seed-exit are factored out (`removeCells`, `dropAndExit`) and shared with the ordinary move. Tests: the moon alone finishes the ten shapes with the board always full, a move plus the moon finishes sooner than moves alone, the gentle finish leaves no frost, vine, bubble or seed.
+- **App**: one `applySoftening()` points the board, the chimes and the music at the sleepy stretch, which now also follows "Finish after this level" and the new "Sleepy wind-down" switch; the rest clock (`scheduleRest`) fades the lullaby, quiets the twinkles after two minutes and lets the wake lock go after ten, timed from when the rest began; rest-until comes from the new "Rest for" setting; the night dimmer is a black sheet (`#gf-dim`) whose opacity is the slider.
+- **View, sounds, music, map**: the vignette breathes deeper and the ambient life runs slower in the softening; chimes shift down an octave and soften (`GameSounds.setSoft`); `MusicPlayer.fadeOut` fades while still playing; the map's resting scene dims at two and ten minutes and ticks once a second deep in the night; a wave of thaw across the picture is given a moment on screen.
+- **Verified in Chromium at phone size:** a frost level after "Finish after this level" (the moon helping each move), "Finish now, gently" on a fresh frost level (thaw, then the gems into the lantern, then the sleeping companion), the resting scene at 0, 3 and 11 minutes with a tap's twinkle in the deep night, the panel's new rows and the dimmer at half.
+- **Debug hooks** (`?debug=1`): `restFor(ms)` shows the resting scene as if it began that long ago; `softening()`; `restAge()`.
+
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
 2. Hear the parent's phone verdict on the map (batch B) and the Play levels (Stage 4), and tune the ramp from what he sees.
-3. **Stage 5** endings and wind-down (3.8): session timer, softening, the resting scene's timing and dimming, rest-until and New session as designed, the breathing glow controls, the night dimmer.
+3. Hear the parent's verdict on the endings (Stage 5): the sleepy stretch in a Play level, "Finish now, gently", the resting night, the dimmer in a dark car.
 4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
 
 ## How to continue in a new session

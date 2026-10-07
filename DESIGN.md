@@ -137,6 +137,18 @@ Play levels are now the ones designed in 3.7, generated per lantern. What was de
 ---
 ---
 
+## 2i. Stage 5 built: endings and wind-down (7 October 2026)
+
+The endings of 3.8 as built, on top of the Stage 3 timer and resting scene. What was decided while building:
+
+- **The softening** (motion a fifth slower, falls floatier, the scene dimmed by about a fifth, the vignette breathing deeper, the ambient life slower, the music in its sleepy form, every chime an octave lower and a third quieter) now runs whenever she is playing in the timer's sleepy stretch *or* after "Finish after this level", so the softening coincides with her finishing as 3.8 asks. It is a parent choice: "Sleepy wind-down" on the panel; off, the time simply runs out into the gentle ending, with no softening.
+- **The moon helps in Play.** In Calm the sleepy stretch fills the lantern twice as fast; in a Play level each of her moves now also melts a layer off the thickest frost, pops a bubble, takes whatever sits under the lowest star-seed so it drops a row, or takes one gem of the gathered colour, in that order, so the level resolves within the window without the goal being cut short.
+- **"Finish now, gently" in a Play level resolves the goal first:** the frost melts off the whole picture in waves, the vines let go, every bubble floats free, the seeds drift out and sprout, the gathered gems are counted off the board; then the gems drift up into the lantern exactly as in Calm. The level's own reward is never skipped.
+- **The resting scene's night:** the lullaby plays about twelve seconds more, then fades to silence over half a minute; taps twinkle a star with a very soft chime for two minutes, after that the star alone; at two minutes the screen dims by a further third, at ten it settles to a near-black night with a few slow stars, the scene ticks once a second and the screen wake lock is released so the phone can lock itself. All of it is timed from the moment the rest began, so closing and reopening the app carries the night on rather than starting it over.
+- **Rest-until is a setting** ("Rest for": 15 min, 30 min, 1 hour, Unlock). "Unlock" keeps the sleeping scene on every relaunch until a grown-up opens the gate and taps New session.
+- **The night dimmer** is a slider at the end of the panel's Session section: a black sheet over the whole game, up to three quarters dark, that takes no touches. It dims the panel too, on purpose, so a parent in a dark car sees the same screen she does.
+- The timer's default stays off and its sleepy stretch four minutes (the Stage 3 play-test decision) rather than the ten and two of 3.8; the breathing glow stays an on/off toggle at the 7.5-second pace.
+
 ## 3. The game
 
 ### 3.1 Name and world
