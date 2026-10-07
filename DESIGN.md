@@ -92,12 +92,23 @@ Settled with the parent as five picture choices, one at a time (samples and prom
 
 - **One hand for everything: hand-painted storybook** (gouache and watercolour, soft brushwork, rich jewel colours), chosen over polished glossy and stained glass. The painted gems, the Meadow mockup and the firefly had each been in a different hand; from here every piece is made against the same style paragraph.
 - **The companions are now a fairy, a kid dragon and a little hooded hero**, extra-cute proportions. Harper loves fairies above all, so the fairy is the default. The firefly and the glow fish are retired (the code's ids stay for saved games).
-- **The board moves to the top of the screen and gains a row** (seven by nine in Play), the gems a tenth bigger, the companion beside the lantern half again as big, and a soft still glow under every gem; the landscape shows beneath the board. Painted cells (a gilded jewel box, a flower frame, a ring of stars) were tried and the glass cells kept.
+- **The board moves to the top of the screen** (seven by eight in Play: a ninth row was tried on the deployed build and dropped on 7 October because it cluttered the board over the painted backdrops), the gems a tenth bigger, the companion beside the lantern half again as big, and a soft still glow under every gem; the landscape shows beneath the board. Painted cells (a gilded jewel box, a flower frame, a ring of stars) were tried and the glass cells kept.
 - **The seven areas** were approved from one painted strip, so they read as siblings.
 - **The map becomes a scrolling storybook**: tall painted sections per area with the path painted into the landscape, chaining top to bottom; the code places lanterns and companions on points along the painted path and keeps drawing all the light. The perspective stage and the code-drawn road ribbon go. The parent's words: the old road "just drifts oddly into the mountains".
 - **Stage 4's pieces** (frost, vines, cloud puffs, moonstone, star-seeds, bubbles, hidden pictures) were approved painted, so Play levels are built with their real art from the first day.
 - **Reskins later**: each theme is a folder of same-named pictures chosen from the panel, so a superhero or birthday version is pictures only.
 - **The rule that protects the feel**: pictures are the body, code is the light (STYLE.md). Glows, auras, pulses and the win shimmer stay code-drawn on top; every picture sits on the code-drawn anchor; the code-drawn piece stays as the fallback.
+
+---
+
+## 2f. The launch picture (7 October 2026)
+
+The parent asked for a splash screen on game load. Decided and built as the Stage 6 "launch picture", so it is not planned twice:
+
+- **What she sees:** the moment the icon is tapped, a painted night sky with the name Glimmerfall in glowing storybook letters, the fairy scattering jewels that drift down like gentle falling stars, and the meadow glowing below. Code draws the light over it: twinkling stars and slow glimmers in the gem colours drifting down. No tap is asked for, nothing moves fast, and there is nothing to read but the name.
+- **How it goes:** it stays while the game's pictures load, always long enough to be seen as a picture (about two and a half seconds), never longer than about five, then fades into the board or the map over a second on its own. A tap after the first moment lets it go a little sooner; a swipe during the fade already moves a gem. `?splash=0` skips it (screenshots and tests).
+- **The game opens on the map, not on the board** (the parent, 7 October: "load to map, last level if applicable"). After the splash, the map waits at her lantern, already lit and breathing the invitation, with her companion on it; there is no hop and no bloom, since she has not just won anything. A tap on the lantern or her companion brings back the board exactly as she left it, part way through if it was; lit lanterns behind her replay as before; anywhere else twinkles. The resting scene still comes first while she is "asleep", and a level saved at the moment its lantern filled still finishes first.
+- **Pictures are the body, code is the light:** a code-drawn version (sky, stars, the fairy, the name in plain letters) shows for the first instant and stays if the picture never loads. On a tall phone the painting stands on the bottom edge a little wider than the screen, so the title is never cut, and the code sky carries on above it through a feathered edge; on a squarer screen it covers. The picture is `splash.jpg` in the theme folder, so a reskin can have its own. The app icon is separate and still to do.
 
 ---
 

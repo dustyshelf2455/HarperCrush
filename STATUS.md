@@ -70,27 +70,32 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch A, the board:** painted gems with the soft glow, the seven power bodies, the three new companions (awake and asleep), the board backdrops, the board at the top with the ninth row, the theme folder. About $1 to $2.
 - **Stage 4 with Batch C:** Play levels as designed in 3.7, built with the approved painted pieces. About $1 to $3 of pictures.
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
-- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon, launch picture, panel art), then the full-draft deploy for the parent to play end to end.
+- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon and panel art; the launch picture is done, see below), then the full-draft deploy for the parent to play end to end.
 
 Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about 80 cents of the $25 the parent added on 6 October.
 
 ### Batch A built (6 October, afternoon)
 
-On the branch, checked (typecheck, 210 tests, build) and screenshotted at phone size; waiting on the parent's "Deploy?".
+Deployed to main on the parent's go-ahead: run 22, green 20:50 UTC on 6 October (build stamp 20:49 UTC). The parent's first reaction to the screenshots: "These boards are great." He is considering dropping the ninth row again now that the backdrops show (one number in `src/core/journey.ts` and its test); not done yet.
 
 - **Theme folder:** every picture now lives under `public/art/default/` (gems, powers, companions, board, map). `src/render/artPath.ts` picks the folder from the `glimmerfall.theme` key in local storage, so a second skin is a second folder with the same file names. The service worker's asset list is now walked from the folder (`vite.config.ts`), so new pictures need no hand-listing.
 - **Gems:** the storybook set from the summit, drawn a tenth bigger, with the soft still glow baked into the sprite under the picture.
 - **Powers:** painted Orb, Aurora, bud, sprite and moon pearl stamped over their code-drawn versions (`src/render/powerArt.ts`); comet streak, starburst rays and all auras stay code-drawn.
 - **Companions:** fairy, dragon and hero, each with an asleep picture, on the board (62 px) and the map; the asleep picture replaces the code squash when it exists (`src/render/mapArt.ts`, `creatures.ts`). The code still calls them firefly, fish and hero so saves keep working; `COMPANION_FILES` maps the ids to the picture names.
-- **Board:** Play is seven by nine, at the top of the screen, with the area's painted backdrop behind it (`src/render/boardArt.ts`, loaded per area when first needed).
+- **Board:** Play is seven by eight (nine was tried and dropped on the parent's review, 7 October), at the top of the screen, with the area's painted backdrop behind it (`src/render/boardArt.ts`, loaded per area when first needed).
 - **Backdrops:** all seven painted. The first Crystal Cave, Mermaid Lagoon and Star Garden came back with characters in the bottom strip although the prompt asked for scenery only; the parent found them distracting, so those three were repainted scenery-only with a firmer prompt ("no creatures, no characters, no animals, no people, no faces of any kind; the strip never taller than a sixth"), and Dragon Hollow was painted once the credit was topped up.
+- **Parent's review on the phone (7 October, review mode):** gems and glow right; nine rows dropped to eight (deployed run 24); Cave and Hollow backdrops repainted with a lower strip; the white match rings, sparkles and win rim retinted to the gems' own glow and warm gold; the five coloured powers became whole painted pieces in six colours each (see STYLE.md "The gems"). His map brief is in `playtest/batchA-walkthrough-2026-10-07.md` in the project files and drives batch B.
 - **Air at the top:** the parent found the top packed, so the lantern row is now 154 px tall: the companion sits lower under the Dynamic Island, the goal stars have room below it, and the board starts under them (`resize` and `drawHud` in `src/game/view.ts`).
 - The old map (perspective stage, code road) is unchanged until batch B.
+
+### Launch picture (7 October, branch `claude/splash-screen-naepdv`)
+
+The parent asked for a splash screen on load; it is the Stage 6 "launch picture" from Batch D, done early (DESIGN.md 2f). `src/game/splash.ts` puts a full-bleed canvas over everything from the first frame: a code-drawn night (sky, stars, the fairy, the name in plain letters) with the painting `public/art/default/splash.jpg` stamped over it, the glimmers and stars drawn in code on top, then a fade into the game on its own (timing and placement in `splashTiming.ts`, tested). No tap is needed; a tap after the first moment lets it go sooner. Screenshots and tests use `?splash=0` to skip it (Playwright scripts that shoot the board straight after load need this now). The parent then asked for the game to open on the map rather than straight onto a level: after the splash the map waits at her lantern (lit, no hop, the invitation breathing) and a tap on it brings back the board she left, matches and all (`openLaunchMap` in `app.ts`, the map's `arrive: false`). Verified in Chromium: splash to map, tap to board, two swaps, relaunch to map, tap to the same board at 4 of 16. Playwright scripts that need the board straight after load now call `window.glimmerfall.continueMap()` in debug mode, or tap the lantern. One generation, about 20 cents; prompt and a small copy in the project's `art/batchA/`. Batch D still owes the app icon and the panel art.
 
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
-2. **Deploy batch A** once the parent says so (the branch `claude/art-style-and-roadmap-vi4nkp` carries it), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
+2. Hear the parent's phone verdict on batch A (and whether the ninth row stays), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
 3. **Stage 5** endings and wind-down (3.8): session timer, softening, the resting scene's timing and dimming, rest-until and New session as designed, the breathing glow controls, the night dimmer.
 4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
 

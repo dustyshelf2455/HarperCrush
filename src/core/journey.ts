@@ -156,5 +156,5 @@ export interface BoardSpec {
  */
 export function boardFor(mode: Mode): BoardSpec {
   if (mode === 'calm') return { rows: 9, cols: 6, bias: 0.3, goal: 12, hintMs: 4000 };
-  return { rows: 9, cols: 7, bias: 0.12, goal: 16, hintMs: 10000 };
+  return { rows: 8, cols: 7, bias: 0.12, goal: 16, hintMs: 10000 };
 }

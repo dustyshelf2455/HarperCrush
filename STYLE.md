@@ -28,11 +28,13 @@ Each companion needs: awake facing right, asleep curled up, and (later) a waving
 
 Star gold, heart rose pink, drop sapphire (point up), leaf emerald, diamond amethyst, sunstone coral (rounded hexagon). Painted body only, cut to a 256 px square with the body filling about 183 px; the sprite cache draws it at 3.1 radii. A soft, still glow in the gem's own colour sits under each gem on the board, at about two thirds of the strength tried in `art/style/choice3b` (code-drawn, or baked as a second layer; either is fine as long as it never breathes).
 
-The seven powers get painted bodies in the same hand (comet head, prism orb, bloom bud, lantern sprite, starburst, moon pearl, aurora piece); their moving parts (streak, swirl, opening, rays) stay in code.
+The coloured powers are whole painted pieces, not gems with an ornament (parent, 7 October: a special should turn into a thing of the board, as a match turns into a special candy): a shooting star (comet), a closed flower bud (bloom), a winged wisp with a face (sprite), an eight-pointed star jewel (starburst) and a crescent moon cradling a pearl (moonrise), each painted in all six gem colours so the colour still reads for matching (`powers/<family>-<gem>.png`, prompts in `art/batchA/`). The Orb and the Aurora are colourless painted pieces of their own. Their moving parts (streak, swirl, opening, rays, beams) stay in code.
+
+Light on the board never goes pure white (parent, 7 October): rings, sparkles and the win rim use the gem's own glow colour or a warm gold, because lightened tints under additive blending washed out to white, which nothing else in the painting is.
 
 ## The board
 
-- Seven by nine in Play, six by nine in Calm, moved to the top of the screen just under the lantern row, so the landscape shows below the board.
+- Seven by eight in Play (the ninth row was tried on 6 October and dropped the next day: with the painted backdrops it cluttered the board), six by nine in Calm, moved to the top of the screen just under the lantern row, so the landscape shows below the board.
 - Cells stay the barely-there glass of Deep Night Garden (painted cells were tried and declined).
 - The companion beside the top lantern is drawn at about 62 px, half again the old size.
 - Behind the board: a portrait painting per area (1024 by 1536), sky at the top, quiet and dark through the middle, scenery only in the bottom fifth, smoother sky grain than the first try so it reads at phone size.
@@ -46,6 +48,10 @@ Lantern posts: lit and unlit cut-outs, lamp centre at 0.7 of the picture's heigh
 ## Stage 4 pieces
 
 Approved sheet in `art/style/choice5-play-pieces.jpg`: frost (one and two layers, with a hint of the hidden picture showing through the single layer), vine holding a gem, cloud puff, moonstone block, star-seed and its sprouted flower, bubbles holding a baby dragon or a fairy, and hidden pictures (sleeping creatures, treasures, castle windows) revealed as frost clears. All cell-fit 256 px cut-outs except the hidden pictures, which are painted at the board's size.
+
+## The launch picture
+
+`splash.jpg` in the theme folder (1024 by 1536, prompt in `art/batchA/splash-prompt.txt`): the name Glimmerfall painted in glowing storybook letters in the upper third, the fairy below it scattering jewels that drift down, a quiet meadow at the bottom, everything important inside the central sixty percent of the width. The code sky above it on tall phones starts from the painting's own top colour (`#192546`), so the join is invisible; the stars, the drifting glimmers and the fade are code (DESIGN.md 2f, `src/game/splash.ts`).
 
 ## Files, sizes, themes
 
