@@ -1,6 +1,6 @@
 # Status
 
-Updated 7 October 2026, after batch B (the storybook map). Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
+Updated 7 October 2026, after batch B (the storybook map) and the theme music. Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
 
 ## After the play-test (5 October)
 
@@ -102,6 +102,10 @@ Deployed as run 29, green 04:05 UTC on 7 October (build stamp 04:03 UTC), merged
 ### Launch picture (7 October, branch `claude/splash-screen-naepdv`)
 
 The parent asked for a splash screen on load; it is the Stage 6 "launch picture" from Batch D, done early (DESIGN.md 2f). `src/game/splash.ts` puts a full-bleed canvas over everything from the first frame: a code-drawn night (sky, stars, the fairy, the name in plain letters) with the painting `public/art/default/splash.jpg` stamped over it, the glimmers and stars drawn in code on top, then a fade into the game on its own (timing and placement in `splashTiming.ts`, tested). No tap is needed; a tap after the first moment lets it go sooner. Screenshots and tests use `?splash=0` to skip it (Playwright scripts that shoot the board straight after load need this now). The parent then asked for the game to open on the map rather than straight onto a level: after the splash the map waits at her lantern (lit, no hop, the invitation breathing) and a tap on it brings back the board she left, matches and all (`openLaunchMap` in `app.ts`, the map's `arrive: false`). Verified in Chromium: splash to map, tap to board, two swaps, relaunch to map, tap to the same board at 4 of 16. Playwright scripts that need the board straight after load now call `window.glimmerfall.continueMap()` in debug mode, or tap the lantern. One generation, about 20 cents; prompt and a small copy in the project's `art/batchA/`. Batch D still owes the app icon and the panel art.
+
+### Theme music (7 October, branch `claude/theme-music-dfbaeu`)
+
+The parent asked for theme music for the splash page and the map, with music for each area on the map view. Built as a written tune (DESIGN.md 3.11, "The theme"), not a file: `src/audio/theme.ts` holds the thirty-two bars, the chord cycle and the seven voices; `MusicPlayer` (`src/audio/player.ts`) gained `startTheme` and `setThemeArea`, and crosses between voices by moving weight over three seconds (`crossWeights`, pure); the map scene reports the area under its view (`onArea`, from the pure `areaUnderView` in `mapWorld.ts`, where the tenth lantern of an area still counts as that area); `syncMusic` in `app.ts` decides what plays: the theme in the view's area on the map (launch, between levels, review mode), the area's lullaby under a level and in rest. Any first touch on the page starts the sound, so the theme begins on the launch picture and flows into the map. Verified in Chromium at phone size: no sound before a touch, the theme in the Lagoon's voice at lantern 21 after a touch, a drag back into the Cave crossing to `theme-cave` (the mix moving over about three seconds), the drift home crossing back, the lullaby under the level, the theme again when the map returns. Tests in `tests/theme.test.ts` (the bars fill exactly, the scale, the loop's join, the crossing). Clips rendered offline with the real engine for the parent to hear: `music/` in the project's folder (the full theme, a walk across all seven areas, one clip per area). The debug overlay prints `music theme-<area>` while the theme plays; `window.glimmerfall.music()` and `musicMix()` read it in scripts.
 
 ## Next
 

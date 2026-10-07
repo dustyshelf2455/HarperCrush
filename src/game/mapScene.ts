@@ -28,7 +28,7 @@ import { areaTheme, blendThemeColors, type AreaTheme } from '../render/areas';
 import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
 import { drawLanternPost, drawPathRibbon, postLayout } from '../render/map';
 import { BEACON_LAMP, type MapArt, type SectionArt, loadSectionArt } from '../render/mapArt';
-import { SEAM_OVERLAP, SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionRef } from '../render/mapWorld';
+import { SEAM_OVERLAP, SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, areaUnderView, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionRef } from '../render/mapWorld';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
 import { rgba } from '../render/color';
@@ -53,6 +53,8 @@ export interface MapShowOptions {
   onDone(): void;
   /** She tapped a lit lantern behind her: play that level again (the journey does not move). */
   onReplay?(level: number): void;
+  /** The view has scrolled into another area (the theme changes voice; called once per crossing, and once at show). */
+  onArea?(area: AreaId): void;
   /** Review mode (development only, see review.ts): every lantern is lit and tappable, the map can be dragged. */
   review?: { onOpen(level: number): void };
   /**
@@ -247,6 +249,8 @@ export class MapScene {
       this.litTo = true;
     }
     this.friends = opts.offerCompanions && !opts.rest ? this.layoutFriends(opts.to) : [];
+    this.areaReported = null;
+    this.reportArea();
     this.pointers.clear();
     this.primary = null;
     this.shown = true;
@@ -317,6 +321,8 @@ export class MapScene {
   private fling = 0;
   /** Milliseconds since the last finger lifted; the view drifts home after a pause. */
   private sinceTouch = 0;
+  /** The area last reported through onArea, so a crossing is reported once. */
+  private areaReported: AreaId | null = null;
 
   /** World pixels to screen pixels: the page fills the width. */
   private get scale(): number {
@@ -636,6 +642,7 @@ export class MapScene {
     this.lastNow = now;
     this.time += dt;
     const moving = this.update(dt);
+    this.reportArea();
     this.draw();
     if (!this.running || !this.shown) return;
     if (moving) {
@@ -713,6 +720,16 @@ export class MapScene {
       this.twinkles = this.twinkles.filter((tw) => tw.t < TWINKLE_MS);
     }
     return moving;
+  }
+
+  /** Tell the app when the view has crossed into another area (the music follows). */
+  private reportArea(): void {
+    const opts = this.opts;
+    if (!opts?.onArea) return;
+    const area = areaUnderView(this.camera);
+    if (area === this.areaReported) return;
+    this.areaReported = area;
+    opts.onArea(area);
   }
 
   /** The view's own motion: a fling, the soft ends of the world, the review glide, the drift home. */
