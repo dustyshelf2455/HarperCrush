@@ -1,6 +1,6 @@
 # Status
 
-Updated 7 October 2026, after batch B (the storybook map). Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
+Updated 7 October 2026, after batch B (the storybook map) and the theme music. Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
 
 ## After the play-test (5 October)
 
@@ -118,6 +118,9 @@ Deployed as run 31, green 04:42 UTC on 7 October, on the parent's "Deploy. Terri
 ### Travel companions (7 October, branch `claude/map-companions-f60bo9`)
 
 The parent saw only the fairy on the map (DESIGN.md 2i). Now the dragon and the hero travel with her: they trail her on the path at every beacon, hop after her when she wins a level, wave on landing, and sleep beside her in rest; a tap on one swaps it in as her companion (saved, shown on the board, remembered at the next launch), and a tap on the leader or the beacon resumes the level. The old offer-only-on-some-visits logic and its `companionOffered` save flag are gone (old saves still load). Also: the camera no longer drops below the first page during the hop from lantern 1 (a black band showed under the meadow). Verified in Chromium at phone size: the launch map with all three, two swaps, the board with the chosen one, the hop to lantern 2 with the friends following, a relaunch remembering the hero, review mode with the swap.
+### Theme music (7 October, branch `claude/theme-music-dfbaeu`)
+
+The parent asked for theme music for the splash page and the map, with music for each area on the map view. Built as a written tune (DESIGN.md 3.11, "The theme"), not a file: `src/audio/theme.ts` holds the thirty-two bars, the chord cycle and the seven voices; `MusicPlayer` (`src/audio/player.ts`) gained `startTheme` and `setThemeArea`, and crosses between voices by moving weight over three seconds (`crossWeights`, pure); the map scene reports the area under its view (`onArea`, from the pure `areaUnderView` in `mapWorld.ts`, where the tenth lantern of an area still counts as that area); `syncMusic` in `app.ts` decides what plays: the theme in the view's area on the map (launch, between levels, review mode), the area's lullaby under a level and in rest. Any first touch on the page starts the sound, so the theme begins on the launch picture and flows into the map. Verified in Chromium at phone size: no sound before a touch, the theme in the Lagoon's voice at lantern 21 after a touch, a drag back into the Cave crossing to `theme-cave` (the mix moving over about three seconds), the drift home crossing back, the lullaby under the level, the theme again when the map returns. Tests in `tests/theme.test.ts` (the bars fill exactly, the scale, the loop's join, the crossing). Clips rendered offline with the real engine for the parent to hear: `music/` in the project's folder (the full theme, a walk across all seven areas, one clip per area). The debug overlay prints `music theme-<area>` while the theme plays; `window.glimmerfall.music()` and `musicMix()` read it in scripts.
 
 ## Next
 
