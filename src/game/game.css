@@ -33,22 +33,5 @@ body {
   width: 100%;
   height: 100%;
   touch-action: none;
-}
-
-/* The touch surface: a label for the hidden switch, so a real tap can tick the Taptic Engine. */
-#touch {
-  position: absolute;
-  inset: 0;
-  touch-action: none;
   -webkit-tap-highlight-color: transparent;
-}
-
-#haptic {
-  position: fixed;
-  left: -9999px;
-  top: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
 }
