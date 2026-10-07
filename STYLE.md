@@ -32,7 +32,7 @@ The seven powers get painted bodies in the same hand (comet head, prism orb, blo
 
 ## The board
 
-- Seven by nine in Play, six by nine in Calm, moved to the top of the screen just under the lantern row, so the landscape shows below the board.
+- Seven by eight in Play (the ninth row was tried on 6 October and dropped the next day: with the painted backdrops it cluttered the board), six by nine in Calm, moved to the top of the screen just under the lantern row, so the landscape shows below the board.
 - Cells stay the barely-there glass of Deep Night Garden (painted cells were tried and declined).
 - The companion beside the top lantern is drawn at about 62 px, half again the old size.
 - Behind the board: a portrait painting per area (1024 by 1536), sky at the top, quiet and dark through the middle, scenery only in the bottom fifth, smoother sky grain than the first try so it reads at phone size.

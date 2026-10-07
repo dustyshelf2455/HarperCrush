@@ -498,7 +498,8 @@ export class GameView {
     const boardX = (width - boardW) / 2;
     const spare = height - inset - hud - boardH;
     // The board sits at the top under the lantern row (art summit, DESIGN.md 2e), so the painted landscape shows beneath it.
-    const boardY = hud + Math.max(6, spare * 0.15 - 8);
+    // A third of the spare height goes above the board (parent, 7 October: the top still felt packed), the rest shows the painted landscape below.
+    const boardY = hud + Math.max(6, spare * 0.3 - 8);
     const hudY = boardY - 90;
     this.layout = { width, height, cell, boardX, boardY, hudY };
     this.canvas.width = Math.round(width * this.dpr);
