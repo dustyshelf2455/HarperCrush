@@ -115,7 +115,7 @@ Deployed as run 31, green 04:42 UTC on 7 October, on the parent's "Deploy. Terri
 - **Pictures cost** about $2.30 (one pieces sheet, one vine sheet, seven hidden pictures); about $11 of the $25 is used in all.
 - **Not built:** the hero in a bubble (no picture), the moonstone bias rise (DESIGN.md 2h), goal-specific sounds (the freed creature and the sprouting flower reuse the twinkle and chord for now).
 
-### Travel companions (7 October, branch `claude/map-companions-f60bo9`)
+### Travel companions (7 October, deployed run 35, green about 11:26 UTC)
 
 The parent saw only the fairy on the map (DESIGN.md 2i). Now the dragon and the hero travel with her: they trail her on the path at every beacon, hop after her when she wins a level, wave on landing, and sleep beside her in rest; a tap on one swaps it in as her companion (saved, shown on the board, remembered at the next launch), and a tap on the leader or the beacon resumes the level. The old offer-only-on-some-visits logic and its `companionOffered` save flag are gone (old saves still load). Also: the camera no longer drops below the first page during the hop from lantern 1 (a black band showed under the meadow). Verified in Chromium at phone size: the launch map with all three, two swaps, the board with the chosen one, the hop to lantern 2 with the friends following, a relaunch remembering the hero, review mode with the swap.
 ### Theme music (7 October, branch `claude/theme-music-dfbaeu`)
