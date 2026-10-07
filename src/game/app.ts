@@ -244,9 +244,15 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
+    // The launch picture lets go once the gems and the map's pictures are both on screen.
+    let artPending = 2;
+    const artReady = (): void => {
+      artPending -= 1;
+      if (artPending === 0) splash?.ready();
+    };
     loadGemArt((art) => {
       this.view.setGemArt(art);
-      splash?.ready();
+      artReady();
     });
     loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
@@ -260,6 +266,7 @@ export class App {
     loadMapArt((art) => {
       this.map.setArt(art);
       this.view.setCompanionArt(art.companions);
+      artReady();
     });
 
     // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
@@ -320,11 +327,14 @@ export class App {
     void this.requestWakeLock();
     if (this.phase === 'resting') {
       this.showRest();
-    } else {
-      this.phase = 'playing';
-      this.armHint();
+    } else if (this.matches >= boardFor(this.mode).goal) {
       // A save written at the moment the lantern filled: finish that level now.
-      if (this.matches >= boardFor(this.mode).goal) this.levelComplete();
+      this.phase = 'playing';
+      this.levelComplete();
+    } else if (!this.review) {
+      // The game opens on the map at her lantern (the parent, 7 October; DESIGN.md 2f); a tap on it
+      // brings back the board exactly as it was left.
+      this.openLaunchMap();
     }
     this.sessionTimer = setInterval(() => this.sessionTick(), SESSION_TICK_MS);
     this.save();
@@ -350,7 +360,8 @@ export class App {
     this.matches = 0;
     this.placeLevelGift();
     this.view.setState(this.state);
-    this.view.setGoal(0, boardFor(this.mode).goal);
+    // Between levels the board is fresh (no matches yet); at launch it is the one she left, part way through.
+    this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.applyArea();
   }
 
@@ -628,11 +639,30 @@ export class App {
     this.map.hide();
     this.phase = 'playing';
     this.view.setState(this.state);
-    this.view.setGoal(0, boardFor(this.mode).goal);
+    // Between levels the board is fresh (no matches yet); at launch it is the one she left, part way through.
+    this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.applyArea();
     this.view.start();
     this.save();
     this.armHint();
+  }
+
+  /** At launch: the map waits at her lantern, already lit, until she taps it; the board she left comes back as it was. */
+  private openLaunchMap(): void {
+    this.phase = 'map';
+    this.pending = null;
+    this.view.stop();
+    this.map.show({
+      from: this.level,
+      to: this.level,
+      companion: this.companion,
+      offerCompanions: false,
+      rest: false,
+      arrive: false,
+      onTwinkle: () => this.sounds.twinkle(),
+      onDone: () => this.leaveMap(),
+      onReplay: (n) => this.startReplay(n),
+    });
   }
 
   /** The resting scene on a relaunch while she is still "asleep". */
