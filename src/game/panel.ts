@@ -13,6 +13,7 @@
  * PanelActions and keeps the panel current with update().
  */
 import type { Settings, SettingsStore } from './settings';
+import { reviewAvailable } from './review'; // review mode (development only)
 import './panel.css';
 
 export interface PanelContext {
@@ -36,6 +37,8 @@ export interface PanelContext {
   offlineReady: boolean;
   /** A short word on the audio engine's state, for the About line. */
   audio: string;
+  /** Review mode is on (development only, review.ts). */
+  review: boolean;
 }
 
 export interface PanelActions {
@@ -46,6 +49,8 @@ export interface PanelActions {
   newSession(): void;
   setLantern(level: number): void;
   resetProgress(): void;
+  /** Review mode (development only, review.ts). */
+  setReview(on: boolean): void;
 }
 
 /** The panel closes itself after 30 seconds of inactivity (DESIGN.md 3.9). */
@@ -75,6 +80,7 @@ export class Panel {
   private readonly finishBlock: HTMLDivElement;
   private readonly lanternNumber: HTMLDivElement;
   private readonly goButton: HTMLButtonElement;
+  private reviewButton: HTMLButtonElement | null = null;
   private readonly about: HTMLDivElement;
   private readonly segs: Array<(s: Settings) => void> = [];
   private readonly closeListeners = new Set<() => void>();
@@ -119,6 +125,7 @@ export class Panel {
       this.sectionSound(),
       this.sectionFeel(),
       this.sectionDifficulty(),
+      ...(reviewAvailable() ? [this.sectionReview()] : []),
       this.sectionMap(),
       this.sectionReset(),
       this.sectionAbout(),
@@ -276,6 +283,14 @@ export class Panel {
     return s;
   }
 
+  /** Development only (review.ts): look around the whole map and open any lantern. */
+  private sectionReview(): HTMLElement {
+    const s = section('Review mode (development)');
+    this.reviewButton = button('gf-button', 'Turn on review mode', () => this.actions.setReview(!(this.ctx?.review ?? false)));
+    s.append(this.reviewButton, div('gf-note', 'Opens the whole map: drag to look around, tap any lantern to play it. Nothing is saved while it is on, so her real progress stays put. Turning it off returns to her saved game.'));
+    return s;
+  }
+
   private sectionReset(): HTMLElement {
     const s = section('Reset progress');
     s.append(button('gf-button gf-quiet', 'Reset progress', () => this.askConfirm('reset')), div('gf-note', 'Starts her journey again from the first lantern. Asks once more at the top.'));
@@ -314,6 +329,7 @@ export class Panel {
     this.lanternNumber.textContent = String(this.lanternDraft);
     this.goButton.textContent = `Go to lantern ${this.lanternDraft}`;
     this.goButton.disabled = this.lanternDraft === ctx.level;
+    if (this.reviewButton) this.reviewButton.textContent = ctx.review ? 'Turn off review mode' : 'Turn on review mode';
     this.about.textContent = `Glimmerfall · build ${ctx.buildDate} · ready offline: ${ctx.offlineReady ? 'yes' : 'no'} · sound: ${ctx.audio}`;
   }
 
