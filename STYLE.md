@@ -47,7 +47,9 @@ Beacons: every area has its own waymarker for the levels, in the area's own mate
 
 ## Stage 4 pieces
 
-Approved sheet in `art/style/choice5-play-pieces.jpg`: frost (one and two layers, with a hint of the hidden picture showing through the single layer), vine holding a gem, cloud puff, moonstone block, star-seed and its sprouted flower, bubbles holding a baby dragon or a fairy, and hidden pictures (sleeping creatures, treasures, castle windows) revealed as frost clears. All cell-fit 256 px cut-outs except the hidden pictures, which are painted at the board's size.
+Approved sheet in `art/style/choice5-play-pieces.jpg`; the production set (batch C) in `public/art/default/pieces/`: frost in one layer (`frost1.png`, slightly translucent so a hint of the picture shows) and two (`frost2.png`), the sleepy cloud puff, the moonstone block, the star-seed and the flower it sprouts into, a bubble with the baby dragon and one with the fairy asleep inside, and two vine rings (`vine-a.png`, `vine-b.png`, empty in the middle so any gem sits inside). All cell-fit 256 px cut-outs. The hidden pictures are one square painting per area (`hidden-<area>.jpg`, 768 px): the sleeping fairy on a mushroom, the treasure chest, the baby mermaid in her shell, the kitten on the castle window sill, the bunny among star flowers, the snowy owl chick, the baby dragon by the fire; each is one cute subject in the middle on a calm deep background, so it reads from a few thawed cells. Prompts beside the sheets in `art/batchC/`.
+
+How they sit on the board: frost under the gem (the picture under the frost), the vine over the gem, the items in place of a gem. The code draws every one of them first (`src/render/pieces.ts`) and the picture is stamped over it; the glow of a seed, a bubble and a moonstone, the thaw, the pop and the freed sleeper's light are code.
 
 ## The launch picture
 

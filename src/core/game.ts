@@ -73,10 +73,36 @@ export type Combo =
   | 'auroraDawn' // Aurora + Orb: the three most common colours
   | 'pair'; // any other pairing: both go off from the swap cell, one after the other
 
+/**
+ * Stage 4 pieces that are not gems (DESIGN.md 3.7). A seed falls like a gem
+ * and never matches; it leaves the board from the bottom of its column. A
+ * cloud puff and a bubble stay put and go when a match clears beside them
+ * (or a power's light passes over them). A moonstone stays put and only a
+ * power's light clears it.
+ */
+export type ItemKind = 'seed' | 'puff' | 'moonstone' | 'bubble';
+/** Who sleeps in a bubble. */
+export type Creature = 'dragon' | 'fairy' | 'hero';
+export const CREATURES: readonly Creature[] = ['dragon', 'fairy', 'hero'];
+
 export interface Piece {
-  /** null only for the colourless powers (Prism Orb, Aurora). */
+  /** null only for the colourless powers (Prism Orb, Aurora) and for items. */
   readonly type: GemType | null;
   readonly power: PowerKind | null;
+  /** A non-gem piece (Stage 4); absent for every gem and power. */
+  readonly item?: ItemKind;
+  /** A bubble's sleeper. */
+  readonly creature?: Creature;
+}
+
+/** A piece that never moves: a puff, a moonstone or a bubble. */
+export function isFixed(p: Piece | null): boolean {
+  return !!p && (p.item === 'puff' || p.item === 'moonstone' || p.item === 'bubble');
+}
+
+/** A plain gem or a coloured power: something a match can be made of. */
+export function isGem(p: Piece | null): boolean {
+  return !!p && !p.item;
 }
 
 /** board[row][col]; null is an empty cell while a resolution is in progress. */
@@ -100,6 +126,45 @@ export interface GameState {
    * a plus makes a Bloom; before 'aurora' six in a line makes an Orb.
    */
   readonly unlocked: readonly PowerFamily[];
+  /** Stage 4 (DESIGN.md 3.7): the board's shape, frost and vines; absent on a plain board. */
+  readonly terrain?: Terrain;
+  /** Stage 4: the level's picture goals and how far each has come; absent on a plain board (the lantern counts matches). */
+  readonly goals?: readonly Goal[];
+}
+
+/**
+ * The still parts of a Play board (DESIGN.md 3.7), all by [row][col]:
+ * `open` false is a missing cell (a shaped board); `frost` is the layers left
+ * on the cell (0, 1 or 2); `vine` holds the gem there in place until it is
+ * matched; `picture` marks the cells the hidden picture shows through once
+ * their frost has gone. Nothing here spreads, grows back or counts down.
+ */
+export interface Terrain {
+  readonly open: readonly (readonly boolean[])[];
+  readonly frost: readonly (readonly number[])[];
+  readonly vine: readonly (readonly boolean[])[];
+  readonly picture: readonly (readonly boolean[])[];
+}
+
+/** A level goal (DESIGN.md 3.7), shown as pictures: `done` of `total`. */
+export type Goal =
+  /** Clear every layer of frost; the hidden picture emerges. */
+  | { kind: 'uncover'; total: number; done: number }
+  /** Bring the star-seeds down to the bottom of the board. */
+  | { kind: 'seeds'; total: number; done: number }
+  /** Pop the bubbles so the creatures fly up. */
+  | { kind: 'free'; total: number; done: number }
+  /** Collect gems of one type. */
+  | { kind: 'gather'; type: GemType; total: number; done: number };
+
+export function goalsDone(goals: readonly Goal[] | undefined): boolean {
+  return !goals || goals.every((g) => g.done >= g.total);
+}
+
+/** Is (row, col) a cell of the board (inside it and not a hole)? */
+export function isOpen(state: Pick<GameState, 'rows' | 'cols' | 'terrain'>, row: number, col: number): boolean {
+  if (row < 0 || col < 0 || row >= state.rows || col >= state.cols) return false;
+  return state.terrain?.open[row]?.[col] ?? true;
 }
 
 export interface ClearGroup {
@@ -138,7 +203,15 @@ export type Step =
   /** Gems turn into powers in place (Orb + Comet, Orb + Bloom, Orb + Starburst, Orb + Moonrise); their fire steps follow. */
   | { kind: 'transform'; changes: Array<{ cell: Cell; piece: Piece }>; combo: Combo }
   | { kind: 'fall'; moves: Array<{ from: Cell; to: Cell }>; spawns: Array<{ to: Cell; piece: Piece; fromRow: number }> }
-  | { kind: 'reshuffle'; board: Board };
+  | { kind: 'reshuffle'; board: Board }
+  /** Stage 4: frost thinned on these cells by the clear just before (`left` layers remain). */
+  | { kind: 'frost'; cells: Array<{ cell: Cell; left: number }> }
+  /** Stage 4: vines released by the clear just before. */
+  | { kind: 'vine'; cells: Cell[] }
+  /** Stage 4: bubbles popped by the clear just before; each creature flies up. */
+  | { kind: 'free'; cells: Array<{ cell: Cell; creature: Creature }> }
+  /** Stage 4: seeds that reached the bottom and drifted out to sprout. */
+  | { kind: 'exit'; cells: Cell[] };
 
 export interface Resolution {
   readonly state: GameState;
@@ -166,7 +239,10 @@ function set(board: Board, cell: Cell, piece: Piece | null): void {
 }
 
 export function cloneBoard(board: Board): Board {
-  return board.map((row) => row.slice());
+  const copy = board.map((row) => row.slice());
+  const holes = holesOf.get(board);
+  if (holes) holesOf.set(copy, holes);
+  return copy;
 }
 
 export function gem(type: GemType): Piece {
@@ -182,6 +258,11 @@ function allCells(board: Board): Cell[] {
   const out: Cell[] = [];
   for (let r = 0; r < rowsOf(board); r++) for (let c = 0; c < colsOf(board); c++) out.push({ row: r, col: c });
   return out;
+}
+
+/** Cells that hold a piece (holes and cleared cells left out). */
+function occupiedCells(board: Board): Cell[] {
+  return allCells(board).filter((c) => at(board, c.row, c.col) !== null);
 }
 
 /** The board's centre, possibly between cells. */
@@ -342,6 +423,41 @@ export function newGame(rows: number, cols: number, types: readonly GemType[], s
     if (!hasAnyMatch(board, unlocked) && findValidSwaps(state).length > 0) return state;
   }
   throw new Error('could not create a board with a valid move');
+}
+
+/**
+ * Stage 4: what a Play level starts with (DESIGN.md 3.7), made by the level
+ * generator in levels.ts: the shape, frost, vines, the picture window, the
+ * items in place and the goals. `newLevel` deals the gems around it.
+ */
+export interface LevelSpec {
+  rows: number;
+  cols: number;
+  types: readonly GemType[];
+  bias: number;
+  terrain: Terrain;
+  items: Array<{ cell: Cell; piece: Piece }>;
+  goals: Goal[];
+}
+
+/** A fresh board for a level: items and vines where the spec puts them, gems dealt around them with no match and at least one move. */
+export function newLevel(spec: LevelSpec, seed: number, unlocked: readonly PowerFamily[] = BASE_UNLOCKED): GameState {
+  const rng = createRng(deriveSeed(seed, 0));
+  const { rows, cols, types, bias, terrain } = spec;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const board: Board = Array.from({ length: rows }, () => Array<Piece | null>(cols).fill(null));
+    setHoles(board, terrain.open);
+    for (const it of spec.items) set(board, it.cell, it.piece);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (isHole(board, r, c) || at(board, r, c) !== null) continue;
+        set(board, { row: r, col: c }, gem(pickNoMatch(board, r, c, types, rng, bias, unlocked)));
+      }
+    }
+    const state: GameState = { rows, cols, types, board, seed, moves: 0, bias, unlocked, terrain, goals: spec.goals.map((g) => ({ ...g })) };
+    if (!hasAnyMatch(board, unlocked) && findValidSwaps(state).length > 0) return state;
+  }
+  throw new Error('could not create a level board with a valid move');
 }
 
 /** A type for (row, col) that completes no match, biased toward setting up pairs when asked. */
@@ -657,11 +773,18 @@ function anchorFor(group: MatchGroup, swapCells: readonly Cell[]): Cell {
  * two powers always swap, and otherwise the swap must complete a line (or a
  * square, once the Sprite is unlocked) through one of the two cells.
  */
+/** Is the gem at `c` held by a vine? */
+export function vined(state: Pick<GameState, 'terrain'>, c: Cell): boolean {
+  return state.terrain?.vine[c.row]?.[c.col] ?? false;
+}
+
 export function isValidSwap(state: GameState, a: Cell, b: Cell): boolean {
   if (!adjacent(a, b)) return false;
   const pa = at(state.board, a.row, a.col);
   const pb = at(state.board, b.row, b.col);
   if (!pa || !pb) return false;
+  // Stage 4: puffs, moonstones and bubbles stay put, and a vine holds its gem in place.
+  if (isFixed(pa) || isFixed(pb) || vined(state, a) || vined(state, b)) return false;
   if (isColourless(pa.power) || isColourless(pb.power)) return true;
   if (pa.power && pb.power) return true; // two powers swapped set each other off
   if (pa.type === pb.type) return false;
@@ -720,8 +843,36 @@ export function bestHint(state: GameState): SwapOption | null {
   const midR = (state.rows - 1) / 2;
   const midC = (state.cols - 1) / 2;
   const dist = (s: SwapOption): number => Math.abs(s.a.row - midR) + Math.abs(s.a.col - midC);
-  swaps.sort((x, y) => y.strength - x.strength || dist(x) - dist(y));
+  // Stage 4: among swaps of one strength, the one nearest the level's goals (DESIGN.md 3.7).
+  const want = goalCells(state);
+  const near = (s: SwapOption): number => {
+    let n = 0;
+    for (const c of [s.a, s.b]) for (const [dr, dc] of [[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]] as const) if (want.has(key({ row: c.row + dr, col: c.col + dc }))) n++;
+    return n;
+  };
+  swaps.sort((x, y) => y.strength - x.strength || near(y) - near(x) || dist(x) - dist(y));
   return swaps[0] ?? null;
+}
+
+/**
+ * Stage 4: the cells a goal wants cleared or reached: frosted cells, the
+ * neighbours of puffs, bubbles and moonstones, the column under each seed,
+ * and gems of a gather goal's type. Empty on a plain board.
+ */
+export function goalCells(state: GameState): Set<string> {
+  const out = new Set<string>();
+  if (!state.goals) return out;
+  const t = state.terrain;
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const p = at(state.board, r, c);
+      if (t && (t.frost[r]?.[c] ?? 0) > 0) out.add(key({ row: r, col: c }));
+      if (p?.item === 'puff' || p?.item === 'bubble' || p?.item === 'moonstone') for (const n of neighbourCells(state.board, { row: r, col: c })) out.add(key(n));
+      if (p?.item === 'seed') for (let q = r + 1; q < state.rows; q++) out.add(key({ row: q, col: c }));
+      for (const g of state.goals) if (g.kind === 'gather' && g.done < g.total && p?.type === g.type && !p.item) out.add(key({ row: r, col: c }));
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- resolution
@@ -743,6 +894,10 @@ interface Ctx {
    */
   readonly pending: Map<string, { cell: Cell; kind: 'bloom' | 'giant' }>;
   nextGroup: number;
+  /** Stage 4: the terrain as it changes through the move (frost thins, vines go). */
+  readonly frost: number[][] | null;
+  readonly vine: boolean[][] | null;
+  readonly goals: Goal[] | null;
 }
 
 function makeCtx(state: GameState): Ctx {
@@ -755,13 +910,31 @@ function makeCtx(state: GameState): Ctx {
     fired: new Set(),
     pending: new Map(),
     nextGroup: 1,
+    frost: state.terrain ? state.terrain.frost.map((r) => r.slice()) : null,
+    vine: state.terrain ? state.terrain.vine.map((r) => r.slice()) : null,
+    goals: state.goals ? state.goals.map((g) => ({ ...g })) : null,
   };
+}
+
+/** Advance a goal of one kind by n (nothing if the level has no such goal). */
+function progress(ctx: Ctx, kind: Goal['kind'], n: number, type: GemType | null = null): void {
+  if (!ctx.goals || n <= 0) return;
+  for (const g of ctx.goals) {
+    if (g.kind !== kind) continue;
+    if (g.kind === 'gather' && g.type !== type) continue;
+    g.done = Math.min(g.total, g.done + n);
+  }
 }
 
 type Extra = Partial<Pick<FireStep, 'combo' | 'group'>>;
 
 /** Record a firing and put its cells into the round. Marking the firing piece as fired is the caller's job. */
 function emit(ctx: Ctx, step: FireStep): void {
+  // Light passes over holes and empty cells, and a seed is never cleared: it is the thing to bring down.
+  step.cells = step.cells.filter((c) => {
+    const p = at(ctx.board, c.row, c.col);
+    return p !== null && p.item !== 'seed';
+  });
   ctx.steps.push(step);
   for (const c of step.cells) ctx.round.set(key(c), c);
 }
@@ -853,9 +1026,30 @@ function fireBloom(ctx: Ctx, cell: Cell, piece: Piece, extra: Extra = {}): void 
  */
 function fireSprite(ctx: Ctx, cell: Cell, piece: Piece, extra: Extra = {}): void {
   ctx.round.set(key(cell), cell);
-  const target = chooseTarget(ctx, (c) => [c, ...neighbourCells(ctx.board, c)]);
+  const target = usefulItem(ctx) ?? chooseTarget(ctx, (c) => [c, ...neighbourCells(ctx.board, c)]);
   const cells = target ? unique([cell, target, ...neighbourCells(ctx.board, target)]) : [cell];
   emit(ctx, { kind: 'fire', power: 'sprite', at: cell, cells, color: piece.type, ...(target ? { target } : {}), ...extra });
+}
+
+/**
+ * Stage 4: the most useful goal piece for a sprite to pop (DESIGN.md 3.7): a
+ * moonstone first (only light clears them), then a bubble, then a cloud puff,
+ * then a cell still under two layers of frost; nearest the bottom centre among
+ * equals. Null on a board with none of them.
+ */
+function usefulItem(ctx: Ctx): Cell | null {
+  const { board, state } = ctx;
+  const free = (c: Cell): boolean => !ctx.round.has(key(c));
+  for (const item of ['moonstone', 'bubble', 'puff'] as const) {
+    const cells = occupiedCells(board).filter((c) => at(board, c.row, c.col)?.item === item && free(c));
+    if (cells.length > 0) return nearestBottomCentre(board, cells);
+  }
+  if (state.terrain) {
+    const frost = state.terrain.frost;
+    const thick = occupiedCells(board).filter((c) => (frost[c.row]?.[c.col] ?? 0) >= 2 && free(c) && isGem(at(board, c.row, c.col)));
+    if (thick.length > 0) return nearestBottomCentre(board, thick);
+  }
+  return null;
 }
 
 /**
@@ -882,7 +1076,7 @@ function chooseTarget(ctx: Ctx, removalFor: (c: Cell) => Cell[]): Cell | null {
   const { board } = ctx;
   const candidates = allCells(board).filter((c) => {
     const p = at(board, c.row, c.col);
-    return p !== null && p.power === null && !ctx.round.has(key(c));
+    return p !== null && p.power === null && isGem(p) && !ctx.round.has(key(c));
   });
   if (candidates.length === 0) return null;
   const base = [...ctx.round.values()];
@@ -910,7 +1104,7 @@ function commonGemTarget(ctx: Ctx): { target: Cell; colour: GemType } | null {
   if (!colour) return null;
   const candidates = allCells(board).filter((c) => {
     const p = at(board, c.row, c.col);
-    return p !== null && p.power === null && p.type === colour && !ctx.round.has(key(c));
+    return p !== null && p.power === null && isGem(p) && p.type === colour && !ctx.round.has(key(c));
   });
   const target = nearestBottomCentre(board, candidates);
   return target ? { target, colour } : null;
@@ -1116,6 +1310,13 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
       for (const c of g.cells) round.set(key(c), c);
       const power = powerFor(g, state.unlocked);
       if (power) creations.push({ cells: g.cells, anchor: anchorFor(g, cascade === 0 ? swapCells : []), piece: pieceFor(power, g.type) });
+      // Stage 4: a match beside a cloud puff or a bubble clears it too (DESIGN.md 3.7).
+      for (const c of g.cells) {
+        for (const n of neighbourCells(board, c)) {
+          const p = at(board, n.row, n.col);
+          if (p && (p.item === 'puff' || p.item === 'bubble')) round.set(key(n), n);
+        }
+      }
     }
 
     // Chain: any power whose cell is in the round and has not gone off yet goes off, until stable.
@@ -1146,7 +1347,33 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
     const clearGroups: ClearGroup[] = groups.map((g) => ({ cells: g.cells.filter((c) => round.has(key(c))), type: g.type }));
     steps.push({ kind: 'clear', cascade, groups: clearGroups.length > 0 ? clearGroups : [{ cells, type: null }], cells });
     cleared += cells.length;
+    // Stage 4: what the clear does to the still parts of the board and to the goals.
+    const freed: Array<{ cell: Cell; creature: Creature }> = [];
+    const thinned: Array<{ cell: Cell; left: number }> = [];
+    const released: Cell[] = [];
+    for (const c of cells) {
+      const p = at(board, c.row, c.col);
+      if (p?.item === 'bubble') freed.push({ cell: c, creature: p.creature ?? 'fairy' });
+      if (p && isGem(p) && p.type) progress(ctx, 'gather', 1, p.type);
+      if (ctx.frost && (ctx.frost[c.row]?.[c.col] ?? 0) > 0) {
+        const left = (ctx.frost[c.row] as number[])[c.col] = ((ctx.frost[c.row] as number[])[c.col] as number) - 1;
+        thinned.push({ cell: c, left });
+      }
+      if (ctx.vine?.[c.row]?.[c.col]) {
+        (ctx.vine[c.row] as boolean[])[c.col] = false;
+        released.push(c);
+      }
+    }
     for (const c of cells) set(board, c, null);
+    if (freed.length > 0) {
+      steps.push({ kind: 'free', cells: freed });
+      progress(ctx, 'free', freed.length);
+    }
+    if (thinned.length > 0) {
+      steps.push({ kind: 'frost', cells: thinned });
+      progress(ctx, 'uncover', thinned.length);
+    }
+    if (released.length > 0) steps.push({ kind: 'vine', cells: released });
     for (const cr of creations) {
       let cell: Cell | null = cr.anchor;
       if (at(board, cell.row, cell.col) !== null) {
@@ -1160,7 +1387,7 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
     round.clear();
     fired.clear();
 
-    const dropped = fall(board, state.types, ctx.rng, state.bias, state.unlocked);
+    const dropped = fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine);
     steps.push(dropped);
     // Surviving buds ride the fall: follow each to the cell it landed in.
     if (pending.size > 0) {
@@ -1172,6 +1399,14 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
         pending.set(key(cell), { cell, kind: bud.kind });
       }
     }
+    // Stage 4: a seed that reached the bottom of its column drifts out, and the column fills behind it.
+    const exits = seedExits(board);
+    if (exits.length > 0) {
+      for (const c of exits) set(board, c, null);
+      steps.push({ kind: 'exit', cells: exits });
+      progress(ctx, 'seeds', exits.length);
+      steps.push(fall(board, state.types, ctx.rng, state.bias, state.unlocked, ctx.vine));
+    }
     cascade++;
     roundStart = steps.length;
   }
@@ -1181,6 +1416,8 @@ function runRounds(ctx: Ctx, swapCells: readonly Cell[]): { cleared: number; cas
 /** Close a resolution: advance the move count and reshuffle if the board has no move left (DESIGN.md 3.3, dead ends). */
 function finish(ctx: Ctx, result: { cleared: number; cascades: number }): Resolution {
   let next: GameState = { ...ctx.state, board: ctx.board, moves: ctx.state.moves + 1 };
+  if (ctx.state.terrain && ctx.frost && ctx.vine) next = { ...next, terrain: { ...ctx.state.terrain, frost: ctx.frost, vine: ctx.vine } };
+  if (ctx.goals) next = { ...next, goals: ctx.goals };
   if (findValidSwaps(next).length === 0) {
     const shuffled = reshuffleBoard(next, ctx.rng);
     if (shuffled) {
@@ -1233,13 +1470,37 @@ export function firePowerAt(state: GameState, cell: Cell): Resolution {
 
 // --------------------------------------------------------------------- falls
 
-/** Gravity only, in place: every piece drops to the lowest empty cell below it. */
-function settle(board: Board): Array<{ from: Cell; to: Cell }> {
+/**
+ * Holes on a shaped board are kept as a module-level side table keyed by the
+ * board object, so the pure helpers that only see a Board (settle, the
+ * patterns) can still tell a hole from an empty cell. A board without an
+ * entry has no holes.
+ */
+const holesOf = new WeakMap<Board, ReadonlySet<string>>();
+
+/** Mark the holes of a board (and of boards cloned from it later by `cloneBoard`). */
+function setHoles(board: Board, open: Terrain['open'] | undefined): void {
+  if (!open) return;
+  const holes = new Set<string>();
+  open.forEach((row, r) => row.forEach((v, c) => { if (!v) holes.add(key({ row: r, col: c })); }));
+  if (holes.size > 0) holesOf.set(board, holes);
+}
+
+function isHole(board: Board, row: number, col: number): boolean {
+  return holesOf.get(board)?.has(key({ row, col })) ?? false;
+}
+
+/** Gravity only, in place: every piece drops to the lowest empty cell below it. A hole, a fixed piece or a vined gem is a floor. */
+function settle(board: Board, vine: readonly (readonly boolean[])[] | null = null): Array<{ from: Cell; to: Cell }> {
   const moves: Array<{ from: Cell; to: Cell }> = [];
   for (let c = 0; c < colsOf(board); c++) {
     let write = rowsOf(board) - 1;
     for (let r = rowsOf(board) - 1; r >= 0; r--) {
       const p = at(board, r, c);
+      if (isHole(board, r, c) || isFixed(p) || (p && vine?.[r]?.[c])) {
+        write = r - 1;
+        continue;
+      }
       if (!p) continue;
       if (write !== r) {
         set(board, { row: write, col: c }, p);
@@ -1252,19 +1513,47 @@ function settle(board: Board): Array<{ from: Cell; to: Cell }> {
   return moves;
 }
 
+/** Seeds sitting at the bottom of their column (nothing but holes beneath them): they leave the board. */
+function seedExits(board: Board): Cell[] {
+  const out: Cell[] = [];
+  for (let c = 0; c < colsOf(board); c++) {
+    for (let r = 0; r < rowsOf(board); r++) {
+      if (at(board, r, c)?.item !== 'seed') continue;
+      let floor = true;
+      for (let q = r + 1; q < rowsOf(board); q++) if (!isHole(board, q, c)) floor = false;
+      if (floor) out.push({ row: r, col: c });
+    }
+  }
+  return out;
+}
+
 type FallStep = Extract<Step, { kind: 'fall' }>;
 
 /** Gravity and refill, in place. Survivors settle first; refills see the whole final layout. */
-function fall(board: Board, types: readonly GemType[], rng: Rng, bias: number, unlocked: readonly PowerFamily[]): FallStep {
-  const moves = settle(board);
+function fall(board: Board, types: readonly GemType[], rng: Rng, bias: number, unlocked: readonly PowerFamily[], vine: readonly (readonly boolean[])[] | null = null): FallStep {
+  const moves = settle(board, vine);
   const spawns: Array<{ to: Cell; piece: Piece; fromRow: number }> = [];
   for (let c = 0; c < colsOf(board); c++) {
-    let n = 0;
-    while (n < rowsOf(board) && at(board, n, c) === null) n++;
-    for (let r = n - 1; r >= 0; r--) {
-      const piece = gem(pickRefill(board, r, c, types, rng, bias, unlocked));
-      set(board, { row: r, col: c }, piece);
-      spawns.push({ to: { row: r, col: c }, piece, fromRow: r - n });
+    // Each run of cells between floors (holes, fixed pieces, vined gems) fills from its own top: a gem under a cloud drops out of the cloud.
+    let r = 0;
+    while (r < rowsOf(board)) {
+      if (isHole(board, r, c) || isFixed(at(board, r, c)) || (at(board, r, c) && vine?.[r]?.[c])) {
+        r++;
+        continue;
+      }
+      const top = r;
+      let n = 0;
+      while (r < rowsOf(board) && at(board, r, c) === null && !isHole(board, r, c)) {
+        n++;
+        r++;
+      }
+      for (let q = top + n - 1; q >= top; q--) {
+        const piece = gem(pickRefill(board, q, c, types, rng, bias, unlocked));
+        set(board, { row: q, col: c }, piece);
+        spawns.push({ to: { row: q, col: c }, piece, fromRow: q - n });
+      }
+      // Skip the settled pieces of this run.
+      while (r < rowsOf(board) && at(board, r, c) !== null && !isFixed(at(board, r, c)) && !vine?.[r]?.[c] && !isHole(board, r, c)) r++;
     }
   }
   return { kind: 'fall', moves, spawns };
@@ -1301,8 +1590,13 @@ function pickRefill(board: Board, row: number, col: number, types: readonly GemT
  * match there, so even a four-type board nearly always settles first time.
  */
 export function reshuffleBoard(state: GameState, rng: Rng): Board | null {
-  const pieces: Piece[] = [];
-  for (const row of state.board) for (const p of row) if (p) pieces.push(p);
+  // Stage 4: items, vined gems and holes stay where they are; only the loose gems and powers are dealt again.
+  const loose = (c: Cell): boolean => {
+    const p = at(state.board, c.row, c.col);
+    return p !== null && !p.item && !vined(state, c);
+  };
+  const slots = allCells(state.board).filter(loose);
+  const pieces: Piece[] = slots.map((c) => at(state.board, c.row, c.col) as Piece);
   for (let attempt = 0; attempt < 200; attempt++) {
     const bag = pieces.slice();
     for (let i = bag.length - 1; i > 0; i--) {
@@ -1311,23 +1605,21 @@ export function reshuffleBoard(state: GameState, rng: Rng): Board | null {
       bag[i] = bag[j] as Piece;
       bag[j] = t;
     }
-    const board: Board = Array.from({ length: state.rows }, () => Array<Piece | null>(state.cols).fill(null));
+    const board = cloneBoard(state.board);
+    for (const cell of slots) set(board, cell, null);
     let dealt = true;
-    for (let r = 0; r < state.rows && dealt; r++) {
-      for (let c = 0; c < state.cols && dealt; c++) {
-        const cell = { row: r, col: c };
-        let found = -1;
-        for (let i = 0; i < bag.length && found < 0; i++) {
-          set(board, cell, bag[i] as Piece);
-          if (!matchAt(board, r, c, state.unlocked)) found = i;
-        }
-        if (found < 0) {
-          dealt = false;
-          break;
-        }
-        set(board, cell, bag[found] as Piece);
-        bag.splice(found, 1);
+    for (const cell of slots) {
+      let found = -1;
+      for (let i = 0; i < bag.length && found < 0; i++) {
+        set(board, cell, bag[i] as Piece);
+        if (!matchAt(board, cell.row, cell.col, state.unlocked)) found = i;
       }
+      if (found < 0) {
+        dealt = false;
+        break;
+      }
+      set(board, cell, bag[found] as Piece);
+      bag.splice(found, 1);
     }
     if (!dealt) continue;
     const candidate = { ...state, board };
@@ -1380,12 +1672,13 @@ function giftPiece(family: PowerFamily, type: GemType, rng: Rng): Piece {
  */
 export function placeGift(state: GameState, gift: Gift, rng: Rng): { state: GameState; cells: Cell[] } {
   const centre = centreOf(state.board);
-  const occupied = allCells(state.board).filter((c) => at(state.board, c.row, c.col) !== null);
+  // Stage 4: a gift sits on a loose gem, never on an item or a vined gem.
+  const occupied = allCells(state.board).filter((c) => isGem(at(state.board, c.row, c.col)) && !vined(state, c));
   const byCentre = (cells: readonly Cell[]): Cell[] => cells.slice().sort((p, q) => manhattan(p, centre) - manhattan(q, centre) || p.row - q.row || p.col - q.col);
 
   if (gift.kind === 'combo') {
     for (const c1 of byCentre(occupied)) {
-      const c2 = nearest(neighbourCells(state.board, c1).filter((c) => at(state.board, c.row, c.col) !== null), centre);
+      const c2 = nearest(neighbourCells(state.board, c1).filter((c) => isGem(at(state.board, c.row, c.col)) && !vined(state, c)), centre);
       if (!c2) continue;
       const board = cloneBoard(state.board);
       set(board, c1, giftPiece(gift.a, (at(board, c1.row, c1.col) as Piece).type as GemType, rng));
@@ -1427,7 +1720,7 @@ export function placeGift(state: GameState, gift: Gift, rng: Rng): { state: Game
   }
   for (const pre of byCentre(candidates.map((c) => c.pre))) {
     const piece = at(state.board, pre.row, pre.col) as Piece;
-    if (!piece.type) continue;
+    if (!piece.type || piece.item || vined(state, pre)) continue;
     const board = cloneBoard(state.board);
     set(board, pre, giftPiece(gift.family, piece.type, rng));
     const next = { ...state, board };
@@ -1446,6 +1739,7 @@ export function deserialize(json: string): GameState | null {
   try {
     const s = JSON.parse(json) as GameState;
     if (!s || !Array.isArray(s.board) || typeof s.rows !== 'number' || typeof s.cols !== 'number') return null;
+    setHoles(s.board, s.terrain?.open);
     // Saves from before unlocks existed carry the two starting powers.
     if (!Array.isArray(s.unlocked)) return { ...s, unlocked: BASE_UNLOCKED };
     return s;
