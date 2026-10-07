@@ -1,35 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
   SPLASH_FADE_MS,
-  SPLASH_MAX_MS,
-  SPLASH_MIN_MS,
+  SPLASH_OPEN_MS,
   SPLASH_TAP_AFTER_MS,
+  doorHit,
+  placeDoor,
   placePicture,
   splashAlpha,
   splashDone,
   splashFadeStart,
+  splashOpening,
 } from '../src/game/splashTiming';
 
 describe('splash timing', () => {
-  it('holds for the minimum even when the pictures are ready at once', () => {
-    expect(splashFadeStart({ readyAt: 50, tappedAt: null })).toBe(SPLASH_MIN_MS);
-    expect(splashAlpha(SPLASH_MIN_MS - 1, { readyAt: 50, tappedAt: null })).toBe(1);
+  it('waits for the door however long it takes', () => {
+    const waiting = { openedAt: null };
+    expect(splashFadeStart(waiting)).toBeNull();
+    expect(splashAlpha(60_000, waiting)).toBe(1);
+    expect(splashDone(60_000, waiting)).toBe(false);
+    expect(splashOpening(60_000, waiting)).toBe(0);
   });
 
-  it('waits for the pictures, but never past the maximum', () => {
-    expect(splashFadeStart({ readyAt: 3000, tappedAt: null })).toBe(3000);
-    expect(splashFadeStart({ readyAt: null, tappedAt: null })).toBe(SPLASH_MAX_MS);
-    expect(splashFadeStart({ readyAt: 9000, tappedAt: null })).toBe(SPLASH_MAX_MS);
+  it('counts a tap in the first moment from the first moment, so the picture is always seen', () => {
+    expect(splashFadeStart({ openedAt: 100 })).toBe(SPLASH_TAP_AFTER_MS + SPLASH_OPEN_MS);
+    expect(splashFadeStart({ openedAt: 3000 })).toBe(3000 + SPLASH_OPEN_MS);
   });
 
-  it('lets a tap bring the fade forward, but not a touch in the first moment', () => {
-    expect(splashFadeStart({ readyAt: null, tappedAt: 1500 })).toBe(1500);
-    expect(splashFadeStart({ readyAt: null, tappedAt: 100 })).toBe(SPLASH_TAP_AFTER_MS);
-  });
-
-  it('fades smoothly from 1 to 0 and is then done', () => {
-    const times = { readyAt: 100, tappedAt: null };
-    const start = splashFadeStart(times);
+  it('swells the door light, then fades smoothly from 1 to 0 and is done', () => {
+    const times = { openedAt: 3000 };
+    expect(splashOpening(3000, times)).toBe(0);
+    expect(splashOpening(3000 + SPLASH_OPEN_MS, times)).toBe(1);
+    const start = splashFadeStart(times)!;
     expect(splashAlpha(start, times)).toBe(1);
     const mid = splashAlpha(start + SPLASH_FADE_MS / 2, times);
     expect(mid).toBeGreaterThan(0.4);
@@ -56,5 +57,17 @@ describe('splash picture placement', () => {
     expect(p.width).toBeCloseTo(768, 5);
     expect(p.height).toBeCloseTo(1152, 5);
     expect(p.y).toBeCloseTo(-64, 5);
+  });
+});
+
+describe('the fairy door', () => {
+  it('stands at the bottom centre, above the home indicator, and is tapped with a margin', () => {
+    const d = placeDoor(402, 874);
+    expect(d.x + d.width / 2).toBeCloseTo(201, 5);
+    expect(d.y + d.height).toBeLessThan(874 - 34);
+    expect(d.y + d.height).toBeGreaterThan(874 * 0.9);
+    expect(doorHit(d, 201, d.y + d.height / 2)).toBe(true);
+    expect(doorHit(d, d.x - 10, d.y)).toBe(true);
+    expect(doorHit(d, 201, 100)).toBe(false);
   });
 });

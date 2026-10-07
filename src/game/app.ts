@@ -224,8 +224,17 @@ export class App {
     }
     this.state = loaded ?? this.freshState(this.level, this.mode);
     if (!loaded) this.placeLevelGift();
-    // The launch picture goes up before the board is built, so it is the first frame she sees.
-    const splash = opts.splash ? new Splash(this.reducedMotion(settings), this.companion) : null;
+    // The launch picture goes up before the board is built, so it is the first frame she sees. Her tap
+    // on the fairy door is the first touch of the launch, so sound unlocks there (DESIGN.md 2f).
+    if (opts.splash) {
+      new Splash(this.reducedMotion(settings), this.companion, {
+        onEnter: () => this.doorOpened(),
+        onTwinkle: () => {
+          this.unlockAudio();
+          this.sounds.twinkle();
+        },
+      });
+    }
 
     this.view = new GameView(
       canvas,
@@ -244,16 +253,7 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
-    // The launch picture lets go once the gems and the map's pictures are both on screen.
-    let artPending = 2;
-    const artReady = (): void => {
-      artPending -= 1;
-      if (artPending === 0) splash?.ready();
-    };
-    loadGemArt((art) => {
-      this.view.setGemArt(art);
-      artReady();
-    });
+    loadGemArt((art) => this.view.setGemArt(art));
     loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);
@@ -266,7 +266,6 @@ export class App {
     loadMapArt((art) => {
       this.map.setArt(art);
       this.view.setCompanionArt(art.companions);
-      artReady();
     });
 
     // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
@@ -645,6 +644,15 @@ export class App {
     this.view.start();
     this.save();
     this.armHint();
+  }
+
+  /**
+   * She opened the fairy door on the launch picture: the moment the game begins. The first touch of
+   * the launch, so this is where sound may start (a warm chord now; the theme music hooks in here).
+   */
+  private doorOpened(): void {
+    this.unlockAudio();
+    this.sounds.lanternLit();
   }
 
   /** At launch: the map waits at her lantern, already lit, until she taps it; the board she left comes back as it was. */
