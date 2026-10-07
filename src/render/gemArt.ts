@@ -5,15 +5,16 @@
  * never does, the code-drawn gem is shown, so the game never waits on a file.
  */
 import { GEM_TYPES, type GemType } from '../core/grid';
+import { artUrl } from './artPath';
 
 export type GemArt = Partial<Record<GemType, HTMLImageElement>>;
 
 /**
  * How wide the picture is drawn relative to the gem's radius. The painted
  * body fills about 183 of the picture's 256 pixels; the rest is its glow.
- * 2.8 radii makes the body about the size of the code-drawn gem.
+ * 3.1 radii makes the body a tenth bigger than the code-drawn gem (art summit, DESIGN.md 2e).
  */
-export const GEM_ART_SCALE = 2.8;
+export const GEM_ART_SCALE = 3.1;
 
 /** Loads every gem picture that exists and calls back once with all that loaded. */
 export function loadGemArt(onReady: (art: GemArt) => void): void {
@@ -31,6 +32,6 @@ export function loadGemArt(onReady: (art: GemArt) => void): void {
       done();
     };
     img.onerror = done;
-    img.src = new URL(`art/gems/${type}.png`, document.baseURI).href;
+    img.src = artUrl(`gems/${type}.png`);
   }
 }

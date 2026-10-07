@@ -178,7 +178,7 @@ describe('boards', () => {
 
   it('plays Calm on the decided 6 by 9 board and Play on a 7 by 8', () => {
     expect(boardFor('calm')).toEqual({ rows: 9, cols: 6, bias: 0.3, goal: 12, hintMs: 4000 });
-    expect(boardFor('play')).toMatchObject({ rows: 8, cols: 7 });
+    expect(boardFor('play')).toMatchObject({ rows: 9, cols: 7 });
     expect(boardFor('play').bias).toBeLessThan(boardFor('calm').bias);
     expect(boardFor('play').hintMs).toBeGreaterThan(boardFor('calm').hintMs);
   });

@@ -44,6 +44,7 @@ import {
 import { createRng, deriveSeed } from '../shared/rng';
 import { areaTheme } from '../render/areas';
 import { loadGemArt } from '../render/gemArt';
+import { loadPowerArt } from '../render/powerArt';
 import { loadMapArt } from '../render/mapArt';
 import type { CompanionId } from '../render/creatures';
 import { nightGarden } from '../render/styles/nightGarden';
@@ -238,6 +239,7 @@ export class App {
     );
     this.view.setBreathing(settings.breathingGlow);
     loadGemArt((art) => this.view.setGemArt(art));
+    loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);
     this.sounds.enabled = settings.chimes;
@@ -248,7 +250,7 @@ export class App {
     this.map = new MapScene(createMapCanvas(), nightGarden);
     loadMapArt((art) => {
       this.map.setArt(art);
-      this.view.setCompanionArt(art.firefly ?? null);
+      this.view.setCompanionArt(art.companions);
     });
 
     // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
