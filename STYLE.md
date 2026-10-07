@@ -49,6 +49,10 @@ Beacons: every area has its own waymarker for the levels, in the area's own mate
 
 Approved sheet in `art/style/choice5-play-pieces.jpg`: frost (one and two layers, with a hint of the hidden picture showing through the single layer), vine holding a gem, cloud puff, moonstone block, star-seed and its sprouted flower, bubbles holding a baby dragon or a fairy, and hidden pictures (sleeping creatures, treasures, castle windows) revealed as frost clears. All cell-fit 256 px cut-outs except the hidden pictures, which are painted at the board's size.
 
+## The launch picture
+
+`splash.jpg` in the theme folder (1024 by 1536, prompt in `art/batchA/splash-prompt.txt`): the name Glimmerfall painted in glowing storybook letters in the upper third, the fairy below it scattering jewels that drift down, a quiet meadow at the bottom, everything important inside the central sixty percent of the width. The code sky above it on tall phones starts from the painting's own top colour (`#192546`), so the join is invisible; the stars, the drifting glimmers and the fade are code (DESIGN.md 2f, `src/game/splash.ts`).
+
 ## Files, sizes, themes
 
 - Pictures live under `public/art/<theme>/...` with the same file names in every theme; `default` is this guide's set. A later reskin (a superhero night, a birthday) is a second folder picked from the grown-up panel; motion, sound and the powers' light are shared.

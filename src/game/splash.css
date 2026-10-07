@@ -1,0 +1,22 @@
+/*
+ * The launch picture (DESIGN.md 2f): a full-bleed canvas over everything,
+ * Dynamic Island included (the painted sky runs under it), shown from the
+ * first frame and removed once its fade has run. While it fades it lets
+ * touches through, so a swipe during the fade already moves a gem.
+ */
+.splash {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.splash.is-fading {
+  pointer-events: none;
+}

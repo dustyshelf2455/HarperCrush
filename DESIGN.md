@@ -99,7 +99,17 @@ Settled with the parent as five picture choices, one at a time (samples and prom
 - **Reskins later**: each theme is a folder of same-named pictures chosen from the panel, so a superhero or birthday version is pictures only.
 - **The rule that protects the feel**: pictures are the body, code is the light (STYLE.md). Glows, auras, pulses and the win shimmer stay code-drawn on top; every picture sits on the code-drawn anchor; the code-drawn piece stays as the fallback.
 
-## 2f. The map rebuilt (7 October 2026)
+## 2f. The launch picture (7 October 2026)
+
+The parent asked for a splash screen on game load. Decided and built as the Stage 6 "launch picture", so it is not planned twice:
+
+- **What she sees:** the moment the icon is tapped, a painted night sky with the name Glimmerfall in glowing storybook letters, the fairy scattering jewels that drift down like gentle falling stars, and the meadow glowing below. Code draws the light over it: twinkling stars and slow glimmers in the gem colours drifting down. No tap is asked for, nothing moves fast, and there is nothing to read but the name.
+- **How it goes:** it stays while the game's pictures load, always long enough to be seen as a picture (about two and a half seconds), never longer than about five, then fades into the board or the map over a second on its own. A tap after the first moment lets it go a little sooner; a swipe during the fade already moves a gem. `?splash=0` skips it (screenshots and tests).
+- **The game opens on the map, not on the board** (the parent, 7 October: "load to map, last level if applicable"). After the splash, the map waits at her lantern, already lit and breathing the invitation, with her companion on it; there is no hop and no bloom, since she has not just won anything. A tap on the lantern or her companion brings back the board exactly as she left it, part way through if it was; lit lanterns behind her replay as before; anywhere else twinkles. The resting scene still comes first while she is "asleep", and a level saved at the moment its lantern filled still finishes first.
+- **Pictures are the body, code is the light:** a code-drawn version (sky, stars, the fairy, the name in plain letters) shows for the first instant and stays if the picture never loads. On a tall phone the painting stands on the bottom edge a little wider than the screen, so the title is never cut, and the code sky carries on above it through a feathered edge; on a squarer screen it covers. The picture is `splash.jpg` in the theme folder, so a reskin can have its own. The app icon is separate and still to do.
+
+
+## 2g. The map rebuilt (7 October 2026)
 
 The parent's brief for the map, given during his review of batch A: the path must feel integrated into each landscape; scrolling the map should be engaging, comforting and delightful in its own right, even when a toddler flips through it fast; the level markers must be clearly defined and in the map's style, not necessarily lanterns, unique per area if they are called out the same way; fix the scrolling bugs (it scrolled on for ever) and make the area transitions gentle. Built as batch B:
 
@@ -107,9 +117,10 @@ The parent's brief for the map, given during his review of batch A: the path mus
 - **Beacons, one design per area**, all of them a slender post with one round glass lamp on top, so Harper reads them the same way everywhere: a vine-wound post in the Meadow, a crystal pillar in the Cave, a coral post with a starfish in the Lagoon, a pale castle lamp, a flower stalk in the Garden, an ice column on the Peak, a dragon-scaled trunk in the Hollow. Lit behind her, dark ahead, with the warm halo and the pool of light still drawn by the code.
 - **Scrolling** follows the finger exactly while it is down, gives a little past both ends and springs back, and a flick carries on at a capped speed (about a screen and a half a second at most) that eases out, so a fast flip stays calm and tactile instead of racing away. After a couple of seconds without a touch the view drifts home to her beacon, which sits a little below the middle of the screen so the path ahead shows. The map no longer scrolls into nothing: it stops at the first page's bottom edge, and in review mode at the top of the last area.
 - **Area transitions** are the pages themselves: the last page of one area meets the first of the next at a feathered seam, and the area's tint and music change as her beacon crosses, so the walk from the Meadow into the Cave is a soft band of ground rather than a fade.
-- **Open on the map after the splash** (decided in the splash thread the same night): the map is now the first thing seen after launch, framed on her current beacon, so this framing is the most seen view in the app.
+- **Open on the map after the splash** (decided in the splash thread the same night, 2f): the map is now the first thing seen after launch, framed on her current beacon, so this framing is the most seen view in the app.
 
 
+---
 ---
 
 ## 3. The game

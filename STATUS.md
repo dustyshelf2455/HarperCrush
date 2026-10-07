@@ -1,6 +1,6 @@
 # Status
 
-Updated 7 October 2026, after batch B (the storybook map). Decisions in DESIGN.md 2e and 2f; the parent's walkthrough notes in the project's `playtest/` folder.
+Updated 7 October 2026, after batch B (the storybook map). Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
 
 ## After the play-test (5 October)
 
@@ -69,7 +69,7 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch A, the board:** painted gems with the soft glow, the seven power bodies, the three new companions (awake and asleep), the board backdrops, the board at the top with the ninth row, the theme folder. About $1 to $2.
 - **Stage 4 with Batch C:** Play levels as designed in 3.7, built with the approved painted pieces. About $1 to $3 of pictures.
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
-- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon, launch picture, panel art), then the full-draft deploy for the parent to play end to end.
+- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon and panel art; the launch picture is done, see below), then the full-draft deploy for the parent to play end to end.
 
 Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about $9 of the $25 the parent added on 6 October (backdrop repaints, the painted specials, batch B).
 
@@ -97,6 +97,10 @@ On the branch, checked, awaiting the parent's "Deploy?". Screenshots of every ar
 - **Verified in Chromium at phone size:** the hop and lighting in all seven areas, the Meadow to Cave and Hollow to Meadow crossings (the pages join with a soft band), drag back and drift home, a fling that settles, the first page's bottom edge as the floor of the map.
 - **Pictures cost** about $6 of credit for batch B (21 pages and 7 beacon sheets); about $9 of the $25 added on 6 October is used in all (estimate from request counts, check platform.openai.com for the exact figure).
 - **Open:** the splash thread's "open on the map at the last level" lands on main first or second; after both are in, check once that the map's first frame after launch is centred on her beacon with the path ahead showing. If the parent finds any beacon off the path, the fix is its page's points in `mapSections.ts`.
+
+### Launch picture (7 October, branch `claude/splash-screen-naepdv`)
+
+The parent asked for a splash screen on load; it is the Stage 6 "launch picture" from Batch D, done early (DESIGN.md 2f). `src/game/splash.ts` puts a full-bleed canvas over everything from the first frame: a code-drawn night (sky, stars, the fairy, the name in plain letters) with the painting `public/art/default/splash.jpg` stamped over it, the glimmers and stars drawn in code on top, then a fade into the game on its own (timing and placement in `splashTiming.ts`, tested). No tap is needed; a tap after the first moment lets it go sooner. Screenshots and tests use `?splash=0` to skip it (Playwright scripts that shoot the board straight after load need this now). The parent then asked for the game to open on the map rather than straight onto a level: after the splash the map waits at her lantern (lit, no hop, the invitation breathing) and a tap on it brings back the board she left, matches and all (`openLaunchMap` in `app.ts`, the map's `arrive: false`). Verified in Chromium: splash to map, tap to board, two swaps, relaunch to map, tap to the same board at 4 of 16. Playwright scripts that need the board straight after load now call `window.glimmerfall.continueMap()` in debug mode, or tap the lantern. One generation, about 20 cents; prompt and a small copy in the project's `art/batchA/`. Batch D still owes the app icon and the panel art.
 
 ## Next
 

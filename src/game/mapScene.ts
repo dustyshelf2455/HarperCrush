@@ -55,6 +55,11 @@ export interface MapShowOptions {
   onReplay?(level: number): void;
   /** Review mode (development only, see review.ts): every lantern is lit and tappable, the map can be dragged. */
   review?: { onOpen(level: number): void };
+  /**
+   * False at launch (DESIGN.md 2f): she is already at `to`, so there is no hop and no bloom; the map
+   * simply waits with her lantern lit, breathing the invitation to tap it, lit lanterns behind her replayable.
+   */
+  arrive?: boolean;
 }
 
 // Timings from DESIGN.md 3.5 and the Stage 3 brief.
@@ -236,8 +241,8 @@ export class MapScene {
     this.panTarget = null;
     this.fling = 0;
     this.sinceTouch = 0;
-    if (opts.review) {
-      // Review mode (review.ts): no hop and no waiting, the whole map is simply there.
+    if (opts.review || (opts.arrive === false && !opts.rest)) {
+      // Review mode (review.ts), or the launch: no hop and no bloom, the map is simply there with her lantern lit.
       this.phase = 'linger';
       this.litTo = true;
     }
