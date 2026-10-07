@@ -580,10 +580,10 @@ export class GameView {
         sy += c.row;
       }
       const centre = this.centre(sx / g.cells.length, sy / g.cells.length);
-      const color = g.type ? this.style.gemColor(g.type).light : '#fff2c8';
+      const color = g.type ? this.style.gemColor(g.type).glow : '#ffd98a';
       const big = g.cells.length >= 4 || step.cascade > 0;
       this.rings.push({ x: centre.x, y: centre.y, t: 0, duration: big ? 620 : 480, radius: cell * (g.cells.length >= 4 ? 1.9 : 1.4) * (1 + step.cascade * 0.12), color, alpha: big ? 0.55 : 0.4 });
-      if (big) this.rings.push({ x: centre.x, y: centre.y, t: 0, duration: 760, radius: cell * 2.6, color: '#ffffff', alpha: 0.18 });
+      if (big) this.rings.push({ x: centre.x, y: centre.y, t: 0, duration: 760, radius: cell * 2.6, color: '#ffd98a', alpha: 0.14 });
     }
     // Each cascade step brightens the whole scene a touch more: a soft swell, never a flash.
     this.pulse = Math.min(0.14, 0.05 + step.cascade * 0.03);
@@ -745,14 +745,14 @@ export class GameView {
         this.pieces.set(key(step.cell), vp);
         // Light gathers in from around the cell and settles into the new power.
         const to = this.centre(step.cell.col, step.cell.row);
-        const color = step.piece.type ? this.style.gemColor(step.piece.type).light : '#ffffff';
+        const color = step.piece.type ? this.style.gemColor(step.piece.type).glow : '#ffd98a';
         const cell = this.layout.cell;
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2 + this.rng.range(-0.2, 0.2);
           const d = cell * this.rng.range(1.2, 2.2);
           this.particles.push({ x: to.x + Math.cos(a) * d, y: to.y + Math.sin(a) * d, vx: 0, vy: 0, life: 0, maxLife: 420, color, size: cell * 0.08, target: to });
         }
-        this.rings.push({ x: to.x, y: to.y, t: 0, duration: 700, radius: cell * 1.6, color: '#ffffff', alpha: 0.35 });
+        this.rings.push({ x: to.x, y: to.y, t: 0, duration: 700, radius: cell * 1.6, color: '#ffd98a', alpha: 0.3 });
         return;
       }
       case 'fall': {
@@ -903,7 +903,7 @@ export class GameView {
     // of sparkles in the gem's light at the origin, under every effect; flowing, never a bang.
     if (f.leader) {
       const { x, y } = this.centre(step.at.col, step.at.row);
-      const light = origin?.piece.type ? this.style.gemColor(origin.piece.type).light : '#fff2c8';
+      const light = origin?.piece.type ? this.style.gemColor(origin.piece.type).glow : '#ffd98a';
       this.rings.push({ x, y, t: 0, duration: 520, radius: cell * 1.4, color: light, alpha: 0.35 });
       this.spawnSparkles(x, y, light, 10, 0.9);
     }
@@ -1027,7 +1027,7 @@ export class GameView {
             fl.popped = true;
             const cell = this.layout.cell;
             this.rings.push({ x: fl.to.x, y: fl.to.y, t: 0, duration: 420, radius: cell * 1.4, color: '#fff2c8', alpha: 0.6 });
-            this.rings.push({ x: fl.to.x, y: fl.to.y, t: 0, duration: 560, radius: cell * 2, color: '#ffffff', alpha: 0.2 });
+            this.rings.push({ x: fl.to.x, y: fl.to.y, t: 0, duration: 560, radius: cell * 2, color: '#ffd98a', alpha: 0.16 });
             this.spawnSparkles(fl.to.x, fl.to.y, '#ffe9a8', 12, 0.9);
             for (const c of step.cells) this.reach(f, c);
           }
@@ -1108,7 +1108,7 @@ export class GameView {
       // The gem becomes the power at the brightest moment, with a few sparkles.
       tr.swapped = true;
       const color = tr.step.changes[0]?.piece.type;
-      const light = color ? this.style.gemColor(color).light : '#ffffff';
+      const light = color ? this.style.gemColor(color).glow : '#ffd98a';
       for (const ch of tr.step.changes) {
         const vp = this.pieces.get(key(ch.cell));
         if (vp) vp.piece = ch.piece;
@@ -1226,7 +1226,7 @@ export class GameView {
         p.sparkled = true;
         if (!this.hidden.has(k)) {
           const { x, y } = this.centre(p.x, p.y);
-          const color = p.piece.type ? this.style.gemColor(p.piece.type).light : '#ffffff';
+          const color = p.piece.type ? this.style.gemColor(p.piece.type).glow : '#ffd98a';
           this.spawnSparkles(x, y, color, p.piece.power ? 9 : 5);
         }
       }
@@ -1505,7 +1505,10 @@ export class GameView {
       return;
     }
     if (!piece.type) return;
-    const gemScale = power === 'bloom' && o.ornament ? 0.76 : 1;
+    // A coloured power with its whole painted piece loaded is drawn as that piece in place of the gem and
+    // its ornament; the breathing aura and the comet's streak stay, as the light around it.
+    const painted = power && o.ornament ? this.powerArt[`${familyOf(power)}-${piece.type}` as PowerArtName] : undefined;
+    const gemScale = power === 'bloom' && o.ornament && !painted ? 0.76 : 1;
     // A power on the board calls to be used (Stage 3 play-test): an aura in its own colour breathes
     // beneath it and the gem itself swells very slightly at breathing pace. Calm, never a flicker.
     let call = 1;
@@ -1520,6 +1523,18 @@ export class GameView {
       glowDisc(ctx, x, y, radius * (1.9 + 0.3 * breathe) * o.scale, light, 0.42 + 0.3 * breathe);
       glowDisc(ctx, x, y, radius * 1.15 * o.scale, '#ffffff', 0.12 + 0.16 * breathe);
       ctx.restore();
+    }
+    if (painted && power) {
+      ctx.save();
+      ctx.globalAlpha = o.alpha;
+      const r = radius * o.scale * call;
+      if (power === 'cometRow' || power === 'cometCol') this.drawStreak(x, y, r, power === 'cometRow', 1, t, this.style.gemColor(piece.type).light);
+      const size = radius * 2 * POWER_ART_SCALE * 1.08;
+      ctx.translate(x, y);
+      ctx.scale(o.scale * o.scaleX * call, o.scale * o.scaleY * call);
+      ctx.drawImage(painted, -size / 2, -size / 2, size, size);
+      ctx.restore();
+      return;
     }
     this.sprites.draw(ctx, piece.type, x, y, radius, { alpha: o.alpha, scaleX: o.scale * o.scaleX * gemScale * call, scaleY: o.scale * o.scaleY * gemScale * call, brighten: o.brighten + (power && o.ornament ? 0.06 : 0) });
     if (!power || !o.ornament) return;
@@ -1578,8 +1593,8 @@ export class GameView {
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     // The rim glows: a few soft strokes, wide and faint to narrow and bright.
-    for (const [width, alpha] of [[cell * 0.7, 0.1], [cell * 0.3, 0.2], [4, 0.8]] as const) {
-      ctx.strokeStyle = rgba('#ffe9b8', alpha * rim * fade);
+    for (const [width, alpha] of [[cell * 0.7, 0.08], [cell * 0.3, 0.16], [4, 0.5]] as const) {
+      ctx.strokeStyle = rgba('#ffc966', alpha * rim * fade);
       ctx.lineWidth = width;
       ctx.beginPath();
       ctx.roundRect(x0, y0, rw, rh, rr);
@@ -1604,7 +1619,7 @@ export class GameView {
         const back = i * cell * 0.3;
         const p = pointAt(start + dir * (travel - back));
         const a = (1 - i / 9) * fade;
-        glowDisc(ctx, p.x, p.y, (i === 0 ? cell * 0.7 : cell * 0.38) * (1 - i / 12), '#fff6dc', (i === 0 ? 1 : 0.6) * a);
+        glowDisc(ctx, p.x, p.y, (i === 0 ? cell * 0.7 : cell * 0.38) * (1 - i / 12), '#ffd98a', (i === 0 ? 1 : 0.6) * a);
       }
     }
     // A few twinkles along the rim as the light passes.
@@ -1614,7 +1629,7 @@ export class GameView {
       const k = clamp01(1 - Math.min(near, perimeter - near) / (cell * 1.5));
       if (k <= 0) continue;
       const p = pointAt(s);
-      ctx.strokeStyle = rgba('#ffffff', 0.8 * k * fade);
+      ctx.strokeStyle = rgba('#ffe9b8', 0.7 * k * fade);
       ctx.lineWidth = 1.4;
       const r = cell * 0.18 * k;
       ctx.beginPath();
@@ -1727,7 +1742,7 @@ export class GameView {
           const light = step.color ? this.style.gemColor(step.color).light : '#ffffff';
           if (p < 0.3) glowDisc(ctx, x, y, cell * (0.6 + p * 2.5), '#ffffff', 0.5 * (1 - p / 0.3));
           softRing(ctx, x, y, radius, cell * 0.45, light, 0.7 * (1 - p * 0.6));
-          softRing(ctx, x, y, radius * 0.8, cell * 0.3, '#ffffff', 0.25 * (1 - p));
+          softRing(ctx, x, y, radius * 0.8, cell * 0.3, '#ffe9b8', 0.18 * (1 - p));
           break;
         }
         case 'comet': {
@@ -1965,6 +1980,10 @@ export class GameView {
     ctx.restore();
   }
 
+  /**
+   * Rings and sparkles use the gem's own glow colour (parent, 7 October): the lightened tint under
+   * 'lighter' blending washed out to pure white, which nothing else on the board is.
+   */
   private drawRings(): void {
     const { ctx } = this;
     if (this.rings.length === 0) return;

@@ -28,7 +28,9 @@ Each companion needs: awake facing right, asleep curled up, and (later) a waving
 
 Star gold, heart rose pink, drop sapphire (point up), leaf emerald, diamond amethyst, sunstone coral (rounded hexagon). Painted body only, cut to a 256 px square with the body filling about 183 px; the sprite cache draws it at 3.1 radii. A soft, still glow in the gem's own colour sits under each gem on the board, at about two thirds of the strength tried in `art/style/choice3b` (code-drawn, or baked as a second layer; either is fine as long as it never breathes).
 
-The seven powers get painted bodies in the same hand (comet head, prism orb, bloom bud, lantern sprite, starburst, moon pearl, aurora piece); their moving parts (streak, swirl, opening, rays) stay in code.
+The coloured powers are whole painted pieces, not gems with an ornament (parent, 7 October: a special should turn into a thing of the board, as a match turns into a special candy): a shooting star (comet), a closed flower bud (bloom), a winged wisp with a face (sprite), an eight-pointed star jewel (starburst) and a crescent moon cradling a pearl (moonrise), each painted in all six gem colours so the colour still reads for matching (`powers/<family>-<gem>.png`, prompts in `art/batchA/`). The Orb and the Aurora are colourless painted pieces of their own. Their moving parts (streak, swirl, opening, rays, beams) stay in code.
+
+Light on the board never goes pure white (parent, 7 October): rings, sparkles and the win rim use the gem's own glow colour or a warm gold, because lightened tints under additive blending washed out to white, which nothing else in the painting is.
 
 ## The board
 
