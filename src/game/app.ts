@@ -27,6 +27,9 @@ import {
   newGame,
   placeGift,
   serialize,
+  goalsDone,
+  isOpen,
+  newLevel,
 } from '../core/game';
 import type { Cell } from '../core/grid';
 import {
@@ -52,6 +55,7 @@ import { nightGarden } from '../render/styles/nightGarden';
 import { Gate } from './gate';
 import { PointerInput } from './input';
 import { MapScene, createMapCanvas } from './mapScene';
+import { levelFor } from '../core/levels';
 import { Panel, type PanelContext } from './panel';
 import { ReviewBar, reviewOn, setReviewFlag } from './review';
 import { type Settings, SettingsStore, hintDelayMs } from './settings';
@@ -318,7 +322,7 @@ export class App {
     void this.requestWakeLock();
     if (this.phase === 'resting') {
       this.showRest();
-    } else if (this.matches >= boardFor(this.mode).goal) {
+    } else if (this.levelDone()) {
       // A save written at the moment the lantern filled: finish that level now.
       this.phase = 'playing';
       this.levelComplete();
@@ -342,7 +346,14 @@ export class App {
   private freshState(level: number, mode: Mode): GameState {
     const spec = boardFor(mode);
     const seed = this.opts.seed ?? (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
+    // Play (Stage 4, DESIGN.md 3.7): a generated level with picture goals and still obstacles; Calm: the plain board the lantern counts.
+    if (mode === 'play') return newLevel(levelFor(level, this.settings.get().playDifficulty, seed), seed, unlockedAt(level));
     return newGame(spec.rows, spec.cols, typesForLevel(level, mode), seed, spec.bias, unlockedAt(level));
+  }
+
+  /** The level is won: every picture goal is done (Play), or the lantern has its matches (Calm and plain boards). */
+  private levelDone(): boolean {
+    return this.state.goals ? goalsDone(this.state.goals) : this.matches >= boardFor(this.mode).goal;
   }
 
   /** A fresh board for the current lantern, with that lantern's gift if it has one. */
@@ -453,11 +464,11 @@ export class App {
 
   private trySwap(a: Cell, b: Cell): void {
     if (this.phase !== 'playing') return;
-    if (b.row < 0 || b.col < 0 || b.row >= this.state.rows || b.col >= this.state.cols) return;
+    if (!isOpen(this.state, b.row, b.col) || !isOpen(this.state, a.row, a.col)) return;
     this.select(null);
     const goal = boardFor(this.mode).goal;
     if (this.view.busy) {
-      if (this.matches < goal && !this.finishNowWanted) this.pending = { a, b }; // never carry a swap across the level's end
+      if (!this.levelDone() && !this.finishNowWanted) this.pending = { a, b }; // never carry a swap across the level's end
       return;
     }
     const valid = isValidSwap(this.state, a, b);
@@ -498,7 +509,7 @@ export class App {
       () => this.settled(),
       (step) => {
         // Light the next star as each clear lands, not all at once at the end.
-        if (step.kind === 'clear') this.view.setGoal(Math.min(goal, this.view.goalDone + step.groups.length), goal);
+        if (step.kind === 'clear' && !this.state.goals) this.view.setGoal(Math.min(goal, this.view.goalDone + step.groups.length), goal);
       },
       { timeScale: this.discovering ? DISCOVERY_TIME_SCALE : 1 },
     );
@@ -511,7 +522,7 @@ export class App {
   private settled(): void {
     this.discovering = false;
     this.view.setGift(this.giftFamilies());
-    if (this.matches >= boardFor(this.mode).goal || this.finishNowWanted) {
+    if (this.levelDone() || this.finishNowWanted) {
       this.pending = null;
       this.levelComplete();
       return;
