@@ -236,8 +236,6 @@ export class Panel {
     s.append(
       // DESIGN.md 3.9: normal keeps each mode's own delay, quick halves it, slow doubles it.
       this.row('Hint delay', this.segmented([['quick', 'Quick'], ['normal', 'Normal'], ['slow', 'Slow'], ['off', 'Off']], (v) => this.settings.set({ hintDelay: v as Settings['hintDelay'] }), (st) => st.hintDelay), true),
-      // DESIGN.md 3.12: the tap-time haptic tick experiment.
-      this.row('Haptic tick', this.segmented([['true', 'On'], ['false', 'Off']], (v) => this.settings.set({ haptics: v === 'true' }), (st) => String(st.haptics))),
       // DESIGN.md 4.4: the iPhone's Reduce Motion is respected automatically, with a parent override.
       this.row('Reduce motion', this.segmented([['follow', 'Follow iPhone'], ['on', 'On'], ['off', 'Off']], (v) => this.settings.set({ reducedMotion: v as Settings['reducedMotion'] }), (st) => st.reducedMotion), true),
       // DESIGN.md 3.8: the breathing glow is a parent toggle.

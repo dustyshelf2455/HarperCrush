@@ -42,8 +42,7 @@ export class PointerInput {
     el.addEventListener('pointermove', this.move);
     el.addEventListener('pointerup', this.up);
     el.addEventListener('pointercancel', this.cancel);
-    // touch-action: none (CSS) stops scroll and zoom. Do not preventDefault touchstart or
-    // touchend: on iOS that cancels the click, and the click is what ticks the haptic switch.
+    // touch-action: none (CSS) stops scroll and zoom; pointer events carry the gestures.
     const block = (e: Event): void => e.preventDefault();
     el.addEventListener('gesturestart', block);
     el.addEventListener('contextmenu', block);
