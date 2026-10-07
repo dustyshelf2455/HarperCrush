@@ -135,7 +135,7 @@ describe('the solver bot completes every level', () => {
       worst.sort((a, b) => b.moves - a.moves);
       // Nothing takes anywhere near the bound: the ramp stays gentle.
       expect(worst[0]!.moves).toBeLessThan(MAX);
-    });
+    }, 60_000); // 140 full games per difficulty: a few seconds alone, longer when the whole suite shares the CPU
   }
 });
 
