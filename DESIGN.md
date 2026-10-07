@@ -120,6 +120,20 @@ The parent's brief for the map, given during his review of batch A: the path mus
 - **Open on the map after the splash** (decided in the splash thread the same night, 2f): the map is now the first thing seen after launch, framed on her current beacon, so this framing is the most seen view in the app.
 
 
+
+## 2h. Stage 4 built: Play levels (7 October 2026)
+
+Play levels are now the ones designed in 3.7, generated per lantern. What was decided while building:
+
+- **Ten shapes to an area, in this order:** gather; uncover (frost at the bottom over the hidden picture); seeds; free the creatures; uncover with the frost in the corners; cloud puffs with seeds; vines over frost; bubbles guarded by moonstone; a shaped board (rounded corners) with seeds and a gather; the big one (shaped, two layers of frost, guarded bubbles, seeds). The dials rise through the ten, reset at the next area, climb a little on each pass through the seven areas, and scale with the panel's Play difficulty (gentle is three quarters, bigger a quarter more).
+- **Frost thins one layer per clear** of the gem on it, whether by a match or by a power's light. The hidden picture shows through each cell as it thaws (and faintly through a single layer).
+- **Seeds fall like gems and never match;** at the bottom of their column they drift out and a flower sprouts in the scenery under the board for the rest of the level. A cloud puff or a hole is a floor: gems under a cloud fill in from the cloud ("the cloud rains gems").
+- **Puffs and bubbles clear when a match is made beside them** or a power's light passes; moonstone only by light. A freed sleeper's light flies up to its icon in the goal row.
+- **The goal row** replaces the stars on Play boards: one small painted icon per thing to do (frost shows its progress in up to eight), lighting as they are done; the lantern fills with the whole level's progress.
+- **The sprite** goes for a moonstone first, then a bubble, then a puff, then thick frost, before it looks for the biggest cascade. Hints prefer, among swaps of one strength, the one nearest a goal.
+- **Calm is untouched:** the 6 by 9 board that counts matches. Play saves from before Stage 4 open as they were (a plain board counting matches) and the next lantern is a real level.
+- **Completability** is checked twice, as 4.5 asks: every goal cell can be part of a line of three (the generator retries otherwise), and a bot that plays toward the goals finishes all seventy lanterns at every difficulty within the move bound in the tests.
+- The hooded hero sleeps in no bubble yet (only the dragon and the fairy were painted); the "stuck behind moonstone" bias rise from 3.7 is not built, since the bot never needed it.
 ---
 ---
 

@@ -8,7 +8,7 @@
  * blasts. Cells dissolve as the light reaches them. Brightness ramps are
  * gentle and every resting glow breathes over seconds (DESIGN.md 4.4).
  */
-import { type Board, type FireStep, type GameState, type Piece, type PowerFamily, type Step, at, familyOf } from '../core/game';
+import { type Board, type FireStep, type GameState, type Goal, type Piece, type PowerFamily, type Step, at, familyOf, isOpen } from '../core/game';
 import type { Cell, GemType } from '../core/grid';
 import { createRng } from '../shared/rng';
 import { type AreaTheme, paintSky } from '../render/areas';
@@ -22,6 +22,8 @@ import { shapePath } from '../render/shapes';
 import { GemSprites } from '../render/sprites';
 import type { GemArt } from '../render/gemArt';
 import { POWER_ART_SCALE, type PowerArt, type PowerArtName } from '../render/powerArt';
+import { type PieceArt, loadPieceArt } from '../render/pieceArt';
+import { drawBubble, drawFlower, drawFrost, drawMoonstone, drawPuff, drawSeed, drawVine } from '../render/pieces';
 import { breath, clamp01, easeInOutSine, easeOutCubic, glowDisc, highlight, softRing } from '../render/styles/common';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
@@ -178,6 +180,12 @@ const SETTLE_MS = 150;
 const GRAVITY = 30;
 const MAX_FALL = 15;
 const MAX_PARTICLES = 160;
+// Stage 4 (DESIGN.md 3.7) timings, in ms.
+const FROST_FADE_MS = 520;
+const VINE_FADE_MS = 460;
+const FLYER_MS = 900;
+const EXIT_MS = 700;
+const SPROUT_MS = 900;
 const IDLE_FPS = 12;
 
 // Effect timings (DESIGN.md 3.4), in ms before motion scaling.
@@ -224,6 +232,21 @@ export class GameView {
   private onStep: ((step: Step) => void) | null = null;
   private goal = { done: 0, total: 8 };
   private goalPulse: number[] = [];
+  // Stage 4 (DESIGN.md 3.7): the picture goals as shown (they catch up with the state step by step), the still
+  // parts of the board as shown, and the small animations the new steps start.
+  private goals: Goal[] = [];
+  private shownFrost: number[][] | null = null;
+  private shownVine: boolean[][] | null = null;
+  /** Frost fading from one layer count to the next, keyed by cell; `from` is the layers it had. */
+  private frostFade = new Map<string, { t: number; from: number }>();
+  private vineFade = new Map<string, number>();
+  /** A freed creature's light flying from its bubble to the goal row. */
+  private flyers: Array<{ x: number; y: number; from: { x: number; y: number }; to: { x: number; y: number }; t: number; color: string; goal: number }> = [];
+  /** Seeds drifting out of the bottom of the board. */
+  private exits: Array<{ x: number; y: number; t: number; col: number }> = [];
+  /** Flowers that sprouted below the board this level. */
+  private sprouts: Array<{ x: number; y: number; t: number }> = [];
+  private readonly pieceArt: PieceArt = loadPieceArt(() => this.wake());
   private pulse = 0;
   private pokes: { target: HudTarget; t: number }[] = [];
   private queue: Step[] = [];
@@ -406,7 +429,7 @@ export class GameView {
     const y = ((clientY - rect.top) / rect.height) * this.layout.height;
     const col = Math.floor((x - this.layout.boardX) / this.layout.cell);
     const row = Math.floor((y - this.layout.boardY) / this.layout.cell);
-    if (row < 0 || col < 0 || row >= this.state.rows || col >= this.state.cols) return null;
+    if (!isOpen(this.state, row, col)) return null;
     return { row, col };
   }
 
@@ -424,10 +447,54 @@ export class GameView {
     this.state = state;
     this.cancelResolution();
     this.rebuild(state.board);
+    this.takeTerrain(state);
+    this.sprouts = [];
+    this.exits = [];
+    this.flyers = [];
     // A board of another size (Play mode's 7 by 8) needs its own cell size and position.
     if (resized) this.resize();
     this.fadeIn = 1;
     this.wake();
+  }
+
+  /** Show the state's frost, vines and goals as they are (a fresh level, or a board put back without animation). */
+  private takeTerrain(state: GameState): void {
+    this.shownFrost = state.terrain ? state.terrain.frost.map((r) => r.slice()) : null;
+    this.shownVine = state.terrain ? state.terrain.vine.map((r) => r.slice()) : null;
+    this.frostFade.clear();
+    this.vineFade.clear();
+    this.goals = state.goals ? state.goals.map((g) => ({ ...g })) : [];
+    this.goalPulse = [];
+    if (this.goals.length > 0) this.setLantern(this.goalFraction());
+  }
+
+  /** How far the picture goals have come, 0..1 (1 with none). */
+  private goalFraction(): number {
+    if (this.goals.length === 0) return 1;
+    let done = 0;
+    let total = 0;
+    for (const g of this.goals) {
+      done += Math.min(g.done, g.total);
+      total += g.total;
+    }
+    return total > 0 ? done / total : 1;
+  }
+
+  /** Advance a shown goal by n and light its next icons. */
+  private goalStep(kind: Goal['kind'], n: number, type: GemType | null = null): void {
+    for (let i = 0; i < this.goals.length; i++) {
+      const g = this.goals[i] as Goal;
+      if (g.kind !== kind || (g.kind === 'gather' && g.type !== type)) continue;
+      const before = g.done;
+      g.done = Math.min(g.total, g.done + n);
+      for (let k = before; k < g.done; k++) this.goalPulse[i * 16 + Math.min(15, Math.floor((k * this.goalIcons(g)) / g.total))] = 0;
+    }
+    this.setLantern(this.goalFraction());
+  }
+
+  /** How many icons a goal shows: one per thing, up to eight (frost shows its progress in eighths). */
+  private goalIcons(g: Goal): number {
+    return Math.min(8, g.total);
   }
 
   /**
@@ -641,6 +708,50 @@ export class GameView {
     }
     this.pokes = this.pokes.filter((p) => (p.t += dt) < 700);
     if (this.pokes.length > 0) moving = true;
+    for (const [k, f] of this.frostFade) {
+      f.t += gdt;
+      if (f.t >= FROST_FADE_MS) this.frostFade.delete(k);
+      else moving = true;
+    }
+    for (const [k, t0] of this.vineFade) {
+      if (t0 + gdt >= VINE_FADE_MS) this.vineFade.delete(k);
+      else {
+        this.vineFade.set(k, t0 + gdt);
+        moving = true;
+      }
+    }
+    this.flyers = this.flyers.filter((f) => {
+      f.t += gdt;
+      const q = clamp01(f.t / FLYER_MS);
+      const e = easeInOutSine(q);
+      f.x = f.from.x + (f.to.x - f.from.x) * e;
+      f.y = f.from.y + (f.to.y - f.from.y) * e - Math.sin(q * Math.PI) * this.layout.cell * 1.2;
+      if (q >= 1) {
+        if (f.goal >= 0) this.goalStep('free', 1);
+        this.spawnSparkles(f.to.x, f.to.y, f.color, 6, 0.6);
+        return false;
+      }
+      return true;
+    });
+    if (this.flyers.length > 0) moving = true;
+    this.exits = this.exits.filter((e) => {
+      e.t += gdt;
+      if (e.t >= EXIT_MS) {
+        const { boardY, cell } = this.layout;
+        const bottom = boardY + this.state.rows * cell;
+        this.sprouts.push({ x: e.x + this.rng.range(-cell * 0.3, cell * 0.3), y: bottom + cell * this.rng.range(0.6, 1.3), t: 0 });
+        this.goalStep('seeds', 1);
+        return false;
+      }
+      return true;
+    });
+    if (this.exits.length > 0) moving = true;
+    for (const sp of this.sprouts) {
+      if (sp.t < SPROUT_MS) {
+        sp.t += gdt;
+        moving = true;
+      }
+    }
     if (this.updateParticles(seconds)) moving = true;
     if (this.updateClearing(gdt)) moving = true;
     if (this.updateAppear(gdt)) moving = true;
@@ -732,9 +843,54 @@ export class GameView {
         this.events.onClear?.(step.groups, step.cascade);
         this.onStep?.(step);
         this.clearFlourish(step);
+        const gathered = new Map<GemType, number>();
         for (const c of step.cells) {
           const p = this.pieces.get(key(c));
           if (p && p.clearing === null) p.clearing = 0;
+          if (p?.piece.type && !p.piece.item) gathered.set(p.piece.type, (gathered.get(p.piece.type) ?? 0) + 1);
+        }
+        for (const [type, n] of gathered) this.goalStep('gather', n, type);
+        return;
+      }
+      case 'frost': {
+        for (const f of step.cells) {
+          const row = this.shownFrost?.[f.cell.row];
+          if (!row) continue;
+          this.frostFade.set(key(f.cell), { t: 0, from: row[f.cell.col] ?? f.left + 1 });
+          row[f.cell.col] = f.left;
+        }
+        this.goalStep('uncover', step.cells.length);
+        return;
+      }
+      case 'vine': {
+        for (const c of step.cells) {
+          const row = this.shownVine?.[c.row];
+          if (row) row[c.col] = false;
+          this.vineFade.set(key(c), 0);
+        }
+        return;
+      }
+      case 'free': {
+        // The bubble pops with the clear; the sleeper's light flies up to the goal row.
+        const goal = this.goals.findIndex((g) => g.kind === 'free');
+        for (const f of step.cells) {
+          const from = this.centre(f.cell.col, f.cell.row);
+          const g = this.goals[goal];
+          const to = goal >= 0 && g ? this.goalIconPos(goal, Math.min(this.goalIcons(g) - 1, g.done + this.flyers.filter((fl) => fl.goal === goal).length)) : { x: this.layout.width / 2, y: this.layout.hudY + 54 };
+          const color = f.creature === 'dragon' ? '#8fc3ff' : f.creature === 'hero' ? '#c9a3ff' : '#b8ff9a';
+          this.flyers.push({ x: from.x, y: from.y, from, to, t: 0, color, goal });
+          this.rings.push({ x: from.x, y: from.y, t: 0, duration: 600, radius: this.layout.cell * 1.3, color: '#ffe9b8', alpha: 0.4 });
+          this.spawnSparkles(from.x, from.y, color, 8);
+        }
+        return;
+      }
+      case 'exit': {
+        // The seed drifts out below the board and a flower sprouts in the scene there.
+        for (const c of step.cells) {
+          const p = this.pieces.get(key(c));
+          this.pieces.delete(key(c));
+          const { x, y } = p ? this.centre(p.x, p.y) : this.centre(c.col, c.row);
+          this.exits.push({ x, y, t: 0, col: c.col });
         }
         return;
       }
@@ -1208,6 +1364,12 @@ export class GameView {
         }
         return false;
       }
+      case 'frost':
+      case 'vine':
+      case 'free':
+        return true;
+      case 'exit':
+        return cur.t >= 320 * this.motionScale;
     }
   }
 
@@ -1349,7 +1511,10 @@ export class GameView {
     this.drawVignette(t);
     this.drawHud(t);
 
-    for (let r = 0; r < this.state.rows; r++) for (let c = 0; c < this.state.cols; c++) this.style.drawCell(ctx, boardX + c * cell, boardY + r * cell, cell);
+    for (let r = 0; r < this.state.rows; r++) for (let c = 0; c < this.state.cols; c++) if (isOpen(this.state, r, c)) this.style.drawCell(ctx, boardX + c * cell, boardY + r * cell, cell);
+    this.drawHiddenPicture();
+    this.drawFrostLayer(t);
+    this.drawSprouts(t);
 
     if (this.hint) {
       const a = 0.14 + 0.22 * breath(t);
@@ -1425,7 +1590,10 @@ export class GameView {
       if (p.piece.power && p.clearing === null && this.gift.has(familyOf(p.piece.power))) glowDisc(ctx, x, yy, cell * 0.95, this.style.palette.hint, giftAlpha * alpha);
       this.drawPieceArt(p.piece, x, yy, radius, { alpha, scale, scaleX, scaleY, brighten: Math.min(1, brighten), ornament: !p.hideOrnament, opened: p.opened }, t);
     }
+    this.drawVines(t);
+    this.drawExits(t);
     ctx.restore();
+    this.drawFlyers();
 
     this.drawTransform();
     this.drawFires(t);
@@ -1492,6 +1660,10 @@ export class GameView {
   ): void {
     const { ctx } = this;
     const power = piece.power;
+    if (piece.item) {
+      this.drawItem(piece, x, y, radius, o, t);
+      return;
+    }
     if (power === 'orb' || power === 'aurora') {
       ctx.save();
       ctx.globalAlpha = o.alpha;
@@ -1997,7 +2169,279 @@ export class GameView {
     ctx.restore();
   }
 
+  // ------------------------------------------------------- Stage 4 pieces
+
+  /** A Stage 4 item (DESIGN.md 3.7): the painted piece over its code-drawn body, the light around it code-drawn. */
+  private drawItem(piece: Piece, x: number, y: number, radius: number, o: { alpha: number; scale: number; scaleX: number; scaleY: number; brighten: number }, t: number): void {
+    const { ctx } = this;
+    const r = radius * o.scale;
+    const name = piece.item === 'bubble' ? (piece.creature === 'dragon' ? 'bubble-dragon' : 'bubble-fairy') : piece.item === 'seed' ? 'seed' : piece.item === 'puff' ? 'puff' : 'moonstone';
+    const img = this.pieceArt.get(name);
+    ctx.save();
+    ctx.globalAlpha = o.alpha;
+    ctx.translate(x, y);
+    ctx.scale(o.scaleX, o.scaleY);
+    if (piece.item === 'seed') glowDisc(ctx, 0, 0, r * 1.5, '#ffd27a', 0.3 + 0.1 * slowPulse(t, 2.6));
+    if (piece.item === 'bubble') glowDisc(ctx, 0, 0, r * 1.4, piece.creature === 'dragon' ? '#8fc3ff' : '#b8ff9a', 0.22 + 0.1 * slowPulse(t, 3.1));
+    if (piece.item === 'moonstone') glowDisc(ctx, 0, 0, r * 1.2, '#8fc3ff', 0.12 + 0.06 * slowPulse(t, 3.6));
+    if (img) {
+      const size = radius * 2 * 1.45 * o.scale;
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    } else {
+      switch (piece.item) {
+        case 'seed':
+          drawSeed(ctx, 0, 0, r, t);
+          break;
+        case 'puff':
+          drawPuff(ctx, 0, 0, r, t);
+          break;
+        case 'moonstone':
+          drawMoonstone(ctx, 0, 0, r, t);
+          break;
+        case 'bubble':
+          drawBubble(ctx, 0, 0, r, t, piece.creature === 'dragon' ? '#8fc3ff' : '#b8ff9a');
+          break;
+      }
+    }
+    if (o.brighten > 0) glowDisc(ctx, 0, 0, r * 1.3, '#ffffff', o.brighten * 0.6);
+    ctx.restore();
+  }
+
+  /** The cells the hidden picture shows through (its frost thins on top of it). */
+  private pictureCells(): Cell[] {
+    const out: Cell[] = [];
+    const pic = this.state.terrain?.picture;
+    if (!pic) return out;
+    pic.forEach((row, r) => row.forEach((v, c) => { if (v) out.push({ row: r, col: c }); }));
+    return out;
+  }
+
+  /** The area's hidden picture, clipped to its window of cells and fitted over them; a soft glow until it loads. */
+  private drawHiddenPicture(): void {
+    const cells = this.pictureCells();
+    if (cells.length === 0) return;
+    const { ctx } = this;
+    const { cell, boardX, boardY } = this.layout;
+    let r0 = Infinity;
+    let r1 = -Infinity;
+    let c0 = Infinity;
+    let c1 = -Infinity;
+    for (const c of cells) {
+      r0 = Math.min(r0, c.row);
+      r1 = Math.max(r1, c.row);
+      c0 = Math.min(c0, c.col);
+      c1 = Math.max(c1, c.col);
+    }
+    const x = boardX + c0 * cell;
+    const y = boardY + r0 * cell;
+    const w = (c1 - c0 + 1) * cell;
+    const h = (r1 - r0 + 1) * cell;
+    ctx.save();
+    ctx.beginPath();
+    const inset = cell * 0.06;
+    for (const c of cells) ctx.rect(boardX + c.col * cell + inset, boardY + c.row * cell + inset, cell - inset * 2, cell - inset * 2);
+    ctx.clip();
+    const img = this.theme ? this.pieceArt.hidden(this.theme.id) : null;
+    if (img) {
+      // Cover the window, centred, so the subject stays whole whatever the window's shape.
+      const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+    } else {
+      const g = ctx.createRadialGradient(x + w / 2, y + h / 2, 0, x + w / 2, y + h / 2, Math.max(w, h) * 0.7);
+      g.addColorStop(0, rgba('#ffe2a8', 0.35));
+      g.addColorStop(1, rgba('#3b2a60', 0.9));
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.restore();
+  }
+
+  /** Frost over its cells, under the gems; a thinned layer fades away. */
+  private drawFrostLayer(t: number): void {
+    const frost = this.shownFrost;
+    if (!frost) return;
+    const { ctx } = this;
+    const { cell } = this.layout;
+    const one = this.pieceArt.get('frost1');
+    const two = this.pieceArt.get('frost2');
+    const paint = (r: number, c: number, layers: number, alpha: number): void => {
+      if (layers <= 0 || alpha <= 0.01) return;
+      const { x, y } = this.centre(c, r);
+      const img = layers >= 2 ? two : one;
+      if (img) {
+        ctx.save();
+        // A single layer lets a hint of the picture through (STYLE.md "Stage 4 pieces").
+        ctx.globalAlpha = alpha * (layers >= 2 ? 1 : 0.82);
+        const size = cell * 1.22;
+        ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+        ctx.restore();
+      } else drawFrost(ctx, x, y, cell, layers, alpha);
+    };
+    for (let r = 0; r < this.state.rows; r++) {
+      for (let c = 0; c < this.state.cols; c++) {
+        const layers = frost[r]?.[c] ?? 0;
+        const fade = this.frostFade.get(key({ row: r, col: c }));
+        if (fade) {
+          const q = clamp01(fade.t / FROST_FADE_MS);
+          paint(r, c, layers, 1);
+          paint(r, c, fade.from, 1 - easeInOutSine(q));
+          if (q < 0.5 && !this.breathing) continue;
+        } else paint(r, c, layers, 1);
+      }
+    }
+    void t;
+  }
+
+  /** Vines over their gems; a released vine fades out. */
+  private drawVines(t: number): void {
+    const vine = this.shownVine;
+    if (!vine) return;
+    const { ctx } = this;
+    const { cell } = this.layout;
+    const paint = (r: number, c: number, alpha: number): void => {
+      const p = this.pieces.get(key({ row: r, col: c }));
+      const { x, y } = p ? this.centre(p.x, p.y) : this.centre(c, r);
+      const img = this.pieceArt.get((r + c) % 2 === 0 ? 'vine-a' : 'vine-b');
+      if (img) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const size = cell * 1.3;
+        ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+        ctx.restore();
+      } else drawVine(ctx, x, y, cell * 0.44, t, alpha);
+    };
+    for (let r = 0; r < this.state.rows; r++) for (let c = 0; c < this.state.cols; c++) if (vine[r]?.[c]) paint(r, c, 1);
+    for (const [k, t0] of this.vineFade) {
+      const [r, c] = k.split(',').map(Number) as [number, number];
+      paint(r, c, 1 - easeInOutSine(clamp01(t0 / VINE_FADE_MS)));
+    }
+  }
+
+  /** Seeds drifting down out of the board. */
+  private drawExits(t: number): void {
+    const { ctx } = this;
+    const { cell } = this.layout;
+    const img = this.pieceArt.get('seed');
+    for (const e of this.exits) {
+      const q = clamp01(e.t / EXIT_MS);
+      const y = e.y + easeInOutSine(q) * cell * 1.6;
+      const alpha = 1 - q * q;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      glowDisc(ctx, e.x, y, cell * 0.6, '#ffd27a', 0.4);
+      if (img) {
+        const size = cell * 1.2;
+        ctx.drawImage(img, e.x - size / 2, y - size / 2, size, size);
+      } else drawSeed(ctx, e.x, y, cell * 0.41, t);
+      ctx.restore();
+    }
+  }
+
+  /** The flowers that sprouted below the board, each growing in. */
+  private drawSprouts(t: number): void {
+    const { ctx } = this;
+    const { cell } = this.layout;
+    const img = this.pieceArt.get('flower');
+    for (const sp of this.sprouts) {
+      const q = easeOutCubic(clamp01(sp.t / SPROUT_MS));
+      if (q <= 0) continue;
+      const r = cell * 0.36 * q;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, sp.x, sp.y, r * 2.2, '#ffb87a', 0.18 + 0.08 * slowPulse(t, 3));
+      ctx.restore();
+      if (img) {
+        const size = r * 3;
+        ctx.save();
+        ctx.globalAlpha = q;
+        ctx.drawImage(img, sp.x - size / 2, sp.y - size / 2, size, size);
+        ctx.restore();
+      } else drawFlower(ctx, sp.x, sp.y, r, t, q);
+    }
+  }
+
+  /** The freed sleepers' light on its way to the goal row. */
+  private drawFlyers(): void {
+    const { ctx } = this;
+    if (this.flyers.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of this.flyers) {
+      glowDisc(ctx, f.x, f.y, this.layout.cell * 0.55, f.color, 0.55);
+      ctx.fillStyle = rgba(lighten(f.color, 0.4), 0.9);
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, this.layout.cell * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Where icon i of goal g sits in the goal row. */
+  private goalIconPos(g: number, i: number): { x: number; y: number } {
+    const { width: w, hudY } = this.layout;
+    const counts = this.goals.map((goal) => this.goalIcons(goal));
+    const n = counts.reduce((a, b) => a + b, 0) + Math.max(0, this.goals.length - 1); // a gap's width between goals
+    const gap = Math.min(30, (w - 48) / Math.max(1, n));
+    const x0 = w / 2 - ((n - 1) * gap) / 2;
+    let before = 0;
+    for (let k = 0; k < g; k++) before += (counts[k] ?? 0) + 1;
+    return { x: x0 + (before + i) * gap, y: hudY + 54 };
+  }
+
+  /** The picture goals as a row of small icons that light up (DESIGN.md 3.7). */
+  private drawGoalIcons(t: number): void {
+    const { ctx } = this;
+    this.goals.forEach((g, gi) => {
+      const icons = this.goalIcons(g);
+      for (let i = 0; i < icons; i++) {
+        const lit = g.done >= ((i + 1) * g.total) / icons - 1e-6;
+        const pulse = this.goalPulse[gi * 16 + i];
+        const pop = pulse !== undefined && pulse < 900 ? Math.sin(clamp01(pulse / 900) * Math.PI) : 0;
+        const { x, y } = this.goalIconPos(gi, i);
+        ctx.save();
+        ctx.translate(x, y - pop * 4);
+        if (lit) glowDisc(ctx, 0, 0, 15 + pop * 10, '#ffd27a', 0.45 + 0.3 * pop + 0.08 * breath(t + i));
+        ctx.globalAlpha = lit ? 1 : 0.5;
+        const r = 10 + pop * 2;
+        switch (g.kind) {
+          case 'gather':
+            this.sprites.draw(ctx, g.type, 0, 0, r, { brighten: lit ? 0.1 : 0 });
+            break;
+          case 'seeds': {
+            const img = this.pieceArt.get(lit ? 'flower' : 'seed');
+            if (img) ctx.drawImage(img, -r * 1.5, -r * 1.5, r * 3, r * 3);
+            else if (lit) drawFlower(ctx, 0, 0, r, t);
+            else drawSeed(ctx, 0, 0, r, t);
+            break;
+          }
+          case 'free': {
+            const img = this.pieceArt.get(i % 2 === 0 ? 'bubble-fairy' : 'bubble-dragon');
+            if (img) ctx.drawImage(img, -r * 1.5, -r * 1.5, r * 3, r * 3);
+            else drawBubble(ctx, 0, 0, r, t, i % 2 === 0 ? '#b8ff9a' : '#8fc3ff');
+            break;
+          }
+          case 'uncover': {
+            const img = this.pieceArt.get('frost1');
+            if (lit) {
+              ctx.fillStyle = '#ffe49a';
+              ctx.fill(shapePath('star', r * 0.9));
+            } else if (img) ctx.drawImage(img, -r * 1.3, -r * 1.3, r * 2.6, r * 2.6);
+            else drawFrost(ctx, 0, 0, r * 2.1, 1, 0.9);
+            break;
+          }
+        }
+        ctx.restore();
+      }
+    });
+  }
+
   private drawGoal(t: number): void {
+    if (this.goals.length > 0) {
+      this.drawGoalIcons(t);
+      return;
+    }
     const { ctx } = this;
     const { width: w, hudY } = this.layout;
     const n = this.goal.total;

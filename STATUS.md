@@ -72,7 +72,7 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
 - **Stage 5 remainder, then Stage 6 polish and Batch D** (icon and panel art; the launch picture is done, see below), then the full-draft deploy for the parent to play end to end.
 
-Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about $9 of the $25 the parent added on 6 October (backdrop repaints, the painted specials, batch B).
+Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about $11 of the $25 the parent added on 6 October (backdrop repaints, the painted specials, batches B and C).
 
 ### Batch A built (6 October, afternoon)
 
@@ -103,10 +103,22 @@ Deployed as run 29, green 04:05 UTC on 7 October (build stamp 04:03 UTC), merged
 
 The parent asked for a splash screen on load; it is the Stage 6 "launch picture" from Batch D, done early (DESIGN.md 2f). `src/game/splash.ts` puts a full-bleed canvas over everything from the first frame: a code-drawn night (sky, stars, the fairy, the name in plain letters) with the painting `public/art/default/splash.jpg` stamped over it, the glimmers and stars drawn in code on top, then a fade into the game on its own (timing and placement in `splashTiming.ts`, tested). No tap is needed; a tap after the first moment lets it go sooner. Screenshots and tests use `?splash=0` to skip it (Playwright scripts that shoot the board straight after load need this now). The parent then asked for the game to open on the map rather than straight onto a level: after the splash the map waits at her lantern (lit, no hop, the invitation breathing) and a tap on it brings back the board she left, matches and all (`openLaunchMap` in `app.ts`, the map's `arrive: false`). Verified in Chromium: splash to map, tap to board, two swaps, relaunch to map, tap to the same board at 4 of 16. Playwright scripts that need the board straight after load now call `window.glimmerfall.continueMap()` in debug mode, or tap the lantern. One generation, about 20 cents; prompt and a small copy in the project's `art/batchA/`. Batch D still owes the app icon and the panel art.
 
+### Stage 4 built (7 October, early morning): real Play levels
+
+On the branch, checked, awaiting the parent's "Deploy?". Decisions in DESIGN.md 2h; screenshots in the project's `art/batchC/` folder.
+
+- **Core** (`src/core/game.ts`): pieces can be items (seed, puff, moonstone, bubble with a sleeper), the state carries a terrain (holes, frost layers, vines, the picture window) and goals (uncover, seeds, free, gather), and the resolution emits four new steps (frost thinned, vine released, creature freed, seed out). Holes and fixed pieces are floors for the fall; every run of cells between floors refills from its own top. Reshuffles move only loose gems; gifts sit only on loose gems.
+- **Generator** (`src/core/levels.ts`): `levelFor(lantern, difficulty, seed)` builds the ten shapes with the heat ramp and the static check; `newLevel` deals the gems around the items. Tests (`tests/levels.test.ts`): every lantern 1 to 70 at every setting passes the static check, and the solver bot finishes each within 160 moves (the whole run takes about 14 s).
+- **App**: Play boards come from the generator with the panel's difficulty; a level is won when its goals are done (Calm still counts matches); holes cannot be tapped or swapped.
+- **View**: holes have no cell; the hidden picture is drawn under its window and frost over it (fading as it thins); vines over their gems; items as painted pieces over code-drawn bodies with their glow; the goal row of icons; the freed sleeper's light flying to the goal row; seeds drifting out and flowers sprouting under the board. `src/render/pieceArt.ts` loads the pictures lazily, `src/render/pieces.ts` draws the fallbacks.
+- **Verified in Chromium at phone size:** all ten shapes of the Meadow and the Hollow, a frost level played until the picture showed through, a seed brought down and the level won, a bubble popped and the level won.
+- **Pictures cost** about $2.30 (one pieces sheet, one vine sheet, seven hidden pictures); about $11 of the $25 is used in all.
+- **Not built:** the hero in a bubble (no picture), the moonstone bias rise (DESIGN.md 2h), goal-specific sounds (the freed creature and the sprouting flower reuse the twinkle and chord for now).
+
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
-2. Hear the parent's phone verdict on the map (batch B), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
+2. Hear the parent's phone verdict on the map (batch B) and the Play levels (Stage 4), and tune the ramp from what he sees.
 3. **Stage 5** endings and wind-down (3.8): session timer, softening, the resting scene's timing and dimming, rest-until and New session as designed, the breathing glow controls, the night dimmer.
 4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
 
