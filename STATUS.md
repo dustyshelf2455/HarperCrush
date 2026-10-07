@@ -1,6 +1,6 @@
 # Status
 
-Updated 5 October 2026, after the Stage 3 play-test (notes and the plan in the project's `playtest/` folder; decisions in DESIGN.md 2d).
+Updated 7 October 2026, after batch B (the storybook map). Decisions in DESIGN.md 2e and 2f; the parent's walkthrough notes in the project's `playtest/` folder.
 
 ## After the play-test (5 October)
 
@@ -71,7 +71,7 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
 - **Stage 5 remainder, then Stage 6 polish and Batch D** (icon, launch picture, panel art), then the full-draft deploy for the parent to play end to end.
 
-Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about 80 cents of the $25 the parent added on 6 October.
+Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about $9 of the $25 the parent added on 6 October (backdrop repaints, the painted specials, batch B).
 
 ### Batch A built (6 October, afternoon)
 
@@ -85,12 +85,23 @@ Deployed to main on the parent's go-ahead: run 22, green 20:50 UTC on 6 October 
 - **Backdrops:** all seven painted. The first Crystal Cave, Mermaid Lagoon and Star Garden came back with characters in the bottom strip although the prompt asked for scenery only; the parent found them distracting, so those three were repainted scenery-only with a firmer prompt ("no creatures, no characters, no animals, no people, no faces of any kind; the strip never taller than a sixth"), and Dragon Hollow was painted once the credit was topped up.
 - **Parent's review on the phone (7 October, review mode):** gems and glow right; nine rows dropped to eight (deployed run 24); Cave and Hollow backdrops repainted with a lower strip; the white match rings, sparkles and win rim retinted to the gems' own glow and warm gold; the five coloured powers became whole painted pieces in six colours each (see STYLE.md "The gems"). His map brief is in `playtest/batchA-walkthrough-2026-10-07.md` in the project files and drives batch B.
 - **Air at the top:** the parent found the top packed, so the lantern row is now 154 px tall: the companion sits lower under the Dynamic Island, the goal stars have room below it, and the board starts under them (`resize` and `drawHud` in `src/game/view.ts`).
-- The old map (perspective stage, code road) is unchanged until batch B.
+
+### Batch B built (7 October, early morning): the storybook map
+
+On the branch, checked, awaiting the parent's "Deploy?". Screenshots of every area and the beacons in the project's `art/batchB/` folder.
+
+- **Pages:** 21 painted pages (`public/art/default/map/section-<area>-<1..3>.jpg`, 1024 by 1536, about 350 KB each), the path painted in by the painter, no sky, no creatures. The points along each path are in `src/render/mapSections.ts`, read off a tenths grid over each page; a wrong point shows as a beacon beside the wrong bit of path and is a one-number fix.
+- **Geometry** (`src/render/mapWorld.ts`, pure, tested in `tests/mapWorld.test.ts`): pages stack bottom to top with a 120 px overlap at every seam, the ten beacons of an area sit at even shares of the area's path length (half a share of margin at each end), and the companion hops along the painted path itself, across area borders too.
+- **Scene** (`src/game/mapScene.ts`, rewritten): pages drawn with feathered seams and a code-drawn fallback page (the area's ground and a ribbon along the recorded path) until a picture loads; beacons per area, lit under unlit as a crossfade, the lamp's halo and ground pool code-drawn; the companion on the path; friends, swaps, rest and sleep, twinkles and the moon as before. Scrolling: finger-follow drag, give past both ends with a spring back, a capped fling that eases out, drift home after 2.4 s, her beacon framed a little below the middle; review mode's drag and `Area` buttons work over the new pages.
+- **Beacons:** seven lit and unlit cut-outs (`beacon-<area>-lit.png`, `-unlit.png`), lamp heights measured into `BEACON_LAMP`. The old meadow backdrop, road texture, lantern post and path props are deleted with their loader code; `src/render/map.ts` stays for the Stage 1 mockup page only.
+- **Verified in Chromium at phone size:** the hop and lighting in all seven areas, the Meadow to Cave and Hollow to Meadow crossings (the pages join with a soft band), drag back and drift home, a fling that settles, the first page's bottom edge as the floor of the map.
+- **Pictures cost** about $6 of credit for batch B (21 pages and 7 beacon sheets); about $9 of the $25 added on 6 October is used in all (estimate from request counts, check platform.openai.com for the exact figure).
+- **Open:** the splash thread's "open on the map at the last level" lands on main first or second; after both are in, check once that the map's first frame after launch is centred on her beacon with the path ahead showing. If the parent finds any beacon off the path, the fix is its page's points in `mapSections.ts`.
 
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
-2. Hear the parent's phone verdict on batch A (and whether the ninth row stays), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
+2. Hear the parent's phone verdict on the map (batch B), then **Stage 4** Play mode goals and obstacles (DESIGN.md 3.7) with completability tests, replacing the provisional Play board.
 3. **Stage 5** endings and wind-down (3.8): session timer, softening, the resting scene's timing and dimming, rest-until and New session as designed, the breathing glow controls, the night dimmer.
 4. **Stage 6** polish, performance on the phone during the biggest effects, Reduce Motion, area creature cameos, the discoveries book, README install guide, a Playwright smoke test.
 
