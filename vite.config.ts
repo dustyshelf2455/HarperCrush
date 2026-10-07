@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { defineConfig, type Plugin } from 'vitest/config';
 
 /**
@@ -7,6 +9,20 @@ import { defineConfig, type Plugin } from 'vitest/config';
  * does at launch (see src/game/main.ts), so a new build installs in the
  * background and takes over at a launch, never during play.
  */
+/** Every painted picture under public/art (all themes), so the game is complete offline. */
+function paintedArt(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else out.push('./' + relative('public', p).split('\\').join('/'));
+    }
+  };
+  walk('public/art');
+  return out;
+}
+
 function serviceWorker(): Plugin {
   return {
     name: 'glimmerfall-service-worker',
@@ -23,6 +39,7 @@ function serviceWorker(): Plugin {
         './icons/icon-180.png',
         './icons/icon-192.png',
         './icons/icon-512.png',
+        ...paintedArt(),
       ]);
       for (const f of files) assets.add('./' + f);
       const list = [...assets].sort();

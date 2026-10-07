@@ -15,13 +15,14 @@
  * idle tick otherwise (DESIGN.md 4.4). No text, ever.
  */
 import './mapScene.css';
-import { areaForLevel, type AreaId } from '../core/journey';
+import { areaForLevel, LANTERNS_PER_AREA, type AreaId } from '../core/journey';
 import { areaTheme, blendThemeColors, paintSky, type AreaTheme } from '../render/areas';
-import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion } from '../render/creatures';
+import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
 import { drawLanternPost, drawPathRibbon, drawSteppingLights, lanternPoint, type LanternPos, pathPoint, postLayout, smoothPolyline } from '../render/map';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
 import { mix, rgba } from '../render/color';
+import { BACKDROP_HORIZON, LANTERN_LAMP_FROM_BOTTOM, type MapArt } from '../render/mapArt';
 import { createRng, deriveSeed } from '../shared/rng';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
@@ -44,6 +45,8 @@ export interface MapShowOptions {
   onDone(): void;
   /** She tapped a lit lantern behind her: play that level again (the journey does not move). */
   onReplay?(level: number): void;
+  /** Review mode (development only, see review.ts): every lantern is lit and tappable, the map can be dragged. */
+  review?: { onOpen(level: number): void };
 }
 
 // Timings from DESIGN.md 3.5 and the Stage 3 brief.
@@ -62,6 +65,8 @@ const SLEEP_AFTER_MS = 1500;
 const SLEEP_MS = 2200;
 const TWINKLE_MS = 1400;
 const HIDE_MS = 450;
+/** Review mode (review.ts): the farthest lantern the map shows, two passes through the seven areas. */
+const REVIEW_TOP = 140;
 /** Taps during the fade-in are the tail of a board tap, not a wish to move on. */
 const TAP_GUARD_MS = 400;
 
@@ -215,6 +220,12 @@ export class MapScene {
     this.twinkles = [];
     this.sleepiness = 0;
     this.camera = lanternPoint(opts.from).y;
+    this.panTarget = null;
+    if (opts.review) {
+      // Review mode (review.ts): no hop and no waiting, the whole map is simply there.
+      this.phase = 'linger';
+      this.litTo = true;
+    }
     this.friends = opts.offerCompanions && !opts.rest ? this.layoutFriends(opts.to, opts.companion) : [];
     this.pointers.clear();
     this.primary = null;
@@ -274,6 +285,8 @@ export class MapScene {
   // ---------------------------------------------------------------- layout
 
   private camera = 1;
+  /** Review mode: where a glide between areas is heading (a lantern number), or null. */
+  private panTarget: number | null = null;
 
   private get spacing(): number {
     return this.h / FRAME_LANTERNS;
@@ -357,9 +370,16 @@ export class MapScene {
   private readonly move = (e: PointerEvent): void => {
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
+    const dy = e.clientY - p.y;
     p.x = e.clientX;
     p.y = e.clientY;
     if (Math.hypot(p.x - p.x0, p.y - p.y0) > TAP_MAX_PX) p.moved = true;
+    if (this.opts?.review && p.moved && this.primary === e.pointerId) {
+      // Review mode: dragging the map moves the camera along the path.
+      this.panTarget = null;
+      this.camera = Math.min(lanternPoint(REVIEW_TOP).y, Math.max(lanternPoint(1).y, this.camera - dy / this.spacing));
+      this.wake();
+    }
   };
 
   private readonly up = (e: PointerEvent): void => {
@@ -390,6 +410,17 @@ export class MapScene {
     const opts = this.opts;
     if (!opts || !this.shown || this.phase === 'idle' || this.phase === 'done') return;
     if (this.phase === 'enter' && this.phaseT < TAP_GUARD_MS) return;
+    if (opts.review) {
+      const n = this.earlierLanternAt(x, y, REVIEW_TOP + 1);
+      if (n !== null) {
+        opts.review.onOpen(n);
+        return;
+      }
+      this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
+      opts.onTwinkle?.();
+      this.wake();
+      return;
+    }
     if (opts.rest) {
       if (!this.litTo) return;
       this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
@@ -430,13 +461,14 @@ export class MapScene {
   }
 
   /** A lit lantern behind her under the tap (its post or light), nearest first, or null. */
-  private earlierLanternAt(x: number, y: number): number | null {
+  private earlierLanternAt(x: number, y: number, below?: number): number | null {
     const opts = this.opts;
     if (!opts) return null;
+    const top = below ?? opts.to;
     const { nLo } = this.lanternRange();
     let best: number | null = null;
     let bestD = LANTERN_HIT;
-    for (let n = nLo; n < opts.to; n++) {
+    for (let n = nLo; n < top; n++) {
       const base = this.toScreen(lanternPoint(n));
       if (this.fog(base) <= 0.01 || base.y > this.h + 40) continue;
       const light = postLayout(base.x, base.y, this.lanternSizeAt(base)).lantern;
@@ -456,6 +488,16 @@ export class MapScene {
     const nLo = Math.max(1, Math.floor(this.camera - (h - h * BASELINE) / span) - 1);
     const nHi = Math.ceil(this.camera + (h * BASELINE - this.horizonY) / span) + 1;
     return { nLo, nHi };
+  }
+
+  /** Review mode: glide the camera to the first lantern of the next (1) or previous (-1) area. */
+  panArea(dir: 1 | -1): void {
+    if (!this.opts?.review) return;
+    const here = Math.round(this.camera);
+    const start = Math.floor((here - 1) / LANTERNS_PER_AREA) * LANTERNS_PER_AREA + 1;
+    const target = dir > 0 ? start + LANTERNS_PER_AREA : here > start ? start : start - LANTERNS_PER_AREA;
+    this.panTarget = Math.min(REVIEW_TOP, Math.max(1, target));
+    this.wake();
   }
 
   /** Called by the app for a continue it owes elsewhere (the debug hook); same as a tap on the lantern. */
@@ -560,7 +602,19 @@ export class MapScene {
         break;
       }
       case 'linger':
-        if (opts.rest) {
+        if (opts.review) {
+          if (this.panTarget !== null) {
+            const goal = lanternPoint(this.panTarget).y;
+            const gap = goal - this.camera;
+            if (Math.abs(gap) < 0.01) {
+              this.camera = goal;
+              this.panTarget = null;
+            } else {
+              this.camera += gap * Math.min(1, dt / 220);
+              moving = true;
+            }
+          }
+        } else if (opts.rest) {
           if (this.phaseT > SLEEP_AFTER_MS && this.sleepiness < 1) {
             this.sleepiness = clamp01((this.phaseT - SLEEP_AFTER_MS) / SLEEP_MS);
             moving = true;
@@ -614,8 +668,10 @@ export class MapScene {
   /** The area the camera is in, and how far it has crossed into the next one. */
   private areasNow(): { a: AreaTheme; b: AreaTheme; f: number } {
     const opts = this.opts;
-    const from = opts ? opts.from : 1;
-    const to = opts ? opts.to : 1;
+    // Review mode: the area follows the camera, blending across each border as a hop would.
+    const free = opts?.review ? Math.max(1, Math.min(REVIEW_TOP - 1, Math.floor(this.camera))) : 0;
+    const from = free || (opts ? opts.from : 1);
+    const to = free ? free + 1 : opts ? opts.to : 1;
     const span = lanternPoint(to).y - lanternPoint(from).y;
     const k = span !== 0 ? clamp01((this.camera - lanternPoint(from).y) / span) : 1;
     const a = areaTheme(areaForLevel(from));
@@ -631,6 +687,8 @@ export class MapScene {
     const { a, b, f } = this.areasNow();
     const colors = blendThemeColors(a, b, f);
     paintSky(ctx, w, h, colors);
+    const painted = this.backdropAlpha(a, b, f);
+    this.drawBackdrop(painted);
 
     // Ambient life of the area, crossfading at an area border.
     if (f < 1) {
@@ -668,14 +726,20 @@ export class MapScene {
     ctx.restore();
 
     // Scenery and ground: the incoming area fully, the outgoing one fading over it.
-    if (f > 0) b.drawScenery(ctx, w, h, t, hy);
-    if (f < 1) {
+    // Where the painted backdrop shows, the code-drawn ground gives way to it.
+    if (painted < 1) {
       ctx.save();
-      ctx.globalAlpha = 1 - f;
-      a.drawScenery(ctx, w, h, t, hy);
+      ctx.globalAlpha = 1 - painted;
+      if (f > 0) b.drawScenery(ctx, w, h, t, hy);
+      if (f < 1) {
+        ctx.save();
+        ctx.globalAlpha *= 1 - f;
+        a.drawScenery(ctx, w, h, t, hy);
+        ctx.restore();
+      }
+      this.drawHills(colors);
       ctx.restore();
     }
-    this.drawHills(colors);
     this.drawVignette();
 
     if (!opts) return;
@@ -686,6 +750,93 @@ export class MapScene {
   }
 
   private moon: HTMLCanvasElement | null = null;
+  /** Painted pieces (art round two); anything missing is drawn in code. */
+  private art: MapArt | null = null;
+
+  private roadPattern: CanvasPattern | null = null;
+
+  setArt(art: MapArt): void {
+    this.art = art;
+    this.roadPattern = null;
+    this.wake();
+  }
+
+  /** The painted road surface as a repeating pattern, scaled for the screen. */
+  private roadTexture(): CanvasPattern | null {
+    if (this.roadPattern) return this.roadPattern;
+    const img = this.art?.road;
+    if (!img) return null;
+    const pattern = this.ctx.createPattern(img, 'repeat');
+    if (!pattern) return null;
+    const scale = 64 / img.naturalWidth;
+    pattern.setTransform(new DOMMatrix().scale(scale, scale));
+    this.roadPattern = pattern;
+    return pattern;
+  }
+
+  /** The companion: painted when a picture exists for it, else drawn in code. */
+  private drawAnyCompanion(ctx: CanvasRenderingContext2D, id: CompanionId, x: number, y: number, s: number, t: number, opts: CompanionOpts = {}): void {
+    const picture = this.art?.companions[id];
+    if (picture) drawPaintedCompanion(ctx, picture.awake, x, y, s, t, opts, picture.asleep);
+    else drawCompanion(ctx, id, x, y, s, t, opts);
+  }
+
+  /** How much of the painted meadow backdrop shows right now: 1 in the meadow, fading at its borders. */
+  private backdropAlpha(a: AreaTheme, b: AreaTheme, f: number): number {
+    if (!this.art?.backdrop) return 0;
+    if (a.id === 'meadow') return 1 - f;
+    if (b.id === 'meadow') return f;
+    return 0;
+  }
+
+  /** The painted backdrop, scaled so its horizon sits on the map's horizon and its ground reaches the bottom edge. */
+  private drawBackdrop(alpha: number): void {
+    const img = this.art?.backdrop;
+    if (!img || alpha <= 0) return;
+    const { ctx, w, h } = this;
+    const hy = this.horizonY;
+    const scale = Math.max((h - hy) / (img.naturalHeight * (1 - BACKDROP_HORIZON)), w / img.naturalWidth);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    const x = (w - dw) / 2 - this.camera * 6;
+    const y = hy - BACKDROP_HORIZON * dh;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, x, y, dw, dh);
+    ctx.restore();
+  }
+
+  /** A painted lantern post standing at (x, groundY), unlit under lit so the light rises as a crossfade. */
+  private drawPaintedLantern(x: number, groundY: number, s: number, lit: number, alpha: number, t: number): boolean {
+    const litImg = this.art?.lanternLit;
+    const unlitImg = this.art?.lanternUnlit;
+    if (!litImg || !unlitImg) return false;
+    const { ctx } = this;
+    const dh = (s * 1.32) / LANTERN_LAMP_FROM_BOTTOM;
+    const dw = dh * (litImg.naturalWidth / litImg.naturalHeight);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (lit > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(x, groundY + s * 0.05);
+      ctx.scale(1, 0.38);
+      glowDisc(ctx, 0, 0, s * 1.9, this.style.palette.lanternGlow, 0.3 * lit * (0.925 + 0.075 * Math.sin(t * 0.9)));
+      ctx.restore();
+    }
+    if (lit < 0.98) ctx.drawImage(unlitImg, x - dw / 2, groundY - dh, dw, dh);
+    if (lit > 0.02) {
+      ctx.globalAlpha = alpha * clamp01(lit);
+      ctx.drawImage(litImg, x - dw / 2, groundY - dh, dw, dh);
+      // The lamp's own light: a warm halo the picture does not carry, breathing slowly.
+      const lamp = postLayout(x, groundY, s).lantern;
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, lamp.x, lamp.y, s * 1.5, this.style.palette.lanternGlow, (0.42 + 0.06 * Math.sin(t * 0.9)) * clamp01(lit));
+      glowDisc(ctx, lamp.x, lamp.y, s * 0.7, '#fff2cf', 0.28 * clamp01(lit));
+    }
+    ctx.restore();
+    return true;
+  }
 
   /** The same dim moon the board draws at (12,14), baked so the cut-out never erases the scene beneath. */
   private drawMoon(): void {
@@ -785,6 +936,19 @@ export class MapScene {
       const glow = 0.6 + 0.4 * Math.sin(t * 0.7 + it.phase);
       ctx.save();
       ctx.globalAlpha = alpha;
+      const picture = this.art?.props[it.kind];
+      if (picture) {
+        // A painted plant or stone, its foot on the ground, breathing a little of the area's light.
+        const dh = s * 1.9;
+        const dw = dh * (picture.naturalWidth / picture.naturalHeight);
+        ctx.drawImage(picture, p.x - dw / 2, p.y - dh * 0.9, dw, dh);
+        if (it.kind !== 'stone') {
+          ctx.globalCompositeOperation = 'lighter';
+          glowDisc(ctx, p.x, p.y - s * 0.8, s * 1.5, colors.accent, 0.12 * glow);
+        }
+        ctx.restore();
+        continue;
+      }
       switch (it.kind) {
         case 'tuft': {
           ctx.strokeStyle = rgba(mix(colors.ground, colors.accent, 0.45), 0.9);
@@ -884,7 +1048,7 @@ export class MapScene {
   private drawWorld(t: number, opts: MapShowOptions, colors: ReturnType<typeof blendThemeColors>): void {
     const { ctx, h } = this;
     const pal = { ...this.style.palette, path: colors.path, pathLit: colors.pathLit };
-    const walkedTo = this.litTo ? opts.to : opts.from;
+    const walkedTo = opts.review ? REVIEW_TOP : this.litTo ? opts.to : opts.from;
 
     const { nLo, nHi } = this.lanternRange();
     const pts: Pt[] = [];
@@ -897,7 +1061,10 @@ export class MapScene {
     ctx.beginPath();
     ctx.rect(0, hy + 6, this.w, h);
     ctx.clip();
-    drawPathRibbon(ctx, smooth, { path: colors.path, pathLit: colors.pathLit }, (i) => PATH_WIDTH * (0.35 + 0.65 * this.sizeAt((smooth[i] as Pt).y)), (walkedTo - nLo) * SPLINE_PER, { clearY: hy + 8, solidY: hy + h * 0.17 });
+    // Over the painted meadow the road is a little translucent, so the grass shows through its edges.
+    ctx.globalAlpha = 1 - 0.22 * this.backdropAlpha(this.areasNow().a, this.areasNow().b, this.areasNow().f);
+    drawPathRibbon(ctx, smooth, { path: colors.path, pathLit: colors.pathLit, texture: this.backdropAlpha(this.areasNow().a, this.areasNow().b, this.areasNow().f) > 0 ? this.roadTexture() : null }, (i) => PATH_WIDTH * (0.35 + 0.65 * this.sizeAt((smooth[i] as Pt).y)), (walkedTo - nLo) * SPLINE_PER, { clearY: hy + 8, solidY: hy + h * 0.17 });
+    ctx.globalAlpha = 1;
     for (let n = nLo; n < walkedTo && n < nHi; n++) {
       const i = n - nLo;
       const seg = smooth.slice(i * SPLINE_PER, (i + 1) * SPLINE_PER + 1);
@@ -915,16 +1082,16 @@ export class MapScene {
       const p = this.toScreen(lanternPoint(n));
       const alpha = this.fog(p);
       if (alpha <= 0.01 || p.y > h + 80) continue;
-      let lit = n < opts.to ? 1 : 0.1;
-      if (n === opts.to && this.litTo) {
+      let lit = opts.review || n < opts.to ? 1 : 0.1;
+      if (!opts.review && n === opts.to && this.litTo) {
         // The new light rises over the bloom, with a brief soft overshoot that settles.
         const k = clamp01(this.bloomT / BLOOM_MS);
         lit = 0.1 + 0.9 * easeOutCubic(k) + 0.25 * Math.sin(k * Math.PI);
         if (k < 1) bloomAt = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
       }
-      drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
+      if (!this.drawPaintedLantern(p.x, p.y, this.lanternSizeAt(p), lit, alpha, t + n * 0.7)) drawLanternPost(ctx, p.x, p.y, this.lanternSizeAt(p), lit, pal, t + n * 0.7, colors.accent, alpha);
     }
-    if (!opts.rest && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
+    if (!opts.rest && !opts.review && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
       // The invitation: a slow breath of light around the new lantern until she taps it.
       const p = this.toScreen(lanternPoint(opts.to));
       const at = postLayout(p.x, p.y, this.lanternSizeAt(p)).lantern;
@@ -953,7 +1120,7 @@ export class MapScene {
       const p = this.slotScreen(fr.slot);
       const bob = Math.sin(t * 1.2 + i * 2.1) * 2;
       glowDisc(ctx, p.x, p.y + FRIEND_S * 0.4, FRIEND_S * 0.6, colors.pathLit, 0.1);
-      drawCompanion(ctx, fr.id, p.x, p.y + bob, FRIEND_S * this.sizeAt(p.y), t + i * 1.3, { glow: 0.85, facing: p.x < perchTo.x ? 1 : -1, wave: waveNow });
+      this.drawAnyCompanion(ctx, fr.id, p.x, p.y + bob, FRIEND_S * this.sizeAt(p.y), t + i * 1.3, { glow: 0.85, facing: p.x < perchTo.x ? 1 : -1, wave: waveNow });
     }
 
     // The companion: entering, hopping, landed, or asleep.
@@ -964,8 +1131,8 @@ export class MapScene {
       const sinceLand = this.swap.t - HOP_MS;
       const inP = this.arc(slotP, perchTo, k);
       const outP = this.arc(perchTo, slotP, k);
-      drawCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
-      drawCompanion(ctx, this.swap.incoming, inP.x, inP.y, companionSize, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
+      this.drawAnyCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
+      this.drawAnyCompanion(ctx, this.swap.incoming, inP.x, inP.y, companionSize, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
     } else if (this.phase === 'hop') {
       const k = clamp01(this.phaseT / HOP_MS);
       const e = easeInOutSine(k);
@@ -975,7 +1142,7 @@ export class MapScene {
       const perch = postLayout(ground.x, ground.y, this.lanternSizeAt(ground)).perch;
       const y = perch.y - Math.sin(k * Math.PI) * HOP_HEIGHT;
       const dir = Math.sign(lanternPoint(opts.to).x - lanternPoint(opts.from).x) || 1;
-      drawCompanion(ctx, this.companion, perch.x, y, COMPANION_S * this.sizeAt(perch.y), t, { ...this.hopPose(k, -1, dir), glow: 1.15 });
+      this.drawAnyCompanion(ctx, this.companion, perch.x, y, COMPANION_S * this.sizeAt(perch.y), t, { ...this.hopPose(k, -1, dir), glow: 1.15 });
     } else {
       const perch = this.litTo ? perchTo : this.perchOf(opts.from);
       const pose: CompanionOpts = { glow: 1.1 };
@@ -991,7 +1158,7 @@ export class MapScene {
       }
       const bob = pose.sleep ? 0 : Math.sin(t * 1.4) * 1.5;
       glowDisc(ctx, perch.x, perch.y, companionSize * 0.7, colors.pathLit, 0.12);
-      drawCompanion(ctx, this.companion, perch.x, perch.y + bob, companionSize, t, pose);
+      this.drawAnyCompanion(ctx, this.companion, perch.x, perch.y + bob, companionSize, t, pose);
     }
   }
 

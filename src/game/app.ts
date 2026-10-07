@@ -43,12 +43,16 @@ import {
 } from '../core/journey';
 import { createRng, deriveSeed } from '../shared/rng';
 import { areaTheme } from '../render/areas';
+import { loadGemArt } from '../render/gemArt';
+import { loadPowerArt } from '../render/powerArt';
+import { loadMapArt } from '../render/mapArt';
 import type { CompanionId } from '../render/creatures';
 import { nightGarden } from '../render/styles/nightGarden';
 import { Gate } from './gate';
 import { PointerInput } from './input';
 import { MapScene, createMapCanvas } from './mapScene';
 import { Panel, type PanelContext } from './panel';
+import { ReviewBar, reviewOn, setReviewFlag } from './review';
 import { type Settings, SettingsStore, hintDelayMs } from './settings';
 import { GameSounds } from './sounds';
 import { GameView } from './view';
@@ -167,6 +171,13 @@ export class App {
   private phase: Phase = 'playing';
   private finishing = false;
   private finishNowWanted = false;
+  // Review mode (development only, review.ts): nothing is saved while it is on.
+  private review = reviewOn();
+  /** The lantern being looked at in review mode, or null on the review map. */
+  private reviewLevel: number | null = null;
+  /** Where the review map's camera opens: the lantern last looked at. */
+  private reviewAt: number | null = null;
+  private readonly reviewBar: ReviewBar;
   private restingSince: number | null = null;
 
   // Parts
@@ -227,6 +238,8 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
+    loadGemArt((art) => this.view.setGemArt(art));
+    loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);
     this.sounds.enabled = settings.chimes;
@@ -235,6 +248,10 @@ export class App {
 
     // The map canvas sits above the board and its touch surface; it is hidden when not in use.
     this.map = new MapScene(createMapCanvas(), nightGarden);
+    loadMapArt((art) => {
+      this.map.setArt(art);
+      this.view.setCompanionArt(art.companions);
+    });
 
     // Touch goes through the haptic overlay (a label over the canvas) when available, else the canvas.
     const surface = (document.getElementById('touch') as HTMLElement | null) ?? canvas;
@@ -269,6 +286,12 @@ export class App {
       newSession: () => this.newSession(),
       setLantern: (n) => this.goToLantern(n),
       resetProgress: () => this.resetProgress(),
+      setReview: (on) => this.setReview(on),
+    });
+    this.reviewBar = new ReviewBar(stage, {
+      toMap: () => this.openReviewMap(),
+      area: (dir) => this.map.panArea(dir),
+      exit: () => this.setReview(false),
     });
     this.gate = new Gate(stage, { onOpen: () => this.openPanel(), onHoldProgress: (p) => this.view.setMoonHold(p) });
     this.panel.onClose(() => {
@@ -296,11 +319,12 @@ export class App {
     }
     this.sessionTimer = setInterval(() => this.sessionTick(), SESSION_TICK_MS);
     this.save();
+    if (this.review) this.openReviewMap();
   }
 
   /** The lantern whose level is on the board: a replay's, or her own. */
   private get boardLevel(): number {
-    return this.replay ?? this.level;
+    return this.reviewLevel ?? this.replay ?? this.level;
   }
 
   // ------------------------------------------------------------- the board
@@ -519,6 +543,10 @@ export class App {
 
   /** Between levels: the lantern is lit, so the save already stands on the next one. */
   private toMap(): void {
+    if (this.reviewLevel !== null) {
+      this.openReviewMap(); // review mode: a won level goes back to the review map
+      return;
+    }
     const rest = this.finishing;
     // A replay does not move her on: the map comes back to her own lantern, which simply glows again.
     const from = this.level;
@@ -636,6 +664,7 @@ export class App {
       buildDate: __BUILD_DATE__,
       offlineReady: !!navigator.serviceWorker?.controller,
       audio: `${s.state}${this.player.current ? ', music' : ''}`,
+      review: this.review,
     };
   }
 
@@ -719,7 +748,7 @@ export class App {
    */
   private sessionTick(): void {
     const total = this.sessionTotalMs();
-    if (total <= 0 || this.sessionSpent || this.phase !== 'playing' || document.hidden || this.panel.isOpen) return;
+    if (this.review || total <= 0 || this.sessionSpent || this.phase !== 'playing' || document.hidden || this.panel.isOpen) return;
     this.sessionElapsedMs += SESSION_TICK_MS;
     const windDownAt = total - Math.min(WIND_DOWN_MS, total / 2);
     if (!this.windingDown && this.sessionElapsedMs >= windDownAt) this.beginWindDown();
@@ -780,6 +809,58 @@ export class App {
     this.player.setWindDown(false);
     this.panel.close();
     if (this.phase === 'resting') this.leaveMap();
+  }
+
+  // ------------------------------------------------------ review mode
+  // Development only (review.ts). Her saved game is written once on the way in and never
+  // again while review is on; turning it off reloads, which reopens exactly that save.
+
+  private setReview(on: boolean): void {
+    if (on === this.review) return;
+    if (on) {
+      this.save();
+      this.review = true;
+      setReviewFlag(true);
+      this.panel.close();
+      this.openReviewMap();
+    } else {
+      setReviewFlag(false);
+      location.reload();
+    }
+  }
+
+  /** The whole map, every lantern lit and tappable, drag to look around. `at` keeps the camera where she was. */
+  private openReviewMap(): void {
+    const at = this.reviewAt ?? this.level;
+    this.reviewLevel = null;
+    this.clearHint();
+    this.select(null);
+    this.pending = null;
+    this.view.stop();
+    this.phase = 'map';
+    this.reviewBar.show('map');
+    this.map.show({
+      from: at,
+      to: at,
+      companion: this.companion,
+      offerCompanions: false,
+      rest: false,
+      onTwinkle: () => this.sounds.twinkle(),
+      onDone: () => undefined,
+      review: { onOpen: (n) => this.openReviewLevel(n) },
+    });
+  }
+
+  private openReviewLevel(n: number): void {
+    this.reviewAt = n;
+    this.reviewLevel = n;
+    this.pending = null;
+    this.map.hide();
+    this.phase = 'playing';
+    this.startBoard();
+    this.view.start();
+    this.reviewBar.show('level');
+    this.armHint();
   }
 
   /** Map position: the recovery tool if the phone ever loses the save (DESIGN.md 3.9). */
@@ -954,6 +1035,7 @@ export class App {
   }
 
   private save(): void {
+    if (this.review) return; // review mode never touches her saved game
     try {
       const save: Save = {
         v: 3,

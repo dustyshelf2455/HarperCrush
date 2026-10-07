@@ -12,7 +12,7 @@ Then continue from the top item in STATUS.md's "Next" list unless the person say
 
 - Development happens on a branch; `main` deploys to GitHub Pages on every push via `.github/workflows/deploy.yml` (typecheck, tests, build, deploy). Push to `main` only when the build is verified.
 - `npm run check` runs typecheck, tests and the build; it must pass before any push.
-- Zero runtime dependencies. TypeScript, Vite, Vitest only. Art and sound are generated in code; no asset files except the app icons.
+- Zero runtime dependencies. TypeScript, Vite, Vitest only. Sound is generated in code. Art is code-drawn except the painted pictures under `public/art/` (art round two, DESIGN.md 2d): generated with the OpenAI image API from this environment, reviewed, cut out, and stamped by the sprite cache; the code-drawn version of a piece stays as its fallback. New picture files must be added to the service worker's asset list in `vite.config.ts`.
 - The game core in `src/core` is pure and deterministic (seeded RNG) and must stay testable without a browser. Rendering (`src/render`, `src/game/view.ts`) only shows what the core's step list says happened.
 - Keep the brief's rules: no timers, scores, lives, counters, pop-ups, text for the child, strobing, or paths out of the app. Calm is non-negotiable; delight is the hook.
 - Verify visually before pushing: Playwright with the preinstalled Chromium (`/opt/pw-browsers/chromium`) at an iPhone 16 Pro viewport (402 by 874), screenshots and short videos. Scratch scripts live outside the repo.

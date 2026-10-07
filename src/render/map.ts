@@ -75,6 +75,8 @@ export function smoothPolyline(points: readonly Pt[], per: number): Pt[] {
 export interface PathColors {
   path: string;
   pathLit: string;
+  /** A painted road surface, repeated inside the ribbon (art round two). */
+  texture?: CanvasPattern | null;
 }
 
 /**
@@ -102,7 +104,7 @@ export function ribbonOutline(pts: readonly Pt[], halfAt: (i: number) => number)
   return left.concat(right.reverse());
 }
 
-function fillOutline(ctx: CanvasRenderingContext2D, outline: readonly Pt[], style: string | CanvasGradient): void {
+function fillOutline(ctx: CanvasRenderingContext2D, outline: readonly Pt[], style: string | CanvasGradient | CanvasPattern): void {
   if (outline.length < 3) return;
   ctx.beginPath();
   outline.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
@@ -141,7 +143,44 @@ export function drawPathRibbon(ctx: CanvasRenderingContext2D, pts: readonly Pt[]
     [0.3, lighten(colors.path, 0.18), 0.2],
     [0.14, colors.pathLit, 0.07],
   ];
-  for (const [k, color, alpha] of passes) fillOutline(ctx, ribbonOutline(pts, (i) => widthAt(i) * k), paint(color, alpha));
+  for (const [k, color, alpha] of passes) {
+    fillOutline(ctx, ribbonOutline(pts, (i) => widthAt(i) * k), paint(color, alpha));
+    if (k === 0.5 && colors.texture) {
+      // The painted surface sits inside the ribbon's body, under the crown and the walked light.
+      ctx.save();
+      ctx.beginPath();
+      const body = ribbonOutline(pts, (i) => widthAt(i) * 0.5);
+      body.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.clip();
+      const alphaMax = 0.85;
+      if (fade) {
+        // The stones thin out toward the horizon: a stack of bands, each a little fainter than the one below.
+        const bands = 8;
+        const bandH = (fade.solidY - fade.clearY) / bands;
+        for (let b = 0; b < bands; b++) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(-1e4, fade.clearY + b * bandH, 2e4, bandH + 0.5);
+          ctx.clip();
+          ctx.globalAlpha = alphaMax * ((b + 0.5) / bands);
+          fillOutline(ctx, body, colors.texture);
+          ctx.restore();
+        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-1e4, fade.solidY, 2e4, 1e5);
+        ctx.clip();
+        ctx.globalAlpha = alphaMax;
+        fillOutline(ctx, body, colors.texture);
+        ctx.restore();
+      } else {
+        ctx.globalAlpha = alphaMax;
+        fillOutline(ctx, body, colors.texture);
+      }
+      ctx.restore();
+    }
+  }
   const walked = Math.min(pts.length, Math.max(0, litUntil) + 1);
   if (walked >= 2) fillOutline(ctx, ribbonOutline(pts.slice(0, walked), (i) => widthAt(i) * 0.13), paint(colors.pathLit, 0.16));
   ctx.restore();
