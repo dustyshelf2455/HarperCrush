@@ -53,7 +53,7 @@ How they sit on the board: frost under the gem (the picture under the frost), th
 
 ## The launch picture
 
-`splash.jpg` in the theme folder (1024 by 1536, prompt in `art/batchA/splash-prompt.txt`): the name Glimmerfall painted in glowing storybook letters in the upper third, the fairy below it scattering jewels that drift down, a quiet meadow at the bottom, everything important inside the central sixty percent of the width. The code sky above it on tall phones starts from the painting's own top colour (`#192546`), so the join is invisible; the stars, the drifting glimmers and the fade are code (DESIGN.md 2f, `src/game/splash.ts`).
+`splash.jpg` in the theme folder (1024 by 1536, prompt in `art/batchA/splash-prompt.txt`): the name Glimmerfall painted in glowing storybook letters in the upper third, the fairy below it scattering jewels that drift down, a quiet meadow at the bottom, everything important inside the central sixty percent of the width. `splash-door.png` (prompt in `art/batchA/splash-door-prompt.txt`) is the fairy door cut-out that stands at the foot of the picture with the sign "Harper": a honey-wood arch in mossy stone, a lit round window, mushrooms and flowers at its foot; its window light, the invitation breath and the opening bloom are code. The code sky above the picture on tall phones starts from the painting's own top colour (`#192546`), so the join is invisible; the stars, the drifting glimmers and the fade are code (DESIGN.md 2f, `src/game/splash.ts`).
 
 ## Files, sizes, themes
 
