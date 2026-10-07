@@ -1,48 +1,57 @@
 /**
- * When the launch picture (DESIGN.md 2f) shows and when it goes, as pure
- * arithmetic so it can be tested without a browser. Times are milliseconds
- * since the splash opened. The splash never asks for a tap: it stays while
- * the game's pictures load, always long enough to be seen as a picture rather
- * than a flicker, never so long that it feels like a wait, and fades on its
- * own. A tap after the first moment lets it go a little sooner.
+ * When the launch picture (DESIGN.md 2f) goes, as pure arithmetic so it can
+ * be tested without a browser. Times are milliseconds since the splash
+ * opened. The splash waits for her: it stays, stars twinkling and glimmers
+ * drifting, until she taps the fairy door with her name on it (the parent,
+ * 7 October); then the door's light swells and the picture fades into the
+ * map. A touch in the very first moment (a hand still on the screen from the
+ * launch) is not an opening.
  */
 
-/** Seen for at least this long, even when everything is already cached. */
-export const SPLASH_MIN_MS = 2400;
-/** Gone by this time whether or not the pictures have arrived. */
-export const SPLASH_MAX_MS = 4800;
+/** A door tap before this counts from this moment, so the picture is always seen. */
+export const SPLASH_TAP_AFTER_MS = 900;
+/** The door's light swells for this long before the fade begins. */
+export const SPLASH_OPEN_MS = 650;
 /** The fade into the game. */
 export const SPLASH_FADE_MS = 1200;
-/** A tap before this is ignored (a hand still on the screen from the launch). */
-export const SPLASH_TAP_AFTER_MS = 900;
 
 export interface SplashTimes {
-  /** When the game's own pictures were ready, or null while they load. */
-  readyAt: number | null;
-  /** When she tapped the splash, or null. */
-  tappedAt: number | null;
+  /** When she tapped the door, or null while the splash waits. */
+  openedAt: number | null;
 }
 
-/** When the fade begins. */
-export function splashFadeStart(times: SplashTimes): number {
-  let start = SPLASH_MAX_MS;
-  if (times.readyAt !== null) start = Math.min(start, Math.max(times.readyAt, SPLASH_MIN_MS));
-  if (times.tappedAt !== null) start = Math.min(start, Math.max(times.tappedAt, SPLASH_TAP_AFTER_MS));
-  return start;
+/** When the door counts as opened (its light starts to swell), or null while the splash waits. */
+export function splashOpenStart(times: SplashTimes): number | null {
+  return times.openedAt === null ? null : Math.max(times.openedAt, SPLASH_TAP_AFTER_MS);
 }
 
-/** The splash's opacity at `now`: 1 while it holds, easing to 0 across the fade. */
+/** When the fade begins, or null while the splash waits. */
+export function splashFadeStart(times: SplashTimes): number | null {
+  const open = splashOpenStart(times);
+  return open === null ? null : open + SPLASH_OPEN_MS;
+}
+
+/** The door's opening light at `now`, 0 closed to 1 fully open. */
+export function splashOpening(now: number, times: SplashTimes): number {
+  const open = splashOpenStart(times);
+  if (open === null || now <= open) return 0;
+  const f = Math.min(1, (now - open) / SPLASH_OPEN_MS);
+  return 1 - (1 - f) * (1 - f);
+}
+
+/** The splash's opacity at `now`: 1 while it waits, easing to 0 across the fade. */
 export function splashAlpha(now: number, times: SplashTimes): number {
   const start = splashFadeStart(times);
-  if (now <= start) return 1;
+  if (start === null || now <= start) return 1;
   const f = Math.min(1, (now - start) / SPLASH_FADE_MS);
-  // Ease in and out, so the picture lets go gently and the board arrives softly.
+  // Ease in and out, so the picture lets go gently and the map arrives softly.
   return 1 - (f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2);
 }
 
 /** True once the fade has fully run. */
 export function splashDone(now: number, times: SplashTimes): boolean {
-  return now >= splashFadeStart(times) + SPLASH_FADE_MS;
+  const start = splashFadeStart(times);
+  return start !== null && now >= start + SPLASH_FADE_MS;
 }
 
 export interface PicturePlacement {
@@ -75,4 +84,27 @@ export function placePicture(w: number, h: number, imgW: number, imgH: number): 
   const width = imgW * scale;
   const height = imgH * scale;
   return { x: (w - width) / 2, y: h - height, width, height, feather: Math.min(height * 0.22, 160) };
+}
+
+export interface DoorPlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Where the fairy door stands: bottom centre, on the painting's meadow, above
+ * the home indicator, sized to the screen (the door picture is about 480 by
+ * 453). The tap area is the door with a generous margin (`doorHit`).
+ */
+export function placeDoor(w: number, h: number, imgW = 480, imgH = 453): DoorPlacement {
+  const width = Math.min(w * 0.4, h * 0.2);
+  const height = width * (imgH / imgW);
+  return { x: (w - width) / 2, y: h * 0.935 - height, width, height };
+}
+
+export function doorHit(door: DoorPlacement, x: number, y: number): boolean {
+  const m = 28;
+  return x >= door.x - m && x <= door.x + door.width + m && y >= door.y - m && y <= door.y + door.height + m;
 }
