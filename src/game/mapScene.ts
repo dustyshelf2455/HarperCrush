@@ -6,10 +6,12 @@
  * she has lit, stands her companion on the path, hops it along the painting
  * to the next beacon, and draws all the light. Nothing moves on by itself:
  * the map stays until she taps the lit beacon (or her companion on it), and
- * after a moment the beacon breathes as the invitation. On offered visits the
- * other two creatures wait by the path and a tap on one makes it her
- * companion. In rest (DESIGN.md 3.8) the companion curls up and sleeps on the
- * new beacon and the scene stays until the app hides it.
+ * after a moment the beacon breathes as the invitation. The other two
+ * creatures travel with her (the parent, 7 October): they trail along the path
+ * behind her hop and wait beside her at every beacon, and a tap on one swaps
+ * it in as her companion, on the map and on the board alike. In rest
+ * (DESIGN.md 3.8) all three curl up and sleep by the new beacon and the scene
+ * stays until the app hides it.
  *
  * The map can be scrolled with a finger (the parent, 7 October: scrolling
  * along the path should be a calm delight in itself): the pages follow the
@@ -39,13 +41,11 @@ export interface MapShowOptions {
   from: number;
   to: number;
   companion: CompanionId;
-  /** The other creatures wait by the path and can be picked (first visit, first lantern of an area). */
-  offerCompanions: boolean;
   /** The resting scene: she falls asleep on the new lantern and the scene never ends on its own. */
   rest: boolean;
   /** The moment the new lantern lights (the app plays a warm chord). */
   onLight?(): void;
-  /** She tapped a waiting creature; it is now her companion. */
+  /** She tapped one of the friends travelling with her; it is now her companion. */
   onPick?(id: CompanionId): void;
   /** A tap in the resting scene made a star twinkle (the app plays a very soft chime). */
   onTwinkle?(): void;
@@ -88,8 +88,12 @@ const TAP_MAX_MS = 700;
 const TAP_MAX_PX = 12;
 const PARK_AFTER_MS = 500;
 const PARK_STILL_PX = 6;
-/** Generous target around a waiting creature, in CSS px (about 44 pt). */
-const FRIEND_HIT = 44;
+/** Generous target around a travelling friend, in CSS px (a five-year-old's whole fingertip). */
+const FRIEND_HIT = 60;
+/** The friends set off a little after her, one behind the other. */
+const FRIEND_LAG_MS = 240;
+/** A friend's hop is a little lower than hers. */
+const FRIEND_HOP = 0.7;
 
 const IDLE_FPS = 12;
 
@@ -98,7 +102,7 @@ const BASELINE = 0.56;
 // Sizes on screen (CSS px): the beacon's height, the companion and the waiting friends (STYLE.md: the fairy half again as big).
 const BEACON_H = 86;
 const COMPANION_S = 58;
-const FRIEND_S = 50;
+const FRIEND_S = 52;
 const HOP_HEIGHT = 70;
 /** How far the beacon stands from the path's centre line, in CSS px. */
 const BEACON_OFFSET = 34;
@@ -135,14 +139,16 @@ interface Tracked {
 
 interface Friend {
   id: CompanionId;
-  /** Where it waits, in world pixels. */
-  at: Pt;
+  /** Where it stands relative to the beacon she is at, in world pixels (behind her on the path, to one side). */
+  offset: Pt;
 }
 
 interface Swap {
   incoming: CompanionId;
   outgoing: CompanionId;
+  /** The spot they trade, in world pixels, and its place in the line for the one stepping back. */
   at: Pt;
+  offset: Pt;
   t: number;
 }
 
@@ -184,6 +190,8 @@ export class MapScene {
   private bloomT = -1;
   private landT = -1;
   private friends: Friend[] = [];
+  /** Milliseconds since her hop began; the friends' own hops trail it and run on into the linger. */
+  private travelT = -1;
   private swap: Swap | null = null;
   private twinkles: Twinkle[] = [];
   private sleepiness = 0;
@@ -235,9 +243,10 @@ export class MapScene {
     this.bloomT = -1;
     this.landT = -1;
     this.swap = null;
+    this.travelT = -1;
     this.twinkles = [];
     this.sleepiness = 0;
-    this.camera = lanternWorld(opts.from).y;
+    this.camera = this.floored(lanternWorld(opts.from).y);
     this.panTarget = null;
     this.fling = 0;
     this.sinceTouch = 0;
@@ -246,7 +255,7 @@ export class MapScene {
       this.phase = 'linger';
       this.litTo = true;
     }
-    this.friends = opts.offerCompanions && !opts.rest ? this.layoutFriends(opts.to) : [];
+    this.friends = this.layoutFriends();
     this.pointers.clear();
     this.primary = null;
     this.shown = true;
@@ -341,11 +350,16 @@ export class MapScene {
     return { lo, hi: Math.max(lo, hi) };
   }
 
+  /** A camera height no lower than the first page's floor, so the night below the world never shows at the first beacons. */
+  private floored(y: number): number {
+    return Math.max(this.cameraRange().lo, y);
+  }
+
   /** Where the view rests on its own: her lantern (the one she hops to once it is lit). */
   private get home(): number {
     const opts = this.opts;
     if (!opts) return 0;
-    return lanternWorld(this.litTo ? opts.to : opts.from).y;
+    return this.floored(lanternWorld(this.litTo ? opts.to : opts.from).y);
   }
 
   /** The beacon's foot beside the path for lantern n, in world px. */
@@ -371,19 +385,45 @@ export class MapScene {
   }
 
   /**
-   * The two waiting spots for her friends: by the path either side of lantern
-   * `to`, a little before it. Deterministic, so a visit always looks the same.
+   * The two friends travelling with her stand a little behind her on the
+   * path, one to each side. Deterministic, so the group always looks the same.
    */
-  private layoutFriends(to: number): Friend[] {
-    const l = lanternWorld(to);
+  private layoutFriends(): Friend[] {
     const others = COMPANIONS.filter((c) => c !== this.companion);
-    const side = (FRIEND_S * 1.5) / this.scale;
-    const back = (FRIEND_S * 1.1) / this.scale;
+    const side = (FRIEND_S * 1.4) / this.scale;
+    const back = (FRIEND_S * 1.05) / this.scale;
     const slots: Pt[] = [
-      { x: Math.max(side, l.x - side), y: l.y - back },
-      { x: Math.min(SECTION_W - side, l.x + side), y: l.y - back * 1.6 },
+      { x: -side, y: -back },
+      { x: side, y: -back * 1.7 },
     ];
-    return others.map((id, i) => ({ id, at: slots[i] as Pt }));
+    return others.map((id, i) => ({ id, offset: slots[i] as Pt }));
+  }
+
+  /** A friend's world point: its offset from where she is, kept on the page. */
+  private friendWorld(f: Friend, anchor: Pt): Pt {
+    const margin = (FRIEND_S * 0.8) / this.scale;
+    return { x: Math.min(SECTION_W - margin, Math.max(margin, anchor.x + f.offset.x)), y: anchor.y + f.offset.y };
+  }
+
+  /** Where the group stands when nobody is hopping: her beacon's point on the path. */
+  private groupAnchor(): Pt {
+    const opts = this.opts;
+    if (!opts) return { x: 0, y: 0 };
+    return lanternWorld(this.litTo ? opts.to : opts.from);
+  }
+
+  /**
+   * A friend following her hop, trailing it by its place in the line: its world point, how far
+   * through its own hop it is (0..1, 1 when landed) and how long ago it landed.
+   */
+  private friendTravel(i: number): { at: Pt; k: number; sinceLand: number } {
+    const opts = this.opts;
+    const f = this.friends[i] as Friend;
+    const lag = FRIEND_LAG_MS * (i + 1);
+    if (!opts || this.travelT < 0 || opts.from === opts.to) return { at: this.friendWorld(f, this.groupAnchor()), k: 1, sinceLand: -1 };
+    const k = clamp01((this.travelT - lag) / HOP_MS);
+    const anchor = k <= 0 ? lanternWorld(opts.from) : k >= 1 ? lanternWorld(opts.to) : pathBetween(opts.from, opts.to, easeInOutSine(k));
+    return { at: this.friendWorld(f, anchor), k, sinceLand: this.travelT - lag - HOP_MS };
   }
 
   // ------------------------------------------------------------------ input
@@ -473,6 +513,11 @@ export class MapScene {
     if (!opts || !this.shown || this.phase === 'idle' || this.phase === 'done') return;
     if (this.phase === 'enter' && this.phaseT < TAP_GUARD_MS) return;
     if (opts.review) {
+      const friend = this.friendAt(x, y);
+      if (friend) {
+        if (!this.swap) this.pick(friend);
+        return;
+      }
       const n = this.earlierLanternAt(x, y, REVIEW_TOP + 1);
       if (n !== null) {
         opts.review.onOpen(n);
@@ -492,7 +537,7 @@ export class MapScene {
     }
     const friend = this.friendAt(x, y);
     if (friend) {
-      if (this.phase === 'linger' && !this.swap) this.pick(friend);
+      if (this.phase === 'linger' && !this.swap && this.travelDone()) this.pick(friend);
       return;
     }
     // The lit lantern (or her companion on it) starts the next level. Anywhere else twinkles,
@@ -578,11 +623,16 @@ export class MapScene {
     this.finish();
   }
 
+  /** The friends have all landed (a tap on one mid-hop would send it off again). */
+  private travelDone(): boolean {
+    return this.travelT < 0 || this.travelT >= HOP_MS + FRIEND_LAG_MS * this.friends.length + LAND_MS;
+  }
+
   private friendAt(x: number, y: number): Friend | null {
     let best: Friend | null = null;
     let bestD = Infinity;
-    for (const f of this.friends) {
-      const p = this.toScreen(f.at);
+    for (const [i, f] of this.friends.entries()) {
+      const p = this.toScreen(this.friendTravel(i).at);
       const d = Math.hypot(p.x - x, p.y - FRIEND_S * 0.45 - y);
       if (d <= FRIEND_HIT && d < bestD) {
         best = f;
@@ -595,7 +645,7 @@ export class MapScene {
   private pick(friend: Friend): void {
     const opts = this.opts;
     if (!opts) return;
-    this.swap = { incoming: friend.id, outgoing: this.companion, at: friend.at, t: 0 };
+    this.swap = { incoming: friend.id, outgoing: this.companion, at: this.friendWorld(friend, this.groupAnchor()), offset: friend.offset, t: 0 };
     this.friends = this.friends.filter((f) => f !== friend);
     this.companion = friend.id;
     opts.onPick?.(friend.id);
@@ -607,7 +657,7 @@ export class MapScene {
     this.litTo = true;
     this.bloomT = 0;
     this.landT = 0;
-    if (this.opts) this.camera = lanternWorld(this.opts.to).y;
+    if (this.opts) this.camera = this.floored(lanternWorld(this.opts.to).y);
     this.phase = 'linger';
     this.phaseT = 0;
     this.opts?.onLight?.();
@@ -664,12 +714,13 @@ export class MapScene {
         if (this.phaseT >= ENTER_MS) {
           this.phase = 'hop';
           this.phaseT = 0;
+          this.travelT = 0;
         }
         break;
       case 'hop': {
         moving = true;
         const k = clamp01(this.phaseT / HOP_MS);
-        this.camera = lanternWorld(opts.from).y + (lanternWorld(opts.to).y - lanternWorld(opts.from).y) * easeInOutSine(k);
+        this.camera = this.floored(lanternWorld(opts.from).y + (lanternWorld(opts.to).y - lanternWorld(opts.from).y) * easeInOutSine(k));
         if (k >= 1) this.light();
         break;
       }
@@ -689,6 +740,11 @@ export class MapScene {
       case 'done':
         break;
     }
+    if (this.travelT >= 0 && !this.travelDone()) {
+      // The friends are still hopping after her.
+      this.travelT += dt;
+      moving = true;
+    }
     if (this.bloomT >= 0) {
       this.bloomT += dt;
       if (this.bloomT < BLOOM_MS) moving = true;
@@ -703,7 +759,7 @@ export class MapScene {
       this.swap.t += dt;
       moving = true;
       if (this.swap.t >= HOP_MS + LAND_MS) {
-        this.friends.push({ id: this.swap.outgoing, at: this.swap.at });
+        this.friends.push({ id: this.swap.outgoing, offset: this.swap.offset });
         this.swap = null;
       }
     }
@@ -1063,14 +1119,40 @@ export class MapScene {
       ctx.restore();
     }
 
-    // Friends waiting by the path, turned toward her, waving as she passes.
+    // Her friends travelling with her: trailing her hop along the path, then standing a little behind
+    // her, turned her way, waving once they have landed; asleep beside her in rest.
     const perchTo = this.perchOf(opts.to);
-    const waveNow = this.phase === 'hop' ? 1 : this.phase === 'linger' && this.phaseT < WAVE_AFTER_HOP_MS ? 1 - easeInOutSine(clamp01((this.phaseT - WAVE_AFTER_HOP_MS + 700) / 700)) : 0;
+    const asleep = opts.rest && this.sleepiness > 0 ? easeInOutSine(this.sleepiness) : 0;
     for (const [i, fr] of this.friends.entries()) {
-      const p = this.toScreen(fr.at);
-      const bob = Math.sin(t * 1.2 + i * 2.1) * 2;
+      const tr = this.friendTravel(i);
+      const p = this.toScreen(tr.at);
+      if (p.y < -FRIEND_S * 2 || p.y > this.h + FRIEND_S) continue;
+      const dir = Math.sign(perchTo.x - p.x) || 1;
+      const pose: CompanionOpts = { glow: 0.9, facing: dir >= 0 ? 1 : -1 };
+      let y = p.y;
+      if (tr.k < 1) {
+        // In the air behind her, a little lower than her own hop.
+        const air = Math.sin(tr.k * Math.PI);
+        y -= air * HOP_HEIGHT * FRIEND_HOP;
+        Object.assign(pose, this.hopPose(tr.k, -1, dir));
+      } else {
+        const land = tr.sinceLand >= 0 && tr.sinceLand < LAND_MS ? Math.sin(clamp01(tr.sinceLand / LAND_MS) * Math.PI) : 0;
+        pose.squash = 1 - 0.14 * land;
+        // A wave of greeting after everyone has landed, fading out over a moment.
+        const settled = tr.sinceLand - LAND_MS;
+        if (settled >= 0 && settled < WAVE_AFTER_HOP_MS) pose.wave = 1 - easeInOutSine(clamp01((settled - WAVE_AFTER_HOP_MS + 700) / 700));
+        if (asleep > 0) {
+          pose.blink = asleep;
+          pose.sleep = this.sleepiness >= 1;
+          pose.squash = 1 - 0.08 * asleep;
+          pose.motion = 1 - 0.7 * asleep;
+          pose.glow = 0.9 - 0.2 * asleep;
+          pose.wave = 0;
+        }
+        y += pose.sleep ? 0 : Math.sin(t * 1.2 + i * 2.1) * 2 * (1 - asleep);
+      }
       glowDisc(ctx, p.x, p.y, FRIEND_S * 0.6, colors.pathLit, 0.1);
-      this.drawAnyCompanion(ctx, fr.id, p.x, p.y + bob, FRIEND_S, t + i * 1.3, { glow: 0.85, facing: p.x < perchTo.x ? 1 : -1, wave: waveNow });
+      this.drawAnyCompanion(ctx, fr.id, p.x, y, FRIEND_S, t + i * 1.3, pose);
     }
 
     // The companion: entering, hopping, landed, or asleep.

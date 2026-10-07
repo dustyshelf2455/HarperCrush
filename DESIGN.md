@@ -134,6 +134,14 @@ Play levels are now the ones designed in 3.7, generated per lantern. What was de
 - **Calm is untouched:** the 6 by 9 board that counts matches. Play saves from before Stage 4 open as they were (a plain board counting matches) and the next lantern is a real level.
 - **Completability** is checked twice, as 4.5 asks: every goal cell can be part of a line of three (the generator retries otherwise), and a bot that plays toward the goals finishes all seventy lanterns at every difficulty within the move bound in the tests.
 - The hooded hero sleeps in no bubble yet (only the dragon and the fairy were painted); the "stuck behind moonstone" bias rise from 3.7 is not built, since the bot never needed it.
+
+## 2i. Travel companions (7 October 2026)
+
+The parent opened the map and saw only the fairy: the dragon and the hero of 3.5 waited by the path only after level 1 and at the first lantern of each area, so on the launch map and in review mode they never appeared. His ask: "make them travel companions on the map and you can click them to rotate which one you are playing."
+
+- **All three travel together.** The one she is playing leads and stands at her beacon; the other two trail a little behind her on the path, one to each side, turned her way. When she wins a level they hop after her, one after the other, and wave once they have landed. In rest all three fall asleep beside the beacon.
+- **A tap on a trailing friend makes it her companion:** the two swap places with a little hop, and the choice is saved, so the board shows the chosen one at the top and the next launch remembers it. A tap on the leading companion or the beacon still resumes the level. The friends' tap targets are generous (about 60 px around each).
+- The companion offer of 3.5 (only on some visits) is gone, since the friends are always there. Review mode shows them too and a tap swaps them there as well (nothing is saved in review mode).
 ---
 ---
 

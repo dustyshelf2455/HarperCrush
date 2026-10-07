@@ -94,7 +94,8 @@ interface Save {
   state: string;
   matches: number;
   companion: CompanionId;
-  companionOffered: boolean;
+  /** Stage 3 wrote this (the companion offer); the friends now travel with her, so it is ignored. */
+  companionOffered?: boolean;
   seen: PowerFamily[];
   comboCounts: Record<string, number>;
   gift: Gift | null;
@@ -171,7 +172,6 @@ export class App {
   private state: GameState;
   private matches = 0;
   private companion: CompanionId = 'firefly';
-  private companionOffered = false;
   private seen = new Set<PowerFamily>();
   private comboCounts: Record<string, number> = {};
   private gift: Gift | null = null;
@@ -569,15 +569,12 @@ export class App {
       this.state = this.freshState(this.level, this.mode);
     }
     this.placeLevelGift();
-    const offer = (!this.companionOffered && this.level === 2) || isFirstLanternOfArea(this.level);
-    if (offer) this.companionOffered = true;
     this.save();
     this.view.stop();
     this.map.show({
       from,
       to: this.level,
       companion: this.companion,
-      offerCompanions: offer,
       rest,
       onLight: () => (isFirstLanternOfArea(this.level) ? this.sounds.areaArrive(areaForLevel(this.level)) : this.sounds.lanternLit()),
       onPick: (id) => this.pickCompanion(id),
@@ -641,9 +638,9 @@ export class App {
       from: this.level,
       to: this.level,
       companion: this.companion,
-      offerCompanions: false,
       rest: false,
       arrive: false,
+      onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.sounds.twinkle(),
       onDone: () => this.leaveMap(),
       onReplay: (n) => this.startReplay(n),
@@ -657,7 +654,6 @@ export class App {
       from: this.level,
       to: this.level,
       companion: this.companion,
-      offerCompanions: false,
       rest: true,
       onTwinkle: () => this.sounds.twinkle(),
       onDone: () => undefined,
@@ -867,8 +863,8 @@ export class App {
       from: at,
       to: at,
       companion: this.companion,
-      offerCompanions: false,
       rest: false,
+      onPick: (id) => this.pickCompanion(id),
       onTwinkle: () => this.sounds.twinkle(),
       onDone: () => undefined,
       review: { onOpen: (n) => this.openReviewLevel(n) },
@@ -916,7 +912,6 @@ export class App {
       /* nothing to remove */
     }
     this.companion = 'firefly';
-    this.companionOffered = false;
     this.seen.clear();
     this.comboCounts = {};
     this.mode = 'play';
@@ -958,7 +953,6 @@ export class App {
       const gap = now - save.savedAt;
       this.level = Number.isFinite(save.level) ? Math.max(1, Math.floor(save.level)) : 1;
       this.companion = save.companion ?? 'firefly';
-      this.companionOffered = !!save.companionOffered;
       this.seen = new Set(save.seen ?? []);
       this.comboCounts = save.comboCounts ?? {};
       this.parkedPlay = save.parkedPlay ?? null;
@@ -1009,7 +1003,6 @@ export class App {
         state: '',
         matches: 0,
         companion: old.companion ?? 'firefly',
-        companionOffered: !!old.companionOffered,
         seen: old.seen ?? [],
         comboCounts: old.comboCounts ?? {},
         gift: null,
@@ -1041,7 +1034,6 @@ export class App {
         state: '',
         matches: 0,
         companion: old.companion ?? 'firefly',
-        companionOffered: false,
         seen: ['comet', 'orb'],
         comboCounts: {},
         gift: null,
@@ -1069,7 +1061,6 @@ export class App {
         state: serialize(this.state),
         matches: this.matches,
         companion: this.companion,
-        companionOffered: this.companionOffered,
         seen: [...this.seen],
         comboCounts: this.comboCounts,
         gift: this.gift,
@@ -1106,6 +1097,7 @@ export class App {
       openPanel: () => this.openPanel(),
       completeLevel: () => {
         this.matches = boardFor(this.mode).goal;
+        if (this.state.goals) this.state = { ...this.state, goals: this.state.goals.map((g) => ({ ...g, done: g.total })) };
         if (!this.view.busy) this.levelComplete();
       },
       pendingMode: () => this.pendingMode,
