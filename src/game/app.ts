@@ -55,6 +55,7 @@ import { Panel, type PanelContext } from './panel';
 import { ReviewBar, reviewOn, setReviewFlag } from './review';
 import { type Settings, SettingsStore, hintDelayMs } from './settings';
 import { GameSounds } from './sounds';
+import { Splash } from './splash';
 import { GameView } from './view';
 
 const SAVE_KEY = 'glimmerfall.save.v3';
@@ -133,6 +134,8 @@ export interface AppOptions {
   reset: boolean;
   /** Testing: start at this lantern on a fresh board. */
   level: number | null;
+  /** `?splash=0` skips the launch picture (screenshots and tests). */
+  splash: boolean;
 }
 
 export function optionsFromUrl(): AppOptions {
@@ -143,6 +146,7 @@ export function optionsFromUrl(): AppOptions {
     seed: q.get('seed') ? Number(q.get('seed')) : null,
     reset: q.get('reset') === '1',
     level: Number.isFinite(level) && level >= 1 ? Math.floor(level) : null,
+    splash: q.get('splash') !== '0',
   };
 }
 
@@ -220,6 +224,8 @@ export class App {
     }
     this.state = loaded ?? this.freshState(this.level, this.mode);
     if (!loaded) this.placeLevelGift();
+    // The launch picture goes up before the board is built, so it is the first frame she sees.
+    const splash = opts.splash ? new Splash(this.reducedMotion(settings), this.companion) : null;
 
     this.view = new GameView(
       canvas,
@@ -238,7 +244,10 @@ export class App {
       this.reducedMotion(settings),
     );
     this.view.setBreathing(settings.breathingGlow);
-    loadGemArt((art) => this.view.setGemArt(art));
+    loadGemArt((art) => {
+      this.view.setGemArt(art);
+      splash?.ready();
+    });
     loadPowerArt((art) => this.view.setPowerArt(art));
     this.view.setGoal(this.matches, boardFor(this.mode).goal);
     this.sounds = new GameSounds(this.engine, this.player);

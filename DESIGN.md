@@ -101,6 +101,16 @@ Settled with the parent as five picture choices, one at a time (samples and prom
 
 ---
 
+## 2f. The launch picture (7 October 2026)
+
+The parent asked for a splash screen on game load. Decided and built as the Stage 6 "launch picture", so it is not planned twice:
+
+- **What she sees:** the moment the icon is tapped, a painted night sky with the name Glimmerfall in glowing storybook letters, the fairy scattering jewels that drift down like gentle falling stars, and the meadow glowing below. Code draws the light over it: twinkling stars and slow glimmers in the gem colours drifting down. No tap is asked for, nothing moves fast, and there is nothing to read but the name.
+- **How it goes:** it stays while the game's pictures load, always long enough to be seen as a picture (about two and a half seconds), never longer than about five, then fades into the board or the map over a second on its own. A tap after the first moment lets it go a little sooner; a swipe during the fade already moves a gem. `?splash=0` skips it (screenshots and tests).
+- **Pictures are the body, code is the light:** a code-drawn version (sky, stars, the fairy, the name in plain letters) shows for the first instant and stays if the picture never loads. On a tall phone the painting stands on the bottom edge a little wider than the screen, so the title is never cut, and the code sky carries on above it through a feathered edge; on a squarer screen it covers. The picture is `splash.jpg` in the theme folder, so a reskin can have its own. The app icon is separate and still to do.
+
+---
+
 ## 3. The game
 
 ### 3.1 Name and world

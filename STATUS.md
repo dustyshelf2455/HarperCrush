@@ -69,7 +69,7 @@ The style is settled (DESIGN.md 2e, STYLE.md). Production now runs in batches on
 - **Batch A, the board:** painted gems with the soft glow, the seven power bodies, the three new companions (awake and asleep), the board backdrops, the board at the top with the ninth row, the theme folder. About $1 to $2.
 - **Stage 4 with Batch C:** Play levels as designed in 3.7, built with the approved painted pieces. About $1 to $3 of pictures.
 - **Batch B, the map:** the scrolling storybook map, two or three painted sections per area with path points, lantern posts, the companions on the path. About $3.
-- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon, launch picture, panel art), then the full-draft deploy for the parent to play end to end.
+- **Stage 5 remainder, then Stage 6 polish and Batch D** (icon and panel art; the launch picture is done, see below), then the full-draft deploy for the parent to play end to end.
 
 Spent on pictures so far: the first $10 credit (proof of concept, the summit, batch A) and about 80 cents of the $25 the parent added on 6 October.
 
@@ -86,6 +86,10 @@ Deployed to main on the parent's go-ahead: run 22, green 20:50 UTC on 6 October 
 - **Parent's review on the phone (7 October, review mode):** gems and glow right; nine rows dropped to eight (deployed run 24); Cave and Hollow backdrops repainted with a lower strip; the white match rings, sparkles and win rim retinted to the gems' own glow and warm gold; the five coloured powers became whole painted pieces in six colours each (see STYLE.md "The gems"). His map brief is in `playtest/batchA-walkthrough-2026-10-07.md` in the project files and drives batch B.
 - **Air at the top:** the parent found the top packed, so the lantern row is now 154 px tall: the companion sits lower under the Dynamic Island, the goal stars have room below it, and the board starts under them (`resize` and `drawHud` in `src/game/view.ts`).
 - The old map (perspective stage, code road) is unchanged until batch B.
+
+### Launch picture (7 October, branch `claude/splash-screen-naepdv`)
+
+The parent asked for a splash screen on load; it is the Stage 6 "launch picture" from Batch D, done early (DESIGN.md 2f). `src/game/splash.ts` puts a full-bleed canvas over everything from the first frame: a code-drawn night (sky, stars, the fairy, the name in plain letters) with the painting `public/art/default/splash.jpg` stamped over it, the glimmers and stars drawn in code on top, then a fade into the game on its own (timing and placement in `splashTiming.ts`, tested). No tap is needed; a tap after the first moment lets it go sooner. Screenshots and tests use `?splash=0` to skip it (Playwright scripts that shoot the board straight after load need this now). One generation, about 20 cents; prompt and a small copy in the project's `art/batchA/`. Batch D still owes the app icon and the panel art.
 
 ## Next
 
