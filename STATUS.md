@@ -89,7 +89,7 @@ Deployed to main on the parent's go-ahead: run 22, green 20:50 UTC on 6 October 
 
 ### Batch B built (7 October, early morning): the storybook map
 
-On the branch, checked, awaiting the parent's "Deploy?". Screenshots of every area and the beacons in the project's `art/batchB/` folder.
+Deployed as run 29, green 04:05 UTC on 7 October (build stamp 04:03 UTC), merged with the launch picture and the haptics removal. Screenshots of every area and the beacons in the project's `art/batchB/` folder.
 
 - **Pages:** 21 painted pages (`public/art/default/map/section-<area>-<1..3>.jpg`, 1024 by 1536, about 350 KB each), the path painted in by the painter, no sky, no creatures. The points along each path are in `src/render/mapSections.ts`, read off a tenths grid over each page; a wrong point shows as a beacon beside the wrong bit of path and is a one-number fix.
 - **Geometry** (`src/render/mapWorld.ts`, pure, tested in `tests/mapWorld.test.ts`): pages stack bottom to top with a 120 px overlap at every seam, the ten beacons of an area sit at even shares of the area's path length (half a share of margin at each end), and the companion hops along the painted path itself, across area borders too.
