@@ -143,6 +143,10 @@ Deployed as run 38, green 03:44 UTC on 9 October, on the parent's "Deploy": the 
 - **README** rewritten for the full draft: what is live, the panel, the switches, the smoke test, the iPhone setup in short.
 - Verified in Chromium at phone size: the smoke test end to end; the profile before and after.
 
+### Exploring the map (9 October, branch `claude/explore-any-area-3lfj0d`)
+
+The parent's ask after the full draft: in ordinary play, scroll the whole map and play one level per area ahead, just for exploring. Decisions in DESIGN.md 2k. Built: the map scrolls to the end of her pass through the seven areas; the first lantern of every area ahead glimmers softly and opens its level as a replay (a win celebrates, then the map returns to her own lantern; nothing moves on, nothing is unlocked); the drift home now waits fifteen seconds instead of two and a half. The open lanterns are listed by `exploreLanterns` in `src/core/journey.ts` (tested); the map uses `canPlayFromMap` for taps and the save. Verified in Chromium at phone size: scrolling from the Meadow to Dragon Hollow and the stop at the top, the map holding still for five seconds after a drag, the Cave's first beacon glimmering and opening lantern 11 as a replay of lantern 3, the win returning to lantern 3; `npm run check` and the smoke test green. Not deployed until the parent says so.
+
 ## Next
 
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.

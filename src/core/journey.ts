@@ -48,6 +48,34 @@ export function isFirstLanternOfArea(level: number): boolean {
   return lanternInArea(level) === 1;
 }
 
+/** The last lantern of the pass through the seven areas that `level` belongs to (70 on the first pass). */
+export function passEnd(level: number): number {
+  return (cycleForLevel(level) + 1) * LANTERNS_PER_AREA * AREA_COUNT;
+}
+
+/**
+ * Exploring (the parent, 9 October): from the map she can wander ahead of her own lantern and play the
+ * first level of every area she has not reached yet, just for looking around. The open lanterns are the
+ * first of each area ahead of her, to the end of her current pass through the seven areas. Winning one
+ * is a replay: it never moves her own lantern on.
+ */
+export function exploreLanterns(level: number): number[] {
+  const here = Math.max(1, Math.floor(level));
+  const out: number[] = [];
+  for (let n = areaStart(here) + LANTERNS_PER_AREA; n <= passEnd(here); n += LANTERNS_PER_AREA) out.push(n);
+  return out;
+}
+
+/** The first lantern of the area that `level` is in. */
+function areaStart(level: number): number {
+  return Math.max(1, Math.floor(level)) - lanternInArea(level) + 1;
+}
+
+/** Whether lantern n may be played from the map without having been reached: a lit one behind her, or an explore lantern ahead. */
+export function canPlayFromMap(n: number, level: number): boolean {
+  return (n >= 1 && n < level) || exploreLanterns(level).includes(n);
+}
+
 // ------------------------------------------------------------------- gifts
 
 export type Gift = { kind: 'power'; family: PowerFamily } | { kind: 'combo'; a: PowerFamily; b: PowerFamily };

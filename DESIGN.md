@@ -169,6 +169,17 @@ What was done against the Stage 6 list, and what was decided:
 - **Not built, on purpose:** the discoveries book (3.7) stays out until Play wants more sense of accumulation, as planned; area creature cameos for the second pass through the areas wait for the parent's verdict on the first pass; panel art is not needed (the panel is for grown-ups, and text is fine there).
 - **Still to do before her real install (Stage 6, the parent's side):** rename the repository to `glimmerfall`, remove review mode, and the phone setup in Section 5.
 
+## 2k. Exploring the map (9 October 2026)
+
+The parent's ask: in the ordinary game (not review mode), Harper should be able to scroll through the whole map and play one level in every area, even the ones she has not reached, just for looking around and exploring.
+
+- **The map scrolls to the end of her pass.** Behind her it still reaches back to the first page; ahead it now runs on through every area of the seven, up to the top of Dragon Hollow's last page (the first pass is lanterns 1 to 70; on her second pass it is the second set of pages). The give at the ends, the capped flick and the finger-following drag are unchanged.
+- **One open level per area ahead: the first.** The first lantern of each area she has not reached (11, 21, 31, 41, 51, 61 on her first pass) can be tapped and played. It is the area's gentlest level and shows off its pieces, its picture and its music. Every other lantern ahead stays dark and does nothing but twinkle.
+- **An explore level is a replay.** Winning it gives the normal celebration, then the map comes back to her own lantern. It never moves her beacon on, unlocks nothing, and she can play it as often as she likes. (Under the hood it is the same "replay" as a lit lantern behind her, so the save and the panel treat it the same way.)
+- **Explore beacons glimmer.** In the map's own language, lit behind her and dark ahead, the explore beacons sit in between: about a third lit with a slow breath of light, so a five-year-old can tell they can be tapped without any of them reading as "hers". Code-drawn, no new pictures.
+- **The drift home waits much longer.** The view used to slide back to her beacon about two and a half seconds after her finger lifted, which would pull the map away while she was looking. It now waits fifteen seconds and strolls back more slowly; a touch holds it where it is.
+- Review mode is unchanged (every lantern lit, drag anywhere, the Area buttons). Rest is unchanged: the sleeping scene does not scroll ahead.
+
 ## 3. The game
 
 ### 3.1 Name and world

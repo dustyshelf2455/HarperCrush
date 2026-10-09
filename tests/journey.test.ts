@@ -17,6 +17,9 @@ import {
   boardFor,
   comboId,
   cycleForLevel,
+  canPlayFromMap,
+  exploreLanterns,
+  passEnd,
   giftAt,
   isFirstLanternOfArea,
   lanternInArea,
@@ -60,6 +63,31 @@ describe('areas along the path', () => {
     expect(isFirstLanternOfArea(11)).toBe(true);
     expect(isFirstLanternOfArea(12)).toBe(false);
     expect(isFirstLanternOfArea(71)).toBe(true);
+  });
+
+  it('opens the first lantern of every area ahead of her for exploring, to the end of her pass', () => {
+    expect(passEnd(1)).toBe(70);
+    expect(passEnd(70)).toBe(70);
+    expect(passEnd(71)).toBe(140);
+    expect(exploreLanterns(1)).toEqual([11, 21, 31, 41, 51, 61]);
+    expect(exploreLanterns(3)).toEqual([11, 21, 31, 41, 51, 61]);
+    expect(exploreLanterns(11)).toEqual([21, 31, 41, 51, 61]);
+    expect(exploreLanterns(60)).toEqual([61]);
+    expect(exploreLanterns(61)).toEqual([]);
+    expect(exploreLanterns(70)).toEqual([]);
+    expect(exploreLanterns(75)).toEqual([81, 91, 101, 111, 121, 131]);
+  });
+
+  it('lets a lit lantern behind her or an explore lantern ahead be played from the map, nothing else', () => {
+    expect(canPlayFromMap(1, 3)).toBe(true);
+    expect(canPlayFromMap(2, 3)).toBe(true);
+    expect(canPlayFromMap(3, 3)).toBe(false);
+    expect(canPlayFromMap(4, 3)).toBe(false);
+    expect(canPlayFromMap(11, 3)).toBe(true);
+    expect(canPlayFromMap(12, 3)).toBe(false);
+    expect(canPlayFromMap(61, 3)).toBe(true);
+    expect(canPlayFromMap(71, 3)).toBe(false);
+    expect(canPlayFromMap(0, 3)).toBe(false);
   });
 });
 

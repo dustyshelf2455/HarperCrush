@@ -41,6 +41,7 @@ import {
   type Mode,
   areaForLevel,
   boardFor,
+  canPlayFromMap,
   comboId,
   giftAt,
   isFirstLanternOfArea,
@@ -112,7 +113,7 @@ interface Save {
   phase: Phase;
   finishing: boolean;
   restingSince: number | null;
-  /** A lit lantern being played again from the map (DESIGN.md 2d); her own lantern is `level`. */
+  /** A lit lantern being played again from the map (DESIGN.md 2d), or an explore lantern ahead (2k); her own lantern is `level`. */
   replay: number | null;
   /** Foreground play time this session, for the timer. */
   sessionElapsedMs: number;
@@ -700,9 +701,13 @@ export class App {
     this.player.setWindDown(this.musicSoft());
   }
 
-  /** A lit lantern tapped on the map: play that level again; her own lantern stays where it is (DESIGN.md 2d). */
+  /**
+   * A lit lantern tapped on the map: play that level again; her own lantern stays where it is (DESIGN.md 2d).
+   * Also an explore lantern ahead of her (the first of an area she has not reached, DESIGN.md 2k): the same
+   * replay, so winning it celebrates but never moves her on.
+   */
   private startReplay(n: number): void {
-    if (this.phase !== 'map' || n < 1 || n >= this.level) return;
+    if (this.phase !== 'map' || !canPlayFromMap(n, this.level)) return;
     if (this.pendingMode) {
       this.mode = this.pendingMode;
       this.pendingMode = null;
@@ -1096,7 +1101,7 @@ export class App {
       this.mode = save.mode ?? 'play';
       this.pendingMode = save.pendingMode ?? null;
       this.finishing = !!save.finishing;
-      this.replay = Number.isFinite(save.replay) && save.replay !== null && save.replay >= 1 && save.replay < this.level ? Math.floor(save.replay) : null;
+      this.replay = Number.isFinite(save.replay) && save.replay !== null && canPlayFromMap(Math.floor(save.replay), this.level) ? Math.floor(save.replay) : null;
       // The session clock carries across a short break (she closed and reopened the app), not a long one.
       this.sessionElapsedMs = gap <= SESSION_CARRY_MS && Number.isFinite(save.sessionElapsedMs) ? Math.max(0, save.sessionElapsedMs) : 0;
       this.appliedSessionMinutes = this.settings.get().sessionMinutes;

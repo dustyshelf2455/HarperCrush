@@ -16,21 +16,24 @@
  * The map can be scrolled with a finger (the parent, 7 October: scrolling
  * along the path should be a calm delight in itself): the pages follow the
  * finger, a fling carries on gently with a cap on its speed, the ends of the
- * known world give softly, and after a pause the view drifts home to her
+ * known world give softly, and after a long pause the view drifts home to her
  * lantern. Behind her lantern it reaches back to the first page; ahead it
- * shows a little of the unlit path, so the journey still goes on forever.
+ * runs on through every area of her pass (the parent, 9 October: she can
+ * look around the whole map and play the first level of each area ahead,
+ * just for exploring). Those explore beacons glimmer softly, half-lit, so she
+ * can tell they can be tapped; the rest of the path ahead stays dark.
  *
  * A full-screen canvas overlay, display:none while not in use so it costs
  * nothing. It draws at full rate only while something moves and at a slow
  * idle tick otherwise (DESIGN.md 4.4). No text, ever.
  */
 import './mapScene.css';
-import { LANTERNS_PER_AREA, type AreaId } from '../core/journey';
+import { LANTERNS_PER_AREA, type AreaId, exploreLanterns, passEnd } from '../core/journey';
 import { areaTheme, blendThemeColors, type AreaTheme } from '../render/areas';
 import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
 import { drawLanternPost, drawPathRibbon, postLayout } from '../render/map';
 import { BEACON_LAMP, type MapArt, type SectionArt, loadSectionArt } from '../render/mapArt';
-import { SEAM_OVERLAP, SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, areaUnderView, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionRef } from '../render/mapWorld';
+import { SEAM_OVERLAP, SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, areaUnderView, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionBottom, sectionRef } from '../render/mapWorld';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
 import { rgba } from '../render/color';
@@ -53,7 +56,7 @@ export interface MapShowOptions {
   onTwinkle?(): void;
   /** The scene is finished (never called in rest). */
   onDone(): void;
-  /** She tapped a lit lantern behind her: play that level again (the journey does not move). */
+  /** She tapped a lit lantern behind her, or an explore lantern ahead: play that level (the journey does not move). */
   onReplay?(level: number): void;
   /** The view has scrolled into another area (the theme changes voice; called once per crossing, and once at show). */
   onArea?(area: AreaId): void;
@@ -105,6 +108,7 @@ const FRIEND_LAG_MS = 240;
 const FRIEND_HOP = 0.7;
 
 const IDLE_FPS = 12;
+const EMPTY_SET: ReadonlySet<number> = new Set();
 
 // Composition: her lantern a little below the middle of the screen (DESIGN.md 3.5).
 const BASELINE = 0.56;
@@ -124,8 +128,18 @@ const MAX_FLING_SCREENS_PER_S = 1.6;
 const FLING_DECAY_PER_S = 0.12;
 /** Below this speed (CSS px/s) a fling has stopped. */
 const FLING_STOP = 12;
-/** How long after the finger lifts (and the fling ends) before the view drifts home. */
-const HOME_AFTER_MS = 2400;
+/**
+ * How long after the finger lifts (and the fling ends) before the view drifts home. Long, so the map
+ * never slides away from under her while she is looking around (the parent, 9 October); it only comes
+ * back once the phone has clearly been left alone.
+ */
+const HOME_AFTER_MS = 15_000;
+/** The drift home's pace: the time, in ms, for most of the way; slow enough to read as a stroll, not a snap. */
+const HOME_DRIFT_MS = 1100;
+/** The explore beacons' glimmer: how lit they sit (0 dark, 1 her own) and how much they breathe. */
+const EXPLORE_LIT = 0.36;
+const EXPLORE_BREATH = 0.14;
+const EXPLORE_PERIOD_MS = 6200;
 /** Beyond the ends of the known world the pages give only this much of the finger's movement. */
 const EDGE_GIVE = 0.35;
 /** How much of the unlit path shows above her lantern, in screen heights. */
@@ -345,6 +359,9 @@ export class MapScene {
   private sinceTouch = 0;
   /** The area last reported through onArea, so a crossing is reported once. */
   private areaReported: AreaId | null = null;
+  /** The explore lanterns for her current lantern (exploreSet). */
+  private explore: Set<number> = new Set();
+  private exploreFor = -1;
 
   /** World pixels to screen pixels: the page fills the width. */
   private get scale(): number {
@@ -359,14 +376,39 @@ export class MapScene {
     return this.camera + (this.h * BASELINE - sy) / this.scale;
   }
 
-  /** Where the view may travel: from the first page to a little above her lantern (all of it in review mode). */
+  /**
+   * Where the view may travel: from the first page to the top of the last page of her pass through the
+   * seven areas, so she can look around the whole map (all of it to REVIEW_TOP in review mode). In rest
+   * only a little above her lantern.
+   */
   private cameraRange(): { lo: number; hi: number } {
     const opts = this.opts;
     // Scrolled all the way back, the first page's bottom edge meets the bottom of the screen.
     const lo = (this.h * (1 - BASELINE)) / this.scale;
-    const top = opts?.review ? REVIEW_TOP : opts ? Math.max(opts.from, opts.to) : 1;
-    const hi = lanternWorld(top).y + (opts?.review ? 0 : (this.h * LOOK_AHEAD) / this.scale);
+    let hi: number;
+    if (opts?.review) {
+      hi = lanternWorld(REVIEW_TOP).y;
+    } else if (opts && !opts.rest) {
+      // Scrolled all the way on, the last page's top edge meets the top of the screen.
+      const here = Math.max(opts.from, opts.to);
+      const lastPage = sectionAt(lanternWorld(passEnd(here)).y).k;
+      hi = Math.max(lanternWorld(here).y + (this.h * LOOK_AHEAD) / this.scale, sectionBottom(lastPage) + SECTION_H - (this.h * BASELINE) / this.scale);
+    } else {
+      hi = lanternWorld(opts ? Math.max(opts.from, opts.to) : 1).y + (this.h * LOOK_AHEAD) / this.scale;
+    }
     return { lo, hi: Math.max(lo, hi) };
+  }
+
+  /** The explore lanterns (the first of each area ahead of her), or none in review mode and rest. */
+  private exploreSet(): ReadonlySet<number> {
+    const opts = this.opts;
+    if (!opts || opts.review || opts.rest) return EMPTY_SET;
+    const here = Math.max(opts.from, opts.to);
+    if (this.exploreFor !== here) {
+      this.exploreFor = here;
+      this.explore = new Set(exploreLanterns(here));
+    }
+    return this.explore;
   }
 
   /** A camera height no lower than the first page's floor, so the night below the world never shows at the first beacons. */
@@ -565,10 +607,11 @@ export class MapScene {
       this.finish();
       return;
     }
-    const earlier = this.litTo && this.phase === 'linger' && opts.onReplay ? this.earlierLanternAt(x, y) : null;
-    if (earlier !== null && opts.onReplay) {
+    // A lit lantern behind her, or an explore lantern ahead, plays that level without moving her on.
+    const open = this.litTo && this.phase === 'linger' && opts.onReplay ? this.openLanternAt(x, y) : null;
+    if (open !== null && opts.onReplay) {
       this.phase = 'done';
-      opts.onReplay(earlier);
+      opts.onReplay(open);
       return;
     }
     this.twinkles.push({ x, y, t: 0, seed: this.twinkles.length });
@@ -588,13 +631,26 @@ export class MapScene {
 
   /** A lit lantern behind her under the tap (its beacon or lamp), nearest first, or null. */
   private earlierLanternAt(x: number, y: number, below?: number): number | null {
+    const top = below ?? this.opts?.to ?? 1;
+    return this.lanternUnderTap(x, y, (n) => n < top);
+  }
+
+  /** A lantern she may play from here under the tap: a lit one behind her or an explore lantern ahead. */
+  private openLanternAt(x: number, y: number): number | null {
+    const to = this.opts?.to ?? 1;
+    const explore = this.exploreSet();
+    return this.lanternUnderTap(x, y, (n) => n < to || explore.has(n));
+  }
+
+  /** The nearest lantern on screen under the tap (its beacon or lamp) among those `allowed`, or null. */
+  private lanternUnderTap(x: number, y: number, allowed: (n: number) => boolean): number | null {
     const opts = this.opts;
     if (!opts) return null;
-    const top = below ?? opts.to;
     const { nLo, nHi } = this.lanternRange();
     let best: number | null = null;
     let bestD = LANTERN_HIT;
-    for (let n = nLo; n < Math.min(top, nHi + 1); n++) {
+    for (let n = nLo; n <= nHi; n++) {
+      if (!allowed(n)) continue;
       const foot = this.toScreen(this.beaconFoot(n));
       if (foot.y < -40 || foot.y > this.h + 40) continue;
       const lamp = this.lampOf(n);
@@ -836,8 +892,8 @@ export class MapScene {
       this.fling = 0;
       moving = true;
     } else if (!opts.review && this.fling === 0 && this.sinceTouch >= HOME_AFTER_MS && Math.abs(this.camera - this.home) > 0.5) {
-      // Left alone, the view drifts gently back to her lantern.
-      this.camera += (this.home - this.camera) * Math.min(1, dt / 420);
+      // Left alone for a good while, the view strolls gently back to her lantern.
+      this.camera += (this.home - this.camera) * Math.min(1, dt / HOME_DRIFT_MS);
       if (Math.abs(this.home - this.camera) < 0.5) this.camera = this.home;
       moving = true;
     }
@@ -1146,10 +1202,16 @@ export class MapScene {
     }
     ctx.restore();
 
-    // Beacons, far to near so nearer ones overlap farther ones: lit behind her, dim ahead, never greyed out.
+    // Beacons, far to near so nearer ones overlap farther ones: lit behind her, dim ahead, never greyed out;
+    // the explore beacons ahead (the first of each area) glimmer half-lit with a slow breath, the invitation to look in.
+    const explore = this.exploreSet();
     let bloomAt: Pt | null = null;
     for (let n = nHi; n >= nLo; n--) {
       let lit = opts.review || n < opts.to ? 1 : 0.1;
+      if (lit < 1 && n !== opts.to && explore.has(n)) {
+        const breath = 0.5 - 0.5 * Math.cos(((t * 1000) / EXPLORE_PERIOD_MS + n * 0.37) * Math.PI * 2);
+        lit = EXPLORE_LIT + EXPLORE_BREATH * breath;
+      }
       if (!opts.review && n === opts.to && this.litTo) {
         // The new light rises over the bloom, with a brief soft overshoot that settles.
         const k = clamp01(this.bloomT / (BLOOM_MS * this.motion));
