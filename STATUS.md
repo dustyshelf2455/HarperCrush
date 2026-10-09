@@ -133,7 +133,7 @@ Deployed as run 36, green 11:30 UTC on 7 October, on the parent's "Deploy", merg
 
 ### Stage 6 built (7 October, midday): polish and hardening
 
-On the branch, checked, awaiting the parent's "Deploy?". Decisions in DESIGN.md 2j; the icon in the project's `art/batchD/` folder.
+Deployed as run 38, green 03:44 UTC on 9 October, on the parent's "Deploy": the full draft is live. Decisions in DESIGN.md 2j; the icon in the project's `art/batchD/` folder.
 
 - **Performance**: the area's sky and painted scenery, and the breathing vignette's gradient, are each baked once at device resolution (`backdrop` and `vignette` in `src/game/view.ts`) and drawn with one copy per frame. Profiled with a CPU profile and a frame sampler over the Aurora, a Comet-Bloom combination and a plain level: the game's own code is a few percent of the frame; the rest is painting, which this cut by about a quarter in software rendering.
 - **Reduce Motion** on the map (`MapScene.setReducedMotion`): hop, bloom and landing at 0.6.
