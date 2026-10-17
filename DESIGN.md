@@ -180,6 +180,17 @@ The parent's ask: in the ordinary game (not review mode), Harper should be able 
 - **The drift home waits much longer.** The view used to slide back to her beacon about two and a half seconds after her finger lifted, which would pull the map away while she was looking. It now waits fifteen seconds and strolls back more slowly; a touch holds it where it is.
 - Review mode is unchanged (every lantern lit, drag anywhere, the Area buttons). Rest is unchanged: the sleeping scene does not scroll ahead.
 
+## 2l. The map rethought: islands in the night sky (17 October 2026)
+
+The parent stepped out of the full playthrough with a bigger-picture note: the levels feel right and need little, but the map and the characters on it were not working. The painted scrolling pages asked the picture tool for the one thing it is bad at (twenty-one pages that line up, keep one scale, run a path through exact points and join into one world); what came back read as wallpaper with a wiggle, with the characters and lamp posts stuck on top like stickers. His ask: rethink the map's structure to lean into what we can actually make look great, the way the best older games chose a stylised look their tools could carry. Three directions were put to him (islands in the night sky, a storybook of seven pages, a constellation map; the note is in the project's `design/map-rethink-2026-10-17.md`); he chose the islands.
+
+- **One painted island per area**, a cut-out on a transparent background, hanging one above the next in a code-drawn night sky: the picture tool paints whole things that stand alone, and code draws everything that has to line up, join, move or glow ("pictures are the body, code is the light", kept honestly this time).
+- **The levels are a trail of stars** rising from each island to the underside of the next: lit gold behind her, dim ahead, the explore stars glimmering, the same taps as before (her star or her companion continues; a lit star behind or an explore star ahead replays; anywhere else twinkles).
+- **The companions fly.** Her companion hovers over her star and flies along the trail to the next star after a win; the two friends float a little behind her and a tap on one still swaps it in. A flying character never has to stand on painted ground at the right scale, which is what made them look pasted on.
+- **Scrolling is unchanged** in feel: finger-follow, give at the ends, a capped fling, drift home after a long pause, the whole pass open to look around, music following the area under the view.
+- **Nothing else moved:** the levels, the launch through the fairy door onto the map, the resting night (the three fall asleep on her star), review mode.
+- Cost: seven islands at about 35 cents each, about $2.50 of credit.
+
 ## 3. The game
 
 ### 3.1 Name and world

@@ -1,27 +1,28 @@
 /**
- * The map between levels (DESIGN.md 3.5, rebuilt as the scrolling storybook of
- * DESIGN.md 2e and STYLE.md "The map"): tall painted pages, three to an area,
- * stacked bottom to top forever, with the path painted into the landscape.
- * The code places a beacon beside the path for every lantern, lights the ones
- * she has lit, stands her companion on the path, hops it along the painting
- * to the next beacon, and draws all the light. Nothing moves on by itself:
- * the map stays until she taps the lit beacon (or her companion on it), and
- * after a moment the beacon breathes as the invitation. The other two
+ * The map between levels (DESIGN.md 3.5, rebuilt as the islands in the night
+ * sky of DESIGN.md 2l and STYLE.md "The map"): one painted floating island per
+ * area, hanging one above the next in a code-drawn night sky, and between
+ * them a trail of glowing stars, one per level, climbing from each island to
+ * the underside of the next. The code draws the sky, lights the stars she has
+ * reached, hovers her companion over her star, flies it along the trail to the
+ * next star, and draws all the light. Nothing moves on by itself: the map
+ * stays until she taps her lit star (or her companion on it), and after a
+ * moment the star breathes as the invitation. The other two
  * creatures travel with her (the parent, 7 October): they trail along the path
- * behind her hop and wait beside her at every beacon, and a tap on one swaps
+ * behind her hop and wait beside her at every star, and a tap on one swaps
  * it in as her companion, on the map and on the board alike. In rest
- * (DESIGN.md 3.8) all three curl up and sleep by the new beacon and the scene
- * stays until the app hides it.
+ * (DESIGN.md 3.8) all three curl up and sleep on her star and the scene stays
+ * until the app hides it.
  *
  * The map can be scrolled with a finger (the parent, 7 October: scrolling
- * along the path should be a calm delight in itself): the pages follow the
+ * along the path should be a calm delight in itself): the sky follows the
  * finger, a fling carries on gently with a cap on its speed, the ends of the
  * known world give softly, and after a long pause the view drifts home to her
- * lantern. Behind her lantern it reaches back to the first page; ahead it
+ * lantern. Behind her lantern it reaches back to the first island; ahead it
  * runs on through every area of her pass (the parent, 9 October: she can
  * look around the whole map and play the first level of each area ahead,
- * just for exploring). Those explore beacons glimmer softly, half-lit, so she
- * can tell they can be tapped; the rest of the path ahead stays dark.
+ * just for exploring). Those explore stars glimmer softly, half-lit, so she
+ * can tell they can be tapped; the rest of the trail ahead stays dim.
  *
  * A full-screen canvas overlay, display:none while not in use so it costs
  * nothing. It draws at full rate only while something moves and at a slow
@@ -31,12 +32,12 @@ import './mapScene.css';
 import { LANTERNS_PER_AREA, type AreaId, exploreLanterns, passEnd } from '../core/journey';
 import { areaTheme, blendThemeColors, type AreaTheme } from '../render/areas';
 import { COMPANIONS, type CompanionId, type CompanionOpts, drawCompanion, drawPaintedCompanion } from '../render/creatures';
-import { drawLanternPost, drawPathRibbon, postLayout } from '../render/map';
-import { BEACON_LAMP, type MapArt, type SectionArt, loadSectionArt } from '../render/mapArt';
-import { SEAM_OVERLAP, SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, areaUnderView, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionBottom, sectionRef } from '../render/mapWorld';
+import { type IslandArt, type MapArt, loadIslandArt } from '../render/mapArt';
+import { ISLAND_SIZE, WORLD_W, areaStartLantern, areaUnderView, islandRect, lanternWorld, pathBetween, pathPolyline, passStageTop, stageAt, stageBlend } from '../render/mapWorld';
 import type { Pt } from '../render/shapes';
 import { Stars, clamp01, easeInOutSine, easeOutCubic, glowDisc } from '../render/styles/common';
 import { rgba } from '../render/color';
+import { createRng } from '../shared/rng';
 import type { Ambient, GemStyle } from '../render/styles/types';
 
 export interface MapShowOptions {
@@ -78,7 +79,7 @@ const LAND_MS = 280;
 const INVITE_AFTER_MS = 2500;
 /** Breathing pace of the invitation (DESIGN.md 3.8: about eight breaths a minute). */
 const INVITE_PERIOD_MS = 7500;
-/** Generous target around the lit lantern and the companion on it, in CSS px. */
+/** Generous target around her lit star and the companion over it, in CSS px. */
 const LANTERN_HIT = 72;
 const WAVE_AFTER_HOP_MS = 2200;
 const SLEEP_AFTER_MS = 1500;
@@ -110,15 +111,18 @@ const FRIEND_HOP = 0.7;
 const IDLE_FPS = 12;
 const EMPTY_SET: ReadonlySet<number> = new Set();
 
-// Composition: her lantern a little below the middle of the screen (DESIGN.md 3.5).
+// Composition: her star a little below the middle of the screen (DESIGN.md 3.5).
 const BASELINE = 0.56;
-// Sizes on screen (CSS px): the beacon's height, the companion and the waiting friends (STYLE.md: the fairy half again as big).
-const BEACON_H = 86;
-const COMPANION_S = 58;
-const FRIEND_S = 52;
+// Sizes on screen (CSS px): a level star's radius, the companion and the friends flying with her
+// (STYLE.md: in the sky the companions read at about a fifth of the width).
+const STAR_R = 13;
+const COMPANION_S = 84;
+const FRIEND_S = 66;
 const HOP_HEIGHT = 70;
-/** How far the beacon stands from the path's centre line, in CSS px. */
-const BEACON_OFFSET = 34;
+/** The companion hovers this far above her star, so the star shows under her feet. */
+const HOVER = 10;
+/** Sky parallax: the far stars move this share of the islands' speed. */
+const SKY_PARALLAX = 0.3;
 
 // Scrolling feel (the parent, 7 October): the pages follow the finger; a fling keeps going gently and is
 // capped so a quick flick never races; the view drifts home after a pause.
@@ -136,7 +140,7 @@ const FLING_STOP = 12;
 const HOME_AFTER_MS = 15_000;
 /** The drift home's pace: the time, in ms, for most of the way; slow enough to read as a stroll, not a snap. */
 const HOME_DRIFT_MS = 1100;
-/** The explore beacons' glimmer: how lit they sit (0 dark, 1 her own) and how much they breathe. */
+/** The explore stars' glimmer: how lit they sit (0 dark, 1 her own) and how much they breathe. */
 const EXPLORE_LIT = 0.36;
 const EXPLORE_BREATH = 0.14;
 const EXPLORE_PERIOD_MS = 6200;
@@ -162,7 +166,7 @@ interface Tracked {
 
 interface Friend {
   id: CompanionId;
-  /** Where it stands relative to the beacon she is at, in world pixels (behind her on the path, to one side). */
+  /** Where it stands relative to the star she is at, in world pixels (behind her along the trail, to one side). */
   offset: Pt;
 }
 
@@ -228,7 +232,7 @@ export class MapScene {
 
   /** Painted pieces (art round two and the summit); anything missing is drawn in code. */
   private art: MapArt | null = null;
-  private readonly sections: SectionArt;
+  private readonly islands: IslandArt;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -237,7 +241,7 @@ export class MapScene {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('no 2d context');
     this.ctx = ctx;
-    this.sections = loadSectionArt(() => this.wake());
+    this.islands = loadIslandArt(() => this.wake());
     canvas.classList.add('mapScene');
     canvas.addEventListener('pointerdown', this.down);
     canvas.addEventListener('pointermove', this.move);
@@ -318,6 +322,7 @@ export class MapScene {
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ambients.clear();
     this.restStars = null;
+    this.skyField = null;
     if (this.shown) this.draw();
   }
 
@@ -363,9 +368,9 @@ export class MapScene {
   private explore: Set<number> = new Set();
   private exploreFor = -1;
 
-  /** World pixels to screen pixels: the page fills the width. */
+  /** World pixels to screen pixels: the world fills the width. */
   private get scale(): number {
-    return this.w / SECTION_W;
+    return this.w / WORLD_W;
   }
 
   private toScreen(p: Pt): Pt {
@@ -377,22 +382,21 @@ export class MapScene {
   }
 
   /**
-   * Where the view may travel: from the first page to the top of the last page of her pass through the
-   * seven areas, so she can look around the whole map (all of it to REVIEW_TOP in review mode). In rest
-   * only a little above her lantern.
+   * Where the view may travel: from a little below the first island to the top of the last island of
+   * her pass through the seven areas, so she can look around the whole map (all of it to REVIEW_TOP in
+   * review mode). In rest only a little above her star.
    */
   private cameraRange(): { lo: number; hi: number } {
     const opts = this.opts;
-    // Scrolled all the way back, the first page's bottom edge meets the bottom of the screen.
-    const lo = (this.h * (1 - BASELINE)) / this.scale;
+    // Scrolled all the way back, a breath of sky shows under the first island.
+    const lo = (this.h * (1 - BASELINE)) / this.scale - ISLAND_SIZE * 0.12;
     let hi: number;
     if (opts?.review) {
       hi = lanternWorld(REVIEW_TOP).y;
     } else if (opts && !opts.rest) {
-      // Scrolled all the way on, the last page's top edge meets the top of the screen.
+      // Scrolled all the way on, the last island of her pass sits whole near the top of the screen.
       const here = Math.max(opts.from, opts.to);
-      const lastPage = sectionAt(lanternWorld(passEnd(here)).y).k;
-      hi = Math.max(lanternWorld(here).y + (this.h * LOOK_AHEAD) / this.scale, sectionBottom(lastPage) + SECTION_H - (this.h * BASELINE) / this.scale);
+      hi = Math.max(lanternWorld(here).y + (this.h * LOOK_AHEAD) / this.scale, passStageTop(passEnd(here)) + ISLAND_SIZE * 0.08 - (this.h * BASELINE) / this.scale);
     } else {
       hi = lanternWorld(opts ? Math.max(opts.from, opts.to) : 1).y + (this.h * LOOK_AHEAD) / this.scale;
     }
@@ -411,7 +415,7 @@ export class MapScene {
     return this.explore;
   }
 
-  /** A camera height no lower than the first page's floor, so the night below the world never shows at the first beacons. */
+  /** A camera height no lower than the first island's floor, so the first stars are never framed over empty sky. */
   private floored(y: number): number {
     return Math.max(this.cameraRange().lo, y);
   }
@@ -423,26 +427,15 @@ export class MapScene {
     return this.floored(lanternWorld(this.litTo ? opts.to : opts.from).y);
   }
 
-  /** The beacon's foot beside the path for lantern n, in world px. */
-  private beaconFoot(n: number): Pt {
-    const l = lanternWorld(n);
-    // Perpendicular to the path, on the recorded side, with the offset measured on screen.
-    const off = BEACON_OFFSET / this.scale;
-    return { x: l.x + l.dir.y * off * l.side, y: l.y - l.dir.x * off * l.side * 0.6 };
-  }
-
-  /** The screen point of the beacon's lamp for lantern n. */
-  private lampOf(n: number): Pt {
-    const foot = this.toScreen(this.beaconFoot(n));
-    const area = sectionRef(sectionAt(lanternWorld(n).y).k).area;
-    const beacon = this.art?.beacons[area];
-    if (beacon) return { x: foot.x, y: foot.y - BEACON_H * BEACON_LAMP[area] };
-    return postLayout(foot.x, foot.y, BEACON_H / 1.9).lantern;
-  }
-
-  /** The screen point a companion stands at for lantern n: on the path, at the lantern's point. */
-  private perchOf(n: number): Pt {
+  /** The screen point of star n. */
+  private starOf(n: number): Pt {
     return this.toScreen(lanternWorld(n));
+  }
+
+  /** The screen point a companion hovers at for star n: just above the star, so it shows under her feet. */
+  private perchOf(n: number): Pt {
+    const s = this.starOf(n);
+    return { x: s.x, y: s.y - HOVER };
   }
 
   /**
@@ -463,10 +456,10 @@ export class MapScene {
   /** A friend's world point: its offset from where she is, kept on the page. */
   private friendWorld(f: Friend, anchor: Pt): Pt {
     const margin = (FRIEND_S * 0.8) / this.scale;
-    return { x: Math.min(SECTION_W - margin, Math.max(margin, anchor.x + f.offset.x)), y: anchor.y + f.offset.y };
+    return { x: Math.min(WORLD_W - margin, Math.max(margin, anchor.x + f.offset.x)), y: anchor.y + f.offset.y };
   }
 
-  /** Where the group stands when nobody is hopping: her beacon's point on the path. */
+  /** Where the group stands when nobody is hopping: her star. */
   private groupAnchor(): Pt {
     const opts = this.opts;
     if (!opts) return { x: 0, y: 0 };
@@ -619,17 +612,16 @@ export class MapScene {
     this.wake();
   }
 
-  /** Whether a tap lands on the new lantern: its beacon, its lamp, or the companion perched by it. */
+  /** Whether a tap lands on her star, or the companion hovering over it. */
   private lanternAt(x: number, y: number): boolean {
     const opts = this.opts;
     if (!opts) return false;
-    const foot = this.toScreen(this.beaconFoot(opts.to));
     const perch = this.perchOf(opts.to);
-    const targets = [foot, this.lampOf(opts.to), perch, { x: perch.x, y: perch.y - COMPANION_S * 0.5 }];
+    const targets = [this.starOf(opts.to), perch, { x: perch.x, y: perch.y - COMPANION_S * 0.5 }];
     return targets.some((p) => Math.hypot(p.x - x, p.y - y) <= LANTERN_HIT);
   }
 
-  /** A lit lantern behind her under the tap (its beacon or lamp), nearest first, or null. */
+  /** A lit star behind her under the tap, nearest first, or null. */
   private earlierLanternAt(x: number, y: number, below?: number): number | null {
     const top = below ?? this.opts?.to ?? 1;
     return this.lanternUnderTap(x, y, (n) => n < top);
@@ -642,7 +634,7 @@ export class MapScene {
     return this.lanternUnderTap(x, y, (n) => n < to || explore.has(n));
   }
 
-  /** The nearest lantern on screen under the tap (its beacon or lamp) among those `allowed`, or null. */
+  /** The nearest star on screen under the tap among those `allowed`, or null. */
   private lanternUnderTap(x: number, y: number, allowed: (n: number) => boolean): number | null {
     const opts = this.opts;
     if (!opts) return null;
@@ -651,10 +643,9 @@ export class MapScene {
     let bestD = LANTERN_HIT;
     for (let n = nLo; n <= nHi; n++) {
       if (!allowed(n)) continue;
-      const foot = this.toScreen(this.beaconFoot(n));
-      if (foot.y < -40 || foot.y > this.h + 40) continue;
-      const lamp = this.lampOf(n);
-      const d = Math.min(Math.hypot(foot.x - x, foot.y - y), Math.hypot(lamp.x - x, lamp.y - y));
+      const star = this.starOf(n);
+      if (star.y < -40 || star.y > this.h + 40) continue;
+      const d = Math.hypot(star.x - x, star.y - y);
       if (d < bestD) {
         bestD = d;
         best = n;
@@ -663,10 +654,10 @@ export class MapScene {
     return best;
   }
 
-  /** The lanterns whose beacons could be on screen, plus one each side. */
+  /** The stars that could be on screen, plus one each side. */
   private lanternRange(): { nLo: number; nHi: number } {
-    const bottom = this.toWorldY(this.h + BEACON_H * 2);
-    const top = this.toWorldY(-BEACON_H * 2);
+    const bottom = this.toWorldY(this.h + STAR_R * 6);
+    const top = this.toWorldY(-STAR_R * 6);
     let nLo = 1;
     while (lanternWorld(nLo + 1).y < bottom) nLo++;
     let nHi = nLo;
@@ -911,14 +902,10 @@ export class MapScene {
     return a;
   }
 
-  /** The area under the view's baseline and how far it has crossed into the next, over the last page's top third. */
+  /** The area under the view's baseline and how far its sky has crossed into the next, over the stage's top third. */
   private areasNow(): { a: AreaTheme; b: AreaTheme; f: number } {
-    const ref = sectionAt(this.camera);
-    const a = areaTheme(ref.area);
-    const next = sectionRef(ref.k + 1);
-    if (ref.i < 2 || next.area === ref.area) return { a, b: a, f: 0 };
-    const within = (this.camera - ref.k * SECTION_PITCH) / SECTION_PITCH;
-    return { a, b: areaTheme(next.area), f: clamp01((within - 0.66) / 0.34) };
+    const blend = stageBlend(this.camera);
+    return { a: areaTheme(blend.a), b: areaTheme(blend.b), f: blend.f };
   }
 
   private draw(): void {
@@ -929,7 +916,7 @@ export class MapScene {
     const { a, b, f } = this.areasNow();
     const colors = blendThemeColors(a, b, f);
 
-    this.drawPages(colors);
+    this.drawSky(colors, t);
 
     // Ambient life of the area, crossfading at an area border.
     if (f < 1) {
@@ -953,6 +940,7 @@ export class MapScene {
     }
     this.drawVignette();
 
+    this.drawIslands(colors, t);
     if (!opts) return;
     this.drawWorld(t, opts, colors);
     if (opts.rest) this.drawRestNight(w, h, t);
@@ -990,104 +978,101 @@ export class MapScene {
     }
   }
 
+  /** The far stars of the sky, laid out once per size and scrolled with a slow parallax. */
+  private skyField: Array<{ x: number; y: number; r: number; a: number; phase: number }> | null = null;
+
   /**
-   * The painted pages under the view, bottom to top, each drawn a touch over the one below so the
-   * seam can be softened with a breath of the area's own night colour. A page without its picture
-   * shows the area's ground with a ribbon along the recorded path, so the journey is never blank.
+   * The night sky behind everything: the area's own night colours (blending into the next area's as
+   * the view climbs), a field of far stars drifting slowly against the islands, and the two soft glows
+   * the board's sky has. Code-drawn, so no two paintings ever have to meet.
    */
-  private drawPages(colors: ReturnType<typeof blendThemeColors>): void {
+  private drawSky(colors: ReturnType<typeof blendThemeColors>, t: number): void {
     const { ctx, w, h } = this;
-    const scale = this.scale;
-    const pageH = SECTION_H * scale;
-    const kLo = Math.max(0, sectionAt(this.toWorldY(h)).k);
-    const kHi = sectionAt(Math.max(0, this.toWorldY(0))).k;
-    // Below the first page (the view can give a little past the start): the first area's night.
-    ctx.fillStyle = colors.bgBottom;
-    ctx.fillRect(0, 0, w, h);
-    const seamH = SEAM_OVERLAP * scale;
-    for (let k = kLo; k <= kHi; k++) {
-      const bottomY = this.toScreen({ x: 0, y: k * SECTION_PITCH }).y;
-      const topY = bottomY - pageH;
-      if (topY > h || bottomY < 0) continue;
-      const img = this.sections.get(k);
-      if (!img) {
-        this.drawFallbackPage(k, topY, pageH);
-        continue;
-      }
-      if (k === kLo || bottomY - seamH > h) {
-        ctx.drawImage(img, 0, topY, w, pageH);
-        continue;
-      }
-      // Over the page below, this page's bottom strip is feathered in across the overlap, so the
-      // two paintings melt into each other instead of meeting at a line.
-      const srcSeam = (SEAM_OVERLAP / SECTION_H) * img.naturalHeight;
-      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight - srcSeam, 0, topY, w, pageH - seamH);
-      const strip = this.seamStrip(w, seamH);
-      const sc = strip.getContext('2d');
-      if (sc) {
-        sc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-        sc.globalCompositeOperation = 'source-over';
-        sc.clearRect(0, 0, w, seamH);
-        sc.drawImage(img, 0, img.naturalHeight - srcSeam, img.naturalWidth, srcSeam, 0, 0, w, seamH);
-        sc.globalCompositeOperation = 'destination-in';
-        const g = sc.createLinearGradient(0, 0, 0, seamH);
-        g.addColorStop(0, 'rgba(0,0,0,1)');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        sc.fillStyle = g;
-        sc.fillRect(0, 0, w, seamH);
-        ctx.drawImage(strip, 0, bottomY - seamH, w, seamH);
-      }
-    }
-  }
-
-  private seam: HTMLCanvasElement | null = null;
-
-  /** A small offscreen canvas for feathering one page over the next, reused every frame. */
-  private seamStrip(w: number, seamH: number): HTMLCanvasElement {
-    const cw = Math.round(w * this.dpr);
-    const ch = Math.round(seamH * this.dpr);
-    if (!this.seam || this.seam.width !== cw || this.seam.height !== ch) {
-      this.seam = document.createElement('canvas');
-      this.seam.width = cw;
-      this.seam.height = ch;
-    }
-    return this.seam;
-  }
-
-  /** A page without its picture: the area's ground and a ribbon along the recorded path. */
-  private drawFallbackPage(k: number, topY: number, pageH: number): void {
-    const { ctx, w } = this;
-    const ref = sectionRef(k);
-    const theme = areaTheme(ref.area);
-    const g = ctx.createLinearGradient(0, topY, 0, topY + pageH);
-    g.addColorStop(0, theme.groundFar);
-    g.addColorStop(1, theme.ground);
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, colors.bgTop);
+    g.addColorStop(1, colors.bgBottom);
     ctx.fillStyle = g;
-    ctx.fillRect(0, topY, w, pageH);
-    const first = k * LANTERNS_PER_AREA;
-    // The painted path's centre line through this page, from the world's recorded points.
-    const pts: Pt[] = [];
-    const bottom = k * SECTION_PITCH;
-    for (let i = 0; i <= 24; i++) {
-      const y = bottom + (SECTION_H * i) / 24;
-      pts.push(this.toScreen(this.pathAtWorldY(y)));
+    ctx.fillRect(0, 0, w, h);
+    glowDisc(ctx, w * 0.5, h * 0.96, w * 0.9, colors.glowLow, 0.22);
+    glowDisc(ctx, w * 0.5, h * 0.02, w * 0.8, colors.glowHigh, 0.18);
+    if (!this.skyField) {
+      const rng = createRng(11);
+      const n = Math.max(60, Math.round((w * h) / 2600));
+      this.skyField = Array.from({ length: n }, () => ({ x: rng.range(0, w), y: rng.range(0, h * 2), r: rng.range(0.6, 1.9), a: rng.range(0.35, 0.95), phase: rng.range(0, Math.PI * 2) }));
     }
+    // The field is two screens tall and wraps, moving at a share of the islands' speed.
+    const tile = h * 2;
+    const shift = ((this.camera * this.scale * SKY_PARALLAX) % tile + tile) % tile;
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, topY, w, pageH);
-    ctx.clip();
-    drawPathRibbon(ctx, pts, { path: theme.path, pathLit: theme.pathLit }, () => 22, this.opts && first < this.opts.to ? pts.length : 0);
+    for (const st of this.skyField) {
+      let y = st.y + shift;
+      if (y >= tile) y -= tile;
+      if (y > h + 4) continue;
+      const tw = 0.75 + 0.25 * Math.sin(t * 0.7 + st.phase);
+      ctx.fillStyle = rgba('#f4f0ff', st.a * tw);
+      ctx.beginPath();
+      ctx.arc(st.x, y, st.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
-  /** The path's point at a world height (for the fallback page): found along the lanterns' path. */
-  private pathAtWorldY(y: number): Pt {
-    let n = 1;
-    while (lanternWorld(n + 1).y < y && n < REVIEW_TOP * 2) n++;
-    const a = lanternWorld(n);
-    const b = lanternWorld(n + 1);
-    const f = b.y > a.y ? clamp01((y - a.y) / (b.y - a.y)) : 0;
-    return pathBetween(n, n + 1, f);
+  /**
+   * The islands under the view, far to near: each area's painted island on its stage, floating very
+   * slightly, with a breath of the area's light behind it. An island without its picture shows a soft
+   * code-drawn isle in the area's colours, so the journey is never blank.
+   */
+  private drawIslands(colors: ReturnType<typeof blendThemeColors>, t: number): void {
+    const { ctx, w, h } = this;
+    const aLo = Math.max(0, stageAt(this.toWorldY(h)).a - 1);
+    const aHi = stageAt(Math.max(0, this.toWorldY(0))).a;
+    for (let a = aHi; a >= aLo; a--) {
+      const r = islandRect(a);
+      const size = r.size * this.scale;
+      const left = r.x * this.scale;
+      const bottomY = this.toScreen({ x: 0, y: r.y }).y;
+      const topY = bottomY - size;
+      if (topY > h || bottomY < 0) continue;
+      // A very slow float, a few px, different for each island.
+      const float = Math.sin(t * 0.45 + a * 1.9) * 3;
+      const area = stageAt(r.y + 1).area;
+      const img = this.islands.get(area);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, left + size / 2, topY + size * 0.5 + float, size * 0.42, colors.glowLow, 0.1);
+      ctx.restore();
+      if (img) ctx.drawImage(img, left, topY + float, size, size);
+      else this.drawFallbackIsland(area, left, topY + float, size, w);
+    }
+  }
+
+  /** An island without its picture: a soft isle in the area's ground colours with a few of its lights. */
+  private drawFallbackIsland(area: AreaId, left: number, top: number, size: number, w: number): void {
+    const { ctx } = this;
+    const theme = areaTheme(area);
+    const cx = left + size / 2;
+    const topY = top + size * 0.3;
+    const rx = size * 0.38;
+    const ry = size * 0.13;
+    ctx.save();
+    // The underside: a rough tapering clump.
+    ctx.fillStyle = theme.groundFar;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx * 0.96, topY + ry * 0.3);
+    ctx.quadraticCurveTo(cx - rx * 0.3, topY + ry * 3.2, cx + rx * 0.08, topY + size * 0.42);
+    ctx.quadraticCurveTo(cx + rx * 0.5, topY + ry * 2.6, cx + rx * 0.96, topY + ry * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    // The top: the area's ground.
+    ctx.fillStyle = theme.ground;
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(ctx, cx, topY, rx * 0.6, theme.accent, 0.18);
+    for (let i = 0; i < 5; i++) glowDisc(ctx, cx + Math.cos(i * 1.3) * rx * 0.6, topY + Math.sin(i * 2.1) * ry * 0.6, 7, theme.accent, 0.35);
+    ctx.restore();
+    void w;
   }
 
   /** The companion: painted when a picture exists for it, else drawn in code. */
@@ -1098,45 +1083,46 @@ export class MapScene {
   }
 
   /**
-   * A beacon standing at its foot: the area's painted design when it exists, else the code-drawn post. Unlit under lit so the light rises as a crossfade; the
-   * lamp's own halo and its pool on the ground are code-drawn light.
+   * A level star hanging in the sky: lit (warm gold, glowing softly, breathing) behind her and under
+   * her, dim ahead; explore stars glimmer in between. All code-drawn light in the area's colour, so
+   * nothing is ever greyed out or locked.
    */
-  private drawBeacon(n: number, lit: number, t: number): void {
+  private drawStar(n: number, lit: number, t: number, colors: ReturnType<typeof blendThemeColors>): void {
     const { ctx } = this;
-    const foot = this.toScreen(this.beaconFoot(n));
-    if (foot.y < -BEACON_H * 2 || foot.y > this.h + BEACON_H) return;
-    const area = sectionRef(sectionAt(lanternWorld(n).y).k).area;
-    const beacon = this.art?.beacons[area];
-    const lamp = this.lampOf(n);
+    const p = this.starOf(n);
+    if (p.y < -STAR_R * 6 || p.y > this.h + STAR_R * 6) return;
+    const k = clamp01(lit);
+    const r = STAR_R * (0.8 + 0.2 * k);
     ctx.save();
-    if (lit > 0.05) {
-      // The pool of light on the ground around the foot.
-      ctx.save();
+    if (k > 0.05) {
       ctx.globalCompositeOperation = 'lighter';
-      ctx.translate(foot.x, foot.y - 2);
-      ctx.scale(1, 0.38);
-      glowDisc(ctx, 0, 0, BEACON_H * 0.95, this.style.palette.lanternGlow, 0.28 * lit * (0.925 + 0.075 * Math.sin(t * 0.9)));
-      ctx.restore();
+      const breath = 0.925 + 0.075 * Math.sin(t * 0.9);
+      glowDisc(ctx, p.x, p.y, r * 3.6, colors.pathLit, 0.34 * k * breath);
+      glowDisc(ctx, p.x, p.y, r * 1.8, '#ffd98a', 0.3 * k);
     }
-    if (beacon) {
-      const dh = BEACON_H;
-      const dw = dh * (beacon.lit.naturalWidth / beacon.lit.naturalHeight);
-      if (lit < 0.98) ctx.drawImage(beacon.unlit, foot.x - dw / 2, foot.y - dh, dw, dh);
-      if (lit > 0.02) {
-        ctx.globalAlpha = clamp01(lit);
-        ctx.drawImage(beacon.lit, foot.x - dw / 2, foot.y - dh, dw, dh);
-      }
-    } else {
-      drawLanternPost(ctx, foot.x, foot.y, BEACON_H / 1.9, lit, { ...this.style.palette }, t, '#9fb8ff', 1);
-    }
-    if (lit > 0.02) {
-      // The lamp's own light: a warm halo the picture does not carry, breathing slowly.
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'lighter';
-      glowDisc(ctx, lamp.x, lamp.y, BEACON_H * 0.62, this.style.palette.lanternGlow, (0.4 + 0.06 * Math.sin(t * 0.9)) * clamp01(lit));
-      glowDisc(ctx, lamp.x, lamp.y, BEACON_H * 0.28, '#fff2cf', 0.26 * clamp01(lit));
-    }
+    ctx.globalCompositeOperation = 'source-over';
+    this.starPath(p.x, p.y, r);
+    ctx.fillStyle = k > 0.5 ? rgba('#ffe6a8', 0.55 + 0.45 * k) : rgba('#aebfe6', 0.3 + 0.5 * k);
+    ctx.fill();
+    this.starPath(p.x, p.y, r * 0.5);
+    ctx.fillStyle = k > 0.5 ? rgba('#fff8e4', k) : rgba('#d6e0f8', 0.35 + 0.4 * k);
+    ctx.fill();
     ctx.restore();
+  }
+
+  /** A five-point star path centred at (x, y) with outer radius r. */
+  private starPath(x: number, y: number, r: number): void {
+    const { ctx } = this;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rr = i % 2 === 0 ? r : r * 0.46;
+      const px = x + Math.cos(ang) * rr;
+      const py = y + Math.sin(ang) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
   }
 
   /** The same dim moon the board draws at (12,14), baked so the cut-out never erases the scene beneath. */
@@ -1185,25 +1171,32 @@ export class MapScene {
     const walkedTo = opts.review ? REVIEW_TOP : this.litTo ? opts.to : opts.from;
     const { nLo, nHi } = this.lanternRange();
 
-    // The lit path between beacons she has passed: a soft glow along the painting, breathing very slowly.
+    // The trail between stars: glimmers of light along the flight, warm and bright behind her, faint ahead.
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (let n = nLo; n < Math.min(walkedTo, nHi); n++) {
-      const line = pathPolyline(n, n + 1, 8).map((p) => this.toScreen(p));
+    for (let n = nLo; n < nHi; n++) {
+      const line = pathPolyline(n, n + 1, 7).map((p) => this.toScreen(p));
       if ((line[0] as Pt).y < -60 && (line[line.length - 1] as Pt).y < -60) continue;
       if ((line[0] as Pt).y > this.h + 60 && (line[line.length - 1] as Pt).y > this.h + 60) continue;
-      ctx.strokeStyle = rgba(colors.pathLit, 0.1 + 0.04 * Math.sin(t * 0.6 + n));
-      ctx.lineWidth = 14;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-      ctx.stroke();
+      const behind = n < walkedTo;
+      for (let i = 1; i < line.length - 1; i++) {
+        const p = line[i] as Pt;
+        const tw = 0.7 + 0.3 * Math.sin(t * 1.1 + n * 0.9 + i * 1.4);
+        if (behind) {
+          glowDisc(ctx, p.x, p.y, 7, colors.pathLit, 0.22 * tw);
+          ctx.fillStyle = rgba('#fff1cf', 0.75 * tw);
+        } else {
+          ctx.fillStyle = rgba('#c9d6f5', 0.22 + 0.1 * tw);
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, behind ? 2 : 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
 
-    // Beacons, far to near so nearer ones overlap farther ones: lit behind her, dim ahead, never greyed out;
-    // the explore beacons ahead (the first of each area) glimmer half-lit with a slow breath, the invitation to look in.
+    // The stars, far to near: lit behind her, dim ahead, never greyed out; the explore stars ahead (the
+    // first of each area) glimmer half-lit with a slow breath, the invitation to look in.
     const explore = this.exploreSet();
     let bloomAt: Pt | null = null;
     for (let n = nHi; n >= nLo; n--) {
@@ -1216,13 +1209,13 @@ export class MapScene {
         // The new light rises over the bloom, with a brief soft overshoot that settles.
         const k = clamp01(this.bloomT / (BLOOM_MS * this.motion));
         lit = 0.1 + 0.9 * easeOutCubic(k) + 0.25 * Math.sin(k * Math.PI);
-        if (k < 1) bloomAt = this.lampOf(n);
+        if (k < 1) bloomAt = this.starOf(n);
       }
-      this.drawBeacon(n, lit, t + n * 0.7);
+      this.drawStar(n, lit, t + n * 0.7, colors);
     }
     if (!opts.rest && !opts.review && this.litTo && this.phase === 'linger' && this.phaseT >= INVITE_AFTER_MS) {
-      // The invitation: a slow breath of light around the new lantern until she taps it.
-      const at = this.lampOf(opts.to);
+      // The invitation: a slow breath of light around her star until she taps it.
+      const at = this.starOf(opts.to);
       const rise = clamp01((this.phaseT - INVITE_AFTER_MS) / 1200);
       const breathK = 0.5 - 0.5 * Math.cos(((this.phaseT - INVITE_AFTER_MS) / INVITE_PERIOD_MS) * Math.PI * 2);
       ctx.save();
@@ -1251,7 +1244,7 @@ export class MapScene {
       if (p.y < -FRIEND_S * 2 || p.y > this.h + FRIEND_S) continue;
       const dir = Math.sign(perchTo.x - p.x) || 1;
       const pose: CompanionOpts = { glow: 0.9, facing: dir >= 0 ? 1 : -1 };
-      let y = p.y;
+      let y = p.y - HOVER;
       if (tr.k < 1) {
         // In the air behind her, a little lower than her own hop.
         const air = Math.sin(tr.k * Math.PI);
@@ -1287,10 +1280,10 @@ export class MapScene {
       this.drawAnyCompanion(ctx, this.swap.outgoing, outP.x, outP.y, FRIEND_S, t, { ...this.hopPose(k, sinceLand, Math.sign(slotP.x - perchTo.x)), glow: 0.9 });
       this.drawAnyCompanion(ctx, this.swap.incoming, inP.x, inP.y, COMPANION_S, t, { ...this.hopPose(k, sinceLand, Math.sign(perchTo.x - slotP.x)), glow: 1.1 });
     } else if (this.phase === 'hop') {
-      // Along the painted path, in the air between the two beacons.
+      // Flying along the trail between the two stars.
       const k = clamp01(this.phaseT / (HOP_MS * this.motion));
       const ground = this.toScreen(pathBetween(opts.from, opts.to, easeInOutSine(k)));
-      const y = ground.y - Math.sin(k * Math.PI) * HOP_HEIGHT;
+      const y = ground.y - HOVER - Math.sin(k * Math.PI) * HOP_HEIGHT;
       const dir = Math.sign(lanternWorld(opts.to).x - lanternWorld(opts.from).x) || 1;
       this.drawAnyCompanion(ctx, this.companion, ground.x, y, COMPANION_S, t, { ...this.hopPose(k, -1, dir), glow: 1.15 });
     } else {

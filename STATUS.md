@@ -1,6 +1,6 @@
 # Status
 
-Updated 7 October 2026, after batch B (the storybook map) and the theme music. Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
+Updated 17 October 2026, after the map rethink (islands in the night sky). Decisions in DESIGN.md 2e, 2f and 2g; the parent's walkthrough notes in the project's `playtest/` folder.
 
 ## After the play-test (5 October)
 
@@ -147,8 +147,13 @@ Deployed as run 38, green 03:44 UTC on 9 October, on the parent's "Deploy": the 
 
 The parent's ask after the full draft: in ordinary play, scroll the whole map and play one level per area ahead, just for exploring. Decisions in DESIGN.md 2k. Built: the map scrolls to the end of her pass through the seven areas; the first lantern of every area ahead glimmers softly and opens its level as a replay (a win celebrates, then the map returns to her own lantern; nothing moves on, nothing is unlocked); the drift home now waits fifteen seconds instead of two and a half. The open lanterns are listed by `exploreLanterns` in `src/core/journey.ts` (tested); the map uses `canPlayFromMap` for taps and the save. Verified in Chromium at phone size: scrolling from the Meadow to Dragon Hollow and the stop at the top, the map holding still for five seconds after a drag, the Cave's first beacon glimmering and opening lantern 11 as a replay of lantern 3, the win returning to lantern 3; `npm run check` and the smoke test green. Deployed on the parent's "Deploy" as run 40, green 00:16 UTC on 11 October (build stamp about 00:15 UTC).
 
+### The map rethought: islands in the night sky (17 October, branch `claude/map-rethink-n5e687`)
+
+The parent's verdict on the painted scrolling pages (17 October): beautiful pictures, but the map was not working, and the characters on it looked stuck on. Decisions in DESIGN.md 2l, the look in STYLE.md "The map". Built: `src/render/mapWorld.ts` rewritten as stages (one island and its climb per area, `AREA_PITCH` world px tall, the trail an analytic S pinned at the island's clearing, tested in `tests/mapWorld.test.ts`); `src/render/mapArt.ts` loads one `island-<area>.webp` per area and the companions (beacons and pages gone, with their files); `src/game/mapScene.ts` draws the sky (area colours blending into the next, a parallax field of far stars), the islands with a slow float and a breath of light behind each, the trail of glimmers and the ten stars per area (lit, dim, explore glimmer, bloom and invitation as before), the companions hovering and flying; input, scrolling, replay, explore, swaps, rest and review mode unchanged. `public/art` shrank from 17 MB to 10 MB. Verified in Chromium at phone size: launch at lanterns 4, 9, 24, 44, 58 and 65, looking back and ahead, the flight after a win, the invitation; `npm run check` and the smoke test green. Pictures cost about $2.50 (seven islands; about $14 of the $25 used in all). Pictures for the parent in the project's `art/map-rethink/` folder.
+
 ## Next
 
+0. **Islands map on the phone:** the parent's verdict on the new map (branch `claude/map-rethink-n5e687`, deploy on his word), then whatever it turns up: the dim stars' brightness, the islands' spacing (`AREA_PITCH`), the friends' places in the air, the resting scene in the sky.
 1. **Play-test Stage 3 on the phone:** first get the phone onto the current build (re-add the icon, or use a Private tab; see the stale-build note above), then: the map and the creatures, the gate (hold the moon top-left for 1.5 s, then tap the two words), the panel in a car with one thumb, the first discoveries (`?reset=1&level=5` opens straight at the Orb's gift, `?level=8` the Bloom's, `?level=15` the Sprite's, `?level=25` the Starburst's, `?level=31` the Moonrise's, `?level=51` the Aurora's), the area crossings (`?level=10` then finish the level), and the sound of each area. Confirm sound and the haptic tick as above.
 2. Hear the parent's phone verdict on the map (batch B) and the Play levels (Stage 4), and tune the ramp from what he sees.
 3. Hear the parent's verdict on the endings (Stage 5): the sleepy stretch in a Play level, "Finish now, gently", the resting night, the dimmer in a dark car.

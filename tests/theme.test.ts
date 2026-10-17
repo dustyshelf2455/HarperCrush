@@ -4,7 +4,7 @@ import { INSTRUMENTS } from '../src/audio/engine';
 import { crossWeights } from '../src/audio/player';
 import { BEATS_PER_BAR, LOOP_BARS, LOOP_BEATS, THEME_BARS, THEME_CHORDS, THEME_MELODY, THEME_VOICES, ThemeComposer, normaliseWeights, themeChordAt } from '../src/audio/theme';
 import { AREA_IDS, type AreaId } from '../src/core/journey';
-import { SECTIONS_PER_AREA, SECTION_PITCH, areaUnderView, lanternWorld } from '../src/render/mapWorld';
+import { AREA_PITCH, areaUnderView, lanternWorld } from '../src/render/mapWorld';
 import { createRng } from '../src/shared/rng';
 import { isInScale } from '../src/shared/scale';
 
@@ -160,14 +160,13 @@ describe('crossing between voices', () => {
 });
 
 describe('the area under the map view', () => {
-  it('is the page area until the top of an area\'s last page, where it becomes the next', () => {
+  it('is the stage\'s area until the view is past its last star, where it becomes the next', () => {
     expect(areaUnderView(0)).toBe('meadow');
     expect(areaUnderView(lanternWorld(1).y)).toBe('meadow');
-    const lastPage = (SECTIONS_PER_AREA - 1) * SECTION_PITCH;
-    expect(areaUnderView(lastPage + SECTION_PITCH * 0.5)).toBe('meadow');
-    expect(areaUnderView(lastPage + SECTION_PITCH * 0.85)).toBe('meadow');
-    expect(areaUnderView(lastPage + SECTION_PITCH * 0.95)).toBe('cave');
-    expect(areaUnderView(SECTIONS_PER_AREA * SECTION_PITCH + 10)).toBe('cave');
+    expect(areaUnderView(AREA_PITCH * 0.5)).toBe('meadow');
+    expect(areaUnderView(lanternWorld(10).y)).toBe('meadow');
+    expect(areaUnderView(AREA_PITCH * 0.98)).toBe('cave');
+    expect(areaUnderView(AREA_PITCH + 10)).toBe('cave');
   });
 
   it('places every lantern in its own area', () => {

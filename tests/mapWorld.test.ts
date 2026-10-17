@@ -1,95 +1,81 @@
 import { describe, expect, it } from 'vitest';
 import { AREA_IDS, LANTERNS_PER_AREA } from '../src/core/journey';
-import { SECTION_PATHS } from '../src/render/mapSections';
-import { SECTION_H, SECTION_PITCH, SECTION_W, areaStartLantern, lanternWorld, pathBetween, pathPolyline, sectionAt, sectionPath, sectionRef } from '../src/render/mapWorld';
+import { AREA_PITCH, ISLAND_SIZE, WORLD_W, areaStartLantern, areaUnderView, islandClearing, islandRect, lanternWorld, pathBetween, pathPolyline, stageAt, stageBlend, stageRef, trailPoint } from '../src/render/mapWorld';
 
-describe('map sections', () => {
-  it('every page has three paths that enter at the bottom centre and leave at the top centre', () => {
-    for (const id of AREA_IDS) {
-      const pages = SECTION_PATHS[id];
-      expect(pages).toHaveLength(3);
-      for (const pts of pages) {
-        expect(pts.length).toBeGreaterThanOrEqual(4);
-        const first = pts[0]!;
-        const last = pts[pts.length - 1]!;
-        expect(first.y).toBe(1);
-        expect(last.y).toBe(0);
-        expect(Math.abs(first.x - 0.5)).toBeLessThan(0.2);
-        expect(Math.abs(last.x - 0.5)).toBeLessThan(0.2);
-        // The path climbs: y (from the top) never increases along the list.
-        for (let i = 1; i < pts.length; i++) expect(pts[i]!.y).toBeLessThanOrEqual(pts[i - 1]!.y);
-        for (const q of pts) {
-          expect(q.x).toBeGreaterThanOrEqual(0.08);
-          expect(q.x).toBeLessThanOrEqual(0.92);
-        }
+describe('islands in the night sky', () => {
+  it('stages cycle through the seven areas forever, one island each', () => {
+    expect(stageRef(0)).toEqual({ a: 0, area: 'meadow', base: 0 });
+    expect(stageRef(1).area).toBe('cave');
+    expect(stageRef(7).area).toBe('meadow');
+    expect(stageRef(7).base).toBe(7 * AREA_PITCH);
+    expect(stageAt(AREA_PITCH * 4 + 10).a).toBe(4);
+    expect(islandRect(2)).toEqual({ x: (WORLD_W - ISLAND_SIZE) / 2, y: 2 * AREA_PITCH, size: ISLAND_SIZE });
+  });
+
+  it('the trail rises from the clearing to just under the next island, inside the middle of the width', () => {
+    for (let a = 0; a < 14; a++) {
+      const start = trailPoint(a, 0);
+      const end = trailPoint(a, 1);
+      expect(start).toEqual(islandClearing(a));
+      expect(end.y).toBeLessThan(stageRef(a + 1).base);
+      expect(end.y).toBeGreaterThan(stageRef(a + 1).base - 200);
+      let last = start.y;
+      for (let i = 1; i <= 40; i++) {
+        const p = trailPoint(a, i / 40);
+        expect(p.y).toBeGreaterThan(last);
+        expect(p.x).toBeGreaterThan(WORLD_W * 0.15);
+        expect(p.x).toBeLessThan(WORLD_W * 0.85);
+        last = p.y;
       }
     }
   });
 
-  it('pages cycle through the seven areas forever', () => {
-    expect(sectionRef(0)).toEqual({ k: 0, area: 'meadow', i: 0 });
-    expect(sectionRef(2)).toEqual({ k: 2, area: 'meadow', i: 2 });
-    expect(sectionRef(3).area).toBe('cave');
-    expect(sectionRef(21).area).toBe('meadow');
-    expect(sectionRef(21).i).toBe(0);
-    expect(sectionAt(SECTION_PITCH * 4 + 10).k).toBe(4);
-  });
-
-  it('a page path in world pixels spans the page from its bottom edge to its top edge', () => {
-    const pts = sectionPath(5);
-    expect(pts[0]!.y).toBeCloseTo(5 * SECTION_PITCH);
-    expect(pts[pts.length - 1]!.y).toBeCloseTo(5 * SECTION_PITCH + SECTION_H);
-    for (const q of pts) {
-      expect(q.x).toBeGreaterThan(0);
-      expect(q.x).toBeLessThan(SECTION_W);
+  it('every star hangs higher than the one before, and the first star of an area is over its island', () => {
+    for (let n = 1; n < 140; n++) {
+      expect(lanternWorld(n + 1).y).toBeGreaterThan(lanternWorld(n).y);
+      expect(Math.hypot(lanternWorld(n).dir.x, lanternWorld(n).dir.y)).toBeCloseTo(1);
     }
-  });
-});
-
-describe('lanterns on the painted path', () => {
-  it('climb forever, ten to an area, each inside its area pages', () => {
-    let prev = -1;
-    for (let n = 1; n <= 150; n++) {
-      const l = lanternWorld(n);
-      expect(l.y).toBeGreaterThan(prev);
-      prev = l.y;
-      const area = Math.floor((n - 1) / LANTERNS_PER_AREA);
-      expect(l.y).toBeGreaterThanOrEqual(area * 3 * SECTION_PITCH);
-      expect(l.y).toBeLessThanOrEqual((area * 3 + 3) * SECTION_PITCH + SECTION_H);
-      expect(l.x).toBeGreaterThan(0);
-      expect(l.x).toBeLessThan(SECTION_W);
-      expect(Math.abs(l.side)).toBe(1);
-      expect(Math.hypot(l.dir.x, l.dir.y)).toBeCloseTo(1);
+    for (let a = 0; a < 7; a++) {
+      const first = lanternWorld(a * LANTERNS_PER_AREA + 1);
+      const r = islandRect(a);
+      expect(first.y).toBeGreaterThan(r.y);
+      expect(first.y).toBeLessThan(r.y + r.size);
     }
   });
 
-  it('are spread evenly enough that none crowds its neighbour', () => {
-    const gaps: number[] = [];
-    for (let n = 1; n < 70; n++) gaps.push(lanternWorld(n + 1).y - lanternWorld(n).y);
-    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-    for (const g of gaps) expect(g).toBeGreaterThan(mean * 0.3);
-  });
-
-  it('the same lantern always lands on the same point', () => {
-    expect(lanternWorld(7)).toEqual(lanternWorld(7));
-    expect(lanternWorld(71).x).toBeCloseTo(lanternWorld(1).x);
-    expect(lanternWorld(71).y - 21 * SECTION_PITCH).toBeCloseTo(lanternWorld(1).y);
-  });
-
-  it('the path between lanterns starts and ends on them and climbs, across an area border too', () => {
-    for (const [n, m] of [[1, 2], [9, 10], [10, 11], [30, 31], [69, 70]] as const) {
-      const a = lanternWorld(n);
-      const b = lanternWorld(m);
-      expect(pathBetween(n, m, 0)).toEqual({ x: a.x, y: a.y });
-      const end = pathBetween(n, m, 1);
-      expect(end.x).toBeCloseTo(b.x);
-      expect(end.y).toBeCloseTo(b.y);
-      const line = pathPolyline(n, m, 20);
-      for (let i = 1; i < line.length; i++) expect(line[i]!.y).toBeGreaterThanOrEqual(line[i - 1]!.y - 1e-6);
+  it('the flight between stars starts and ends on them, within an area and across a border', () => {
+    for (const [n, m] of [
+      [3, 4],
+      [10, 11],
+      [70, 71],
+    ]) {
+      const a = lanternWorld(n!);
+      const b = lanternWorld(m!);
+      const p0 = pathBetween(n!, m!, 0);
+      const p1 = pathBetween(n!, m!, 1);
+      expect(p0.x).toBeCloseTo(a.x, 3);
+      expect(p0.y).toBeCloseTo(a.y, 3);
+      expect(p1.x).toBeCloseTo(b.x, 3);
+      expect(p1.y).toBeCloseTo(b.y, 3);
+      const line = pathPolyline(n!, m!, 8);
+      expect(line).toHaveLength(9);
+      for (let i = 1; i < line.length; i++) expect(line[i]!.y).toBeGreaterThanOrEqual(line[i - 1]!.y);
     }
   });
 
-  it('knows the first lantern of an area', () => {
+  it('the area under the view follows the stages, crossing a little before the next island', () => {
+    expect(areaUnderView(0)).toBe('meadow');
+    expect(areaUnderView(AREA_PITCH * 0.5)).toBe('meadow');
+    expect(areaUnderView(AREA_PITCH * 0.9)).toBe('meadow');
+    expect(areaUnderView(AREA_PITCH * 0.97)).toBe('cave');
+    expect(areaUnderView(AREA_PITCH * 1.2)).toBe('cave');
+    expect(areaUnderView(AREA_PITCH * 6.99)).toBe('meadow');
+    expect(stageBlend(AREA_PITCH * 0.5)).toEqual({ a: 'meadow', b: 'cave', f: 0 });
+    expect(stageBlend(AREA_PITCH * 0.99).f).toBeGreaterThan(0.9);
+    expect(AREA_IDS).toContain(stageBlend(AREA_PITCH * 13.5).a);
+  });
+
+  it('finds the first star of an area', () => {
     expect(areaStartLantern(1)).toBe(1);
     expect(areaStartLantern(10)).toBe(1);
     expect(areaStartLantern(11)).toBe(11);
