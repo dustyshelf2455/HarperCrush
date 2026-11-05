@@ -83,3 +83,7 @@ Full steps are in DESIGN.md Section 5; this is the short version.
 **A Focus mode (5.3)** for the moments you hand the phone over without Guided Access: Settings → Focus → + → Custom, allow calls from the people who must reach you and Allow Repeated Calls, and put it on the Action Button or in Control Center.
 
 **Worth checking (5.4).** Portrait Orientation Lock on; Back Tap off; Screen Time's web restrictions allow the game's address; the game's own night dimmer and iOS's Reduce White Point for dark cabins.
+
+## Pianolandia (a separate little app)
+
+`public/pianolandia/` is a swipeable iPad storybook of piano ideas for Harper's free play: a cover and four pages (a fifth, the C chord, the moon chord, the black-key song). Each page has a picture, a few words, and a keyboard drawn to match her Yamaha Reface CP exactly (37 keys, C to C, the centre C is middle C). Coloured dots mark the keys; silent "ghost hands" press them in a loop; the speaker button plays the idea once with sound; she can play the on-screen keys (chords and glissandos) and tap things in the pictures to hear their notes. It is one self-contained HTML file with code-drawn pictures and code-made sound, deployed with the site at `https://dustyshelf2455.github.io/HarperCrush/pianolandia/` and installable to the Home Screen. Pages are defined in the `PAGES` list near the top of its script.

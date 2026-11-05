@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pianolandia">
+<meta name="theme-color" content="#2b2350">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Pianolandia</title>
+<style>
+  :root {
+    --paper: #fdf5e6;
+    --paper-edge: #f1e3c8;
+    --ink: #3b2a4a;
+    --ink-soft: #6d5a7c;
+    --case: #1c1a1f;
+    --white-key: #fbfaf7;
+    --black-key: #17161a;
+    --C:#ff7a6b; --Cs:#ff8fc8; --D:#ffa552; --Eb:#b388ff; --E:#ffcf3f; --F:#8fd16a;
+    --Fs:#4fd3f0; --G:#2fc3ae; --Ab:#ffb84d; --A:#5aa9f0; --Bb:#9be37f; --B:#a98bf0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #2b2350;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    touch-action: manipulation; overscroll-behavior: none;
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+  }
+  #book {
+    position: fixed; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  #book::-webkit-scrollbar { display: none; }
+  .page {
+    flex: 0 0 100vw; width: 100vw; height: 100%; scroll-snap-align: center; scroll-snap-stop: always;
+    display: flex; flex-direction: column; gap: clamp(8px, 1.6vh, 18px);
+    padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: radial-gradient(120% 90% at 50% 0%, var(--paper) 60%, var(--paper-edge) 100%);
+    position: relative;
+  }
+  .art {
+    flex: 1 1 auto; min-height: 0; border-radius: 28px; overflow: hidden; position: relative;
+    box-shadow: 0 6px 0 rgba(59,42,74,.08), 0 14px 30px rgba(59,42,74,.16);
+  }
+  .art svg { width: 100%; height: 100%; display: block; }
+  .words { flex: 0 0 auto; text-align: center; padding: 0 2vw; }
+  .words h2 {
+    margin: 0; font-family: "Georgia", "Iowan Old Style", serif; font-style: italic; font-weight: 700;
+    font-size: clamp(26px, 4.2vh, 44px); letter-spacing: .01em; color: var(--ink);
+  }
+  .words .say { margin: .25em 0 0; font-size: clamp(19px, 2.8vh, 30px); font-weight: 700; line-height: 1.2; }
+  .words .tip { margin: .3em auto 0; font-size: clamp(15px, 2.1vh, 22px); color: var(--ink-soft); line-height: 1.3; max-width: 46em; }
+  .chip { display: inline-block; padding: 0 .4em; border-radius: .5em; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.2); }
+
+  /* The keyboard: a Yamaha Reface CP, 37 keys, C to C. */
+  .kb-wrap { flex: 0 0 auto; position: relative; }
+  .kb {
+    position: relative; height: clamp(150px, 24vh, 250px); background: var(--case);
+    border-radius: 18px; padding: 14px 12px 12px; touch-action: none;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.08), 0 8px 18px rgba(0,0,0,.25);
+  }
+  .keys { position: relative; height: 100%; }
+  .key { position: absolute; top: 0; }
+  .key.white {
+    height: 100%; background: var(--white-key); border-radius: 0 0 7px 7px;
+    box-shadow: inset 0 -6px 0 #e4e0d8, inset -1px 0 0 #cfcac0;
+    transition: transform .08s, box-shadow .08s, background .2s;
+  }
+  .key.black {
+    height: 62%; background: linear-gradient(#2a2830, var(--black-key)); border-radius: 0 0 5px 5px; z-index: 2;
+    box-shadow: inset 0 -5px 0 #000, 0 2px 3px rgba(0,0,0,.4);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .key.down { transform: translateY(3px); }
+  .key.white.down { background: #f1eee6; box-shadow: inset 0 -2px 0 #e4e0d8, inset -1px 0 0 #cfcac0; }
+  .key.black.down { box-shadow: inset 0 -2px 0 #000; }
+  .mark {
+    position: absolute; left: 50%; bottom: 12%; width: 74%; aspect-ratio: 1; transform: translateX(-50%);
+    border-radius: 50%; background: var(--c); pointer-events: none;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+    font-weight: 800; font-size: clamp(11px, 1.6vw, 20px); text-shadow: 0 1px 1px rgba(0,0,0,.25);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.8), 0 2px 6px rgba(0,0,0,.25);
+  }
+  .key.black .mark { width: 92%; bottom: 10%; box-shadow: 0 0 0 2px rgba(255,255,255,.85); font-size: clamp(9px, 1.2vw, 15px); }
+  .mark::after {
+    content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--c);
+    opacity: 0; transform: scale(.8); transition: opacity .25s, transform .25s;
+  }
+  .key.down .mark::after { opacity: .9; transform: scale(1.35); }
+  .key.down .mark { filter: brightness(1.08); }
+  .key.played-only.down { background: color-mix(in srgb, var(--c) 20%, var(--white-key)); }
+  .key.black.played-only.down { background: color-mix(in srgb, var(--c) 45%, var(--black-key)); }
+  .floaty {
+    position: absolute; pointer-events: none; font-size: clamp(22px, 3vw, 34px); font-weight: 900; color: var(--c);
+    text-shadow: 0 2px 0 rgba(0,0,0,.12); animation: floaty 1.4s ease-out forwards; z-index: 5;
+  }
+  @keyframes floaty { from { opacity: 0; transform: translate(-50%, 0) scale(.6); } 15% { opacity: 1; } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), -90px) scale(1.15); } }
+
+  /* Listen button */
+  .listen {
+    position: absolute; right: 16px; bottom: 16px; width: 64px; height: 64px; border-radius: 50%; border: 0;
+    background: rgba(255,255,255,.88); box-shadow: 0 4px 12px rgba(0,0,0,.18); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; z-index: 3;
+  }
+  .listen:active { transform: scale(.94); }
+  .listen svg { width: 34px; height: 34px; }
+
+  /* Page dots and edge arrows */
+  #dots { position: fixed; left: 50%; transform: translateX(-50%); top: max(20px, calc(env(safe-area-inset-top) + 8px)); display: flex; gap: 10px; z-index: 10; padding: 7px 11px; border-radius: 99px; background: rgba(255,255,255,.55); }
+  #dots button { width: 14px; height: 14px; border-radius: 50%; border: 0; padding: 0; background: rgba(59,42,74,.25); cursor: pointer; transition: background .3s, transform .3s; }
+  #dots button.on { background: var(--ink); transform: scale(1.2); }
+  .edge { position: fixed; top: 34%; width: 52px; height: 52px; border-radius: 50%; border: 0; background: rgba(255,255,255,.7); z-index: 10; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity .3s; box-shadow: 0 3px 10px rgba(0,0,0,.15); }
+  .edge svg { width: 26px; height: 26px; }
+  #prev { left: max(26px, calc(env(safe-area-inset-left) + 22px)); }
+  #next { right: max(26px, calc(env(safe-area-inset-right) + 22px)); }
+  .edge.hide { opacity: 0; pointer-events: none; }
+
+  /* Cover */
+  .cover { padding: 0; }
+  .cover .art { border-radius: 0; box-shadow: none; }
+  .cover-title { position: absolute; left: 0; right: 0; top: 16%; text-align: center; pointer-events: none; color: #fff8e6; }
+  .cover-title h1 { margin: 0; font-family: "Georgia", "Iowan Old Style", serif; font-style: italic; font-size: clamp(54px, 10vw, 120px); letter-spacing: .01em; text-shadow: 0 4px 0 rgba(30,20,60,.45), 0 0 40px rgba(255,220,150,.45); }
+  .cover-title p { margin: .2em 0 0; font-size: clamp(20px, 2.6vw, 30px); font-weight: 700; opacity: .9; }
+  .swipe-hint { position: absolute; bottom: max(36px, calc(env(safe-area-inset-bottom) + 24px)); left: 50%; transform: translateX(-50%); color: #fff8e6; font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; display: flex; align-items: center; gap: 12px; pointer-events: none; opacity: .9; }
+  .swipe-hint span { display: inline-block; animation: nudge 2.4s ease-in-out infinite; font-size: 1.6em; }
+  @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(14px); } }
+
+  /* Illustration motion: slow, soft, never flashing */
+  svg [data-note] { cursor: pointer; }
+  .react { transform-box: fill-box; transform-origin: 50% 100%; }
+  .react.boing { animation: boing .7s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes boing { 0% { transform: scale(1); } 30% { transform: scale(1.14, .9); } 60% { transform: scale(.95, 1.08); } 100% { transform: scale(1); } }
+  .drift { animation: drift 40s linear infinite alternate; }
+  .drift.slow { animation-duration: 60s; }
+  @keyframes drift { from { transform: translateX(-30px); } to { transform: translateX(40px); } }
+  .sway { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 5s ease-in-out infinite; }
+  .sway.b { animation-delay: -1.6s; } .sway.c { animation-delay: -3.1s; }
+  @keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+  .spin { transform-box: fill-box; transform-origin: 50% 50%; animation: spin 60s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .twinkle { animation: twinkle 4s ease-in-out infinite; }
+  .twinkle:nth-child(3n) { animation-delay: -1.3s; animation-duration: 5s; }
+  .twinkle:nth-child(3n+1) { animation-delay: -2.7s; animation-duration: 6s; }
+  @keyframes twinkle { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  .bob { animation: bob 6s ease-in-out infinite; }
+  .bob.b { animation-delay: -2s; } .bob.c { animation-delay: -4s; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .float { animation: floatup 7s ease-in-out infinite; }
+  @keyframes floatup { 0%, 100% { transform: translate(0, 0); } 33% { transform: translate(8px, -12px); } 66% { transform: translate(-6px, -4px); } }
+  @media (prefers-reduced-motion: reduce) { .drift, .sway, .spin, .twinkle, .bob, .float, .swipe-hint span { animation: none !important; } }
+
+  @media (orientation: portrait) {
+    .kb { height: clamp(170px, 20vh, 260px); }
+  }
+</style>
+</head>
+<body>
+<div id="book"></div>
+<div id="dots"></div>
+<button class="edge" id="prev" aria-label="Previous page"><svg viewBox="0 0 24 24"><path d="M15 4 7 12l8 8" fill="none" stroke="#3b2a4a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<button class="edge" id="next" aria-label="Next page"><svg viewBox="0 0 24 24"><path d="m9 4 8 8-8 8" fill="none" stroke="#3b2a4a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+
+<!-- ============ ILLUSTRATIONS (hand-drawn SVG; painted art can replace them later) ============ -->
+<template id="art-cover">
+<svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="cv-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f1a4d"/><stop offset=".6" stop-color="#4a3d8f"/><stop offset="1" stop-color="#8a6fb8"/></linearGradient>
+    <radialGradient id="cv-glow"><stop offset="0" stop-color="#fff2c0" stop-opacity=".9"/><stop offset="1" stop-color="#fff2c0" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1000" height="700" fill="url(#cv-sky)"/>
+  <g fill="#fff8e0">
+    <circle class="twinkle" cx="90" cy="80" r="3"/><circle class="twinkle" cx="180" cy="190" r="2"/><circle class="twinkle" cx="300" cy="60" r="2.5"/>
+    <circle class="twinkle" cx="420" cy="140" r="2"/><circle class="twinkle" cx="610" cy="70" r="3"/><circle class="twinkle" cx="700" cy="170" r="2"/>
+    <circle class="twinkle" cx="880" cy="110" r="2.5"/><circle class="twinkle" cx="950" cy="230" r="2"/><circle class="twinkle" cx="40" cy="260" r="2"/>
+    <circle class="twinkle" cx="520" cy="40" r="2"/><circle class="twinkle" cx="240" cy="300" r="1.8"/><circle class="twinkle" cx="780" cy="290" r="1.8"/>
+  </g>
+  <circle cx="870" cy="120" r="140" fill="url(#cv-glow)"/>
+  <circle cx="870" cy="120" r="52" fill="#fff4cc"/>
+  <circle cx="852" cy="110" r="8" fill="#f3e2a8"/><circle cx="886" cy="136" r="5" fill="#f3e2a8"/>
+  <!-- floating notes, one per colour -->
+  <g font-family="Georgia, serif" font-weight="700" font-size="54">
+    <g class="float"><text class="react" x="140" y="420" fill="#ff7a6b" data-note="C">♪</text></g>
+    <g class="float" style="animation-delay:-2s"><text class="react" x="270" y="360" fill="#ffcf3f" data-note="E">♫</text></g>
+    <g class="float" style="animation-delay:-4s"><text class="react" x="690" y="380" fill="#2fc3ae" data-note="G">♪</text></g>
+    <g class="float" style="animation-delay:-5.5s"><text class="react" x="840" y="440" fill="#b388ff" data-note="Bb">♫</text></g>
+  </g>
+  <!-- hills and a little house of music -->
+  <path d="M0 560 Q 200 470 420 540 T 1000 520 V700 H0Z" fill="#3c3478"/>
+  <path d="M0 620 Q 260 560 520 610 T 1000 600 V700 H0Z" fill="#2b2560"/>
+  <g transform="translate(470 520)">
+    <rect x="-46" y="-40" width="92" height="70" rx="6" fill="#ffd9a8"/>
+    <path d="M-60 -38 L0 -92 L60 -38Z" fill="#ff7a6b"/>
+    <rect x="-14" y="-6" width="28" height="36" rx="12" fill="#7a4f8f"/>
+    <rect x="-36" y="-28" width="18" height="16" rx="4" fill="#ffe680"/><rect x="18" y="-28" width="18" height="16" rx="4" fill="#ffe680"/>
+  </g>
+</svg>
+</template>
+
+<template id="art-castle">
+<svg viewBox="-300 0 1600 560" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="ca-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb4a2"/><stop offset=".6" stop-color="#ffd9b0"/><stop offset="1" stop-color="#fff1d6"/></linearGradient>
+  </defs>
+  <rect x="-300" width="1600" height="560" fill="url(#ca-sky)"/>
+  <circle cx="500" cy="300" r="190" fill="#fff4cf" opacity=".75"/>
+  <g class="drift" fill="#fff" opacity=".85">
+    <ellipse cx="150" cy="110" rx="70" ry="24"/><ellipse cx="200" cy="96" rx="44" ry="26"/>
+    <ellipse cx="820" cy="80" rx="80" ry="22"/><ellipse cx="780" cy="68" rx="40" ry="22"/>
+  </g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 400 Q 180 300 380 380 T 760 360 T 1000 380 V560 H0Z" fill="#d6a6d0"/></g>
+  <!-- left tower (C) -->
+  <g class="react" data-note="C">
+    <rect x="300" y="190" width="110" height="250" rx="6" fill="#f3e8fb"/>
+    <rect x="300" y="190" width="18" height="250" fill="#e2d2ef"/>
+    <path d="M286 194 L355 92 L424 194Z" fill="#ff7a6b"/>
+    <path d="M355 92 L424 194 L390 194Z" fill="#e8604f"/>
+    <line x1="355" y1="94" x2="355" y2="40" stroke="#6b4c7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M357 42 Q 390 30 418 46 Q 392 58 357 66Z" fill="#ff7a6b"/>
+    <path d="M335 270 a20 20 0 0 1 40 0 v34 h-40Z" fill="#ffd34e"/>
+    <circle cx="355" cy="235" r="10" fill="#ffd34e"/>
+  </g>
+  <!-- right tower (G) -->
+  <g class="react" data-note="G">
+    <rect x="590" y="190" width="110" height="250" rx="6" fill="#f3e8fb"/>
+    <rect x="590" y="190" width="18" height="250" fill="#e2d2ef"/>
+    <path d="M576 194 L645 92 L714 194Z" fill="#2fc3ae"/>
+    <path d="M645 92 L714 194 L680 194Z" fill="#22a693"/>
+    <line x1="645" y1="94" x2="645" y2="40" stroke="#6b4c7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M647 42 Q 680 30 708 46 Q 682 58 647 66Z" fill="#2fc3ae"/>
+    <path d="M625 270 a20 20 0 0 1 40 0 v34 h-40Z" fill="#ffd34e"/>
+    <circle cx="645" cy="235" r="10" fill="#ffd34e"/>
+  </g>
+  <!-- wall and gate -->
+  <g class="react" data-note="C G">
+    <rect x="410" y="280" width="180" height="160" fill="#ebdcf5"/>
+    <g fill="#ebdcf5"><rect x="410" y="258" width="30" height="26"/><rect x="460" y="258" width="30" height="26"/><rect x="510" y="258" width="30" height="26"/><rect x="560" y="258" width="30" height="26"/></g>
+    <path d="M455 440 V360 a45 45 0 0 1 90 0 V440Z" fill="#8a5a9c"/>
+    <path d="M478 440 V360 M500 440 V316 M522 440 V360" stroke="#704682" stroke-width="5"/>
+    <circle cx="530" cy="400" r="5" fill="#ffd34e"/>
+  </g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 440 Q 250 410 500 440 T 1000 430 V560 H0Z" fill="#9fd18b"/></g>
+  <path d="M440 440 Q 500 445 560 440 L 640 560 H 360Z" fill="#f7e2b8"/>
+  <g fill="#7fc06b"><circle cx="160" cy="470" r="26"/><circle cx="190" cy="462" r="20"/><circle cx="840" cy="474" r="28"/><circle cx="870" cy="466" r="18"/></g>
+</svg>
+</template>
+
+<template id="art-sun">
+<svg viewBox="-300 0 1600 560" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="su-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc8ff"/><stop offset="1" stop-color="#dff4ff"/></linearGradient>
+  </defs>
+  <rect x="-300" width="1600" height="560" fill="url(#su-sky)"/>
+  <g class="drift slow" fill="#fff" opacity=".9">
+    <ellipse cx="180" cy="120" rx="76" ry="26"/><ellipse cx="220" cy="104" rx="46" ry="28"/>
+    <ellipse cx="830" cy="150" rx="70" ry="22"/>
+  </g>
+  <g class="react" data-note="C E G" style="transform-origin:50% 50%">
+    <g transform="translate(500 175)">
+      <g class="spin">
+        <g fill="#ffe27a">
+          <path d="M-14 -100 L0 -140 L14 -100Z"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(30)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(60)"/>
+          <path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(90)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(120)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(150)"/>
+          <path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(180)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(210)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(240)"/>
+          <path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(270)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(300)"/><path d="M-14 -100 L0 -140 L14 -100Z" transform="rotate(330)"/>
+        </g>
+      </g>
+      <circle r="88" fill="#ffd34e"/>
+      <circle r="88" fill="none" stroke="#ffbf2e" stroke-width="6"/>
+      <path d="M-40 -14 q12 -14 24 0 M16 -14 q12 -14 24 0" fill="none" stroke="#7a4a2a" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="-48" cy="18" r="13" fill="#ff9c86" opacity=".7"/><circle cx="48" cy="18" r="13" fill="#ff9c86" opacity=".7"/>
+      <path d="M-30 22 Q0 54 30 22" fill="#fff" stroke="#7a4a2a" stroke-width="6" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 400 Q 260 330 520 390 T 1000 370 V560 H0Z" fill="#8fd16a"/></g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 450 Q 300 410 600 450 T 1000 440 V560 H0Z" fill="#6fbd52"/></g>
+  <!-- three flowers: C, E, G -->
+  <g transform="translate(330 330)"><g class="sway"><g class="react" data-note="C">
+    <path d="M0 0 V170" stroke="#3f9b4f" stroke-width="8"/><ellipse cx="-22" cy="110" rx="24" ry="10" fill="#4fae5c" transform="rotate(-25 -22 110)"/>
+    <g fill="#ff7a6b"><circle cx="0" cy="-30" r="22"/><circle cx="28" cy="-10" r="22"/><circle cx="18" cy="24" r="22"/><circle cx="-18" cy="24" r="22"/><circle cx="-28" cy="-10" r="22"/></g>
+    <circle r="17" fill="#fff4c2"/></g></g></g>
+  <g transform="translate(500 350)"><g class="sway b"><g class="react" data-note="E">
+    <path d="M0 0 V160" stroke="#3f9b4f" stroke-width="8"/><ellipse cx="22" cy="100" rx="24" ry="10" fill="#4fae5c" transform="rotate(25 22 100)"/>
+    <g fill="#ffcf3f"><circle cx="0" cy="-30" r="22"/><circle cx="28" cy="-10" r="22"/><circle cx="18" cy="24" r="22"/><circle cx="-18" cy="24" r="22"/><circle cx="-28" cy="-10" r="22"/></g>
+    <circle r="17" fill="#ff9a3c"/></g></g></g>
+  <g transform="translate(670 330)"><g class="sway c"><g class="react" data-note="G">
+    <path d="M0 0 V170" stroke="#3f9b4f" stroke-width="8"/><ellipse cx="-22" cy="110" rx="24" ry="10" fill="#4fae5c" transform="rotate(-25 -22 110)"/>
+    <g fill="#2fc3ae"><circle cx="0" cy="-30" r="22"/><circle cx="28" cy="-10" r="22"/><circle cx="18" cy="24" r="22"/><circle cx="-18" cy="24" r="22"/><circle cx="-28" cy="-10" r="22"/></g>
+    <circle r="17" fill="#fff4c2"/></g></g></g>
+  <path d="M160 240 q12 -12 24 0 q12 -12 24 0 M780 270 q10 -10 20 0 q10 -10 20 0" fill="none" stroke="#4a5a8a" stroke-width="4" stroke-linecap="round"/>
+</svg>
+</template>
+
+<template id="art-moon">
+<svg viewBox="-300 0 1600 560" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="mo-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#151a45"/><stop offset="1" stop-color="#3b3f86"/></linearGradient>
+    <mask id="mo-crescent"><rect x="-120" y="-120" width="240" height="240" fill="#fff"/><circle cx="38" cy="-24" r="74" fill="#000"/></mask>
+    <filter id="mo-glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <rect x="-300" width="1600" height="560" fill="url(#mo-sky)"/>
+  <g fill="#fff8e0">
+    <circle class="twinkle" cx="80" cy="70" r="3"/><circle class="twinkle" cx="200" cy="160" r="2"/><circle class="twinkle" cx="330" cy="50" r="2.5"/>
+    <circle class="twinkle" cx="460" cy="120" r="2"/><circle class="twinkle" cx="590" cy="40" r="3"/><circle class="twinkle" cx="900" cy="60" r="2.5"/>
+    <circle class="twinkle" cx="960" cy="200" r="2"/><circle class="twinkle" cx="120" cy="260" r="2"/><circle class="twinkle" cx="420" cy="250" r="1.8"/>
+    <circle class="twinkle" cx="540" cy="190" r="2"/><circle class="twinkle" cx="40" cy="160" r="1.8"/><circle class="twinkle" cx="300" cy="300" r="1.6"/>
+  </g>
+  <!-- the sleepy moon in a nightcap -->
+  <g transform="translate(340 175)"><g class="bob">
+    <circle r="120" fill="#fff2b8" opacity=".12"/>
+    <g mask="url(#mo-crescent)"><circle r="92" fill="#fff2b8"/></g>
+    <path d="M-62 -6 q12 10 24 0" fill="none" stroke="#7a6a3a" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="-62" cy="18" r="10" fill="#ffb3a0" opacity=".6"/>
+    <path d="M-60 38 q12 8 24 0" fill="none" stroke="#7a6a3a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M-80 -54 Q -40 -120 30 -100 Q 0 -70 -10 -40Z" fill="#b388ff"/>
+    <circle cx="34" cy="-102" r="14" fill="#fff"/>
+  </g></g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 440 Q 200 380 420 430 T 1000 410 V560 H0Z" fill="#262b62"/></g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 490 Q 300 450 600 490 T 1000 480 V560 H0Z" fill="#1c2050"/></g>
+  <!-- tree branch and owl -->
+  <path d="M1300 230 Q 860 260 700 300 Q 690 304 700 306 Q 860 278 1300 262Z" fill="#5a3f5e"/>
+  <g transform="translate(-60 0)"><g class="react" data-note="C Eb G">
+    <ellipse cx="770" cy="236" rx="46" ry="58" fill="#9a77c9"/>
+    <ellipse cx="770" cy="252" rx="30" ry="38" fill="#e6d7f7"/>
+    <path d="M734 190 L742 166 L756 186Z M806 190 L798 166 L784 186Z" fill="#9a77c9"/>
+    <circle cx="752" cy="210" r="17" fill="#fff"/><circle cx="788" cy="210" r="17" fill="#fff"/>
+    <circle cx="754" cy="212" r="8" fill="#2a2440"/><circle cx="786" cy="212" r="8" fill="#2a2440"/>
+    <path d="M764 226 L776 226 L770 238Z" fill="#ffa552"/>
+    <path d="M752 294 v8 M762 294 v8 M778 294 v8 M788 294 v8" stroke="#ffa552" stroke-width="4" stroke-linecap="round"/>
+  </g></g>
+  <!-- three fireflies: C, E-flat, G -->
+  <g class="float"><g class="react" data-note="C" style="transform-origin:50% 50%"><circle cx="470" cy="330" r="22" fill="#ff7a6b" filter="url(#mo-glow)"/><circle cx="470" cy="330" r="9" fill="#ffd0c8"/></g></g>
+  <g class="float" style="animation-delay:-2.3s"><g class="react" data-note="Eb" style="transform-origin:50% 50%"><circle cx="560" cy="270" r="22" fill="#b388ff" filter="url(#mo-glow)"/><circle cx="560" cy="270" r="9" fill="#e8dcff"/></g></g>
+  <g class="float" style="animation-delay:-4.6s"><g class="react" data-note="G" style="transform-origin:50% 50%"><circle cx="650" cy="340" r="22" fill="#2fc3ae" filter="url(#mo-glow)"/><circle cx="650" cy="340" r="9" fill="#c8f5ee"/></g></g>
+</svg>
+</template>
+
+<template id="art-whale">
+<svg viewBox="-300 0 1600 560" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wh-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b3d8f"/><stop offset=".65" stop-color="#b783c4"/><stop offset="1" stop-color="#f6b5c8"/></linearGradient>
+  </defs>
+  <rect x="-300" width="1600" height="560" fill="url(#wh-sky)"/>
+  <g fill="#fff8e0">
+    <circle class="twinkle" cx="90" cy="60" r="2.5"/><circle class="twinkle" cx="240" cy="120" r="2"/><circle class="twinkle" cx="760" cy="50" r="2.5"/>
+    <circle class="twinkle" cx="900" cy="140" r="2"/><circle class="twinkle" cx="60" cy="200" r="1.8"/><circle class="twinkle" cx="950" cy="250" r="1.8"/>
+  </g>
+  <!-- the song bubbles: one for each black key -->
+  <g class="float"><g class="react" data-note="Cs" style="transform-origin:50% 50%"><circle cx="370" cy="110" r="26" fill="#ff8fc8"/><circle cx="362" cy="102" r="7" fill="#fff" opacity=".7"/></g></g>
+  <g class="float" style="animation-delay:-1.4s"><g class="react" data-note="Eb" style="transform-origin:50% 50%"><circle cx="450" cy="70" r="26" fill="#b388ff"/><circle cx="442" cy="62" r="7" fill="#fff" opacity=".7"/></g></g>
+  <g class="float" style="animation-delay:-2.8s"><g class="react" data-note="Fs" style="transform-origin:50% 50%"><circle cx="540" cy="56" r="26" fill="#4fd3f0"/><circle cx="532" cy="48" r="7" fill="#fff" opacity=".7"/></g></g>
+  <g class="float" style="animation-delay:-4.2s"><g class="react" data-note="Ab" style="transform-origin:50% 50%"><circle cx="630" cy="76" r="26" fill="#ffb84d"/><circle cx="622" cy="68" r="7" fill="#fff" opacity=".7"/></g></g>
+  <g class="float" style="animation-delay:-5.6s"><g class="react" data-note="Bb" style="transform-origin:50% 50%"><circle cx="705" cy="122" r="26" fill="#9be37f"/><circle cx="697" cy="114" r="7" fill="#fff" opacity=".7"/></g></g>
+  <path d="M520 214 Q 500 170 450 150 M520 214 Q 540 160 540 90 M520 214 Q 570 170 625 105" fill="none" stroke="#e8f6ff" stroke-width="6" stroke-linecap="round" opacity=".7"/>
+  <!-- the sky whale -->
+  <g class="bob"><g class="react" data-note="Cs Fs Bb">
+    <path d="M300 300 Q 300 210 470 205 Q 640 200 700 290 Q 760 300 800 250 Q 830 230 850 250 Q 820 300 840 350 Q 820 360 800 340 Q 760 320 720 340 Q 640 420 470 410 Q 300 400 300 300Z" fill="#5f9de6"/>
+    <path d="M320 330 Q 420 400 560 395 Q 650 390 700 345 Q 600 380 470 372 Q 380 366 320 330Z" fill="#cfe7ff"/>
+    <path d="M400 360 l-6 16 M440 368 l-4 18 M480 372 l-2 18 M520 372 l0 18 M560 370 l2 18 M600 364 l4 16" stroke="#9cc6f2" stroke-width="4" stroke-linecap="round"/>
+    <path d="M520 330 Q 560 330 570 370 Q 540 360 520 330Z" fill="#4b86d0"/>
+    <circle cx="380" cy="290" r="11" fill="#22305a"/><circle cx="384" cy="286" r="3.5" fill="#fff"/>
+    <circle cx="372" cy="318" r="12" fill="#ff9cc0" opacity=".6"/>
+    <path d="M320 320 Q 345 336 370 330" fill="none" stroke="#22305a" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="520" cy="212" rx="12" ry="5" fill="#3f78c0"/>
+  </g></g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 470 Q 60 450 120 470 T 240 470 T 360 470 T 480 470 T 600 470 T 720 470 T 840 470 T 960 470 T 1080 470 V560 H0Z" fill="#5b8fd6"/></g>
+  <g transform="translate(-300 0) scale(1.6 1)"><path d="M0 500 Q 80 484 160 500 T 320 500 T 480 500 T 640 500 T 800 500 T 960 500 T 1120 500 V560 H0Z" fill="#4673bd"/></g>
+</svg>
+</template>
+
+<script>
+(() => {
+  'use strict';
+
+  // ----- Notes -----
+  const NAMES = ['C', 'Cs', 'D', 'Eb', 'E', 'F', 'Fs', 'G', 'Ab', 'A', 'Bb', 'B'];
+  const LABEL = { C: 'C', Cs: 'C♯', D: 'D', Eb: 'E♭', E: 'E', F: 'F', Fs: 'F♯', G: 'G', Ab: 'A♭', A: 'A', Bb: 'B♭', B: 'B' };
+  const BLACK = new Set([1, 3, 6, 8, 10]);
+  // Yamaha Reface CP: 37 keys, C to C. The centre C is middle C (60).
+  const LOW = 48, HIGH = 84;
+  const name = (m) => NAMES[m % 12];
+  const midiFor = (n, octave = 4) => 12 * (octave + 1) + NAMES.indexOf(n);
+
+  // ----- Pages -----
+  // marks: keys with coloured dots. steps: what the little "ghost hands" press, in a loop.
+  const PAGES = [
+    { id: 'cover', art: 'art-cover' },
+    {
+      id: 'castle', art: 'art-castle',
+      title: 'The Castle Gate',
+      say: 'Press these two keys together.',
+      tip: 'Bonnng! That big open sound is called a <b>fifth</b>. Keep the same gap and walk it up and down the piano. Every castle has a gate!',
+      marks: [60, 67],
+      steps: [[[60], 650], [[67], 650], [[], 250], [[60, 67], 1500], [[], 500], [[60, 67], 1500]],
+    },
+    {
+      id: 'sun', art: 'art-sun',
+      title: 'The Sunshine Chord',
+      say: 'Play one, skip one, play one, skip one, play one.',
+      tip: 'Three keys together make the <b>C chord</b>, the happiest sound in Pianolandia. Can you find more sunshine starting on F or G?',
+      marks: [60, 64, 67],
+      steps: [[[60], 500], [[64], 500], [[67], 500], [[], 250], [[60, 64, 67], 1700]],
+    },
+    {
+      id: 'moon', art: 'art-moon',
+      title: 'The Moon Chord',
+      say: 'Now slide your middle finger down to the black key.',
+      tip: 'The sunshine chord turns into a sleepy <b>moon chord</b>. Go back and forth, slowly: sun, moon, sun, moon.',
+      marks: [60, 63, 67],
+      ghost: [64],
+      steps: [[[60, 64, 67], 1300], [[], 250], [[60, 63, 67], 1700], [[], 350], [[60], 450], [[63], 450], [[67], 450], [[], 250], [[60, 63, 67], 1500]],
+    },
+    {
+      id: 'whale', art: 'art-whale',
+      title: "The Sky Whale's Song",
+      say: 'Play only the black keys. Any of them, any way you like.',
+      tip: 'There are no wrong notes on the black keys! Make a song for the whale: high or low, fast or slow.',
+      marks: [49, 51, 54, 56, 58, 61, 63, 66, 68, 70, 73, 75, 78, 80, 82],
+      letters: false,
+      steps: [[[66], 380], [[68], 380], [[70], 760], [[68], 380], [[66], 380], [[63], 760], [[61], 380], [[63], 380], [[66], 760], [[], 300], [[70], 380], [[73], 380], [[75], 760], [[73], 380], [[70], 380], [[66], 1100]],
+    },
+  ];
+
+  const book = document.getElementById('book');
+  const dots = document.getElementById('dots');
+  const pages = [];
+
+  for (const [i, p] of PAGES.entries()) {
+    const el = document.createElement('section');
+    el.className = 'page' + (p.id === 'cover' ? ' cover' : '');
+    const art = document.createElement('div');
+    art.className = 'art';
+    art.appendChild(document.getElementById(p.art).content.cloneNode(true));
+    el.appendChild(art);
+    const page = { ...p, el, art, keys: new Map(), index: i };
+
+    if (p.id === 'cover') {
+      el.insertAdjacentHTML('beforeend',
+        '<div class="cover-title"><h1>Pianolandia</h1><p>a little book of piano magic</p></div>' +
+        '<div class="swipe-hint">swipe <span>👉</span></div>');
+    } else {
+      const words = document.createElement('div');
+      words.className = 'words';
+      words.innerHTML = `<h2>${p.title}</h2><p class="say">${p.say}</p><p class="tip">${p.tip}</p>`;
+      el.appendChild(words);
+      el.appendChild(buildKeyboard(page));
+      const listen = document.createElement('button');
+      listen.className = 'listen';
+      listen.setAttribute('aria-label', 'Listen');
+      listen.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="#3b2a4a"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="#3b2a4a" stroke-width="2" stroke-linecap="round"/></svg>';
+      listen.addEventListener('click', () => { unlockAudio(); demo(page, true); });
+      art.appendChild(listen);
+    }
+
+    // Tap a thing in the picture and it sings its note.
+    art.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-note]');
+      if (!t) {
+        if (p.id === 'cover') { unlockAudio(); sparkle(); }
+        return;
+      }
+      unlockAudio();
+      const ns = t.getAttribute('data-note').split(' ');
+      let m = ns.map((n) => midiFor(n));
+      if (p.id === 'whale' || p.id === 'cover') m = ns.map((n) => midiFor(n, 4));
+      m.forEach((mm, k) => setTimeout(() => userNote(page, mm, 600), k * 90));
+    });
+
+    book.appendChild(el);
+    pages.push(page);
+    const d = document.createElement('button');
+    d.setAttribute('aria-label', 'Page ' + (i + 1));
+    d.addEventListener('click', () => goTo(i));
+    dots.appendChild(d);
+  }
+
+  function buildKeyboard(page) {
+    const wrap = document.createElement('div');
+    wrap.className = 'kb-wrap';
+    const kb = document.createElement('div');
+    kb.className = 'kb';
+    const keys = document.createElement('div');
+    keys.className = 'keys';
+    kb.appendChild(keys);
+    wrap.appendChild(kb);
+
+    const whites = [];
+    for (let m = LOW; m <= HIGH; m++) if (!BLACK.has(m % 12)) whites.push(m);
+    const W = 100 / whites.length;
+    const marks = new Set(page.marks || []);
+    let wi = 0;
+    for (let m = LOW; m <= HIGH; m++) {
+      const k = document.createElement('div');
+      const black = BLACK.has(m % 12);
+      k.className = 'key ' + (black ? 'black' : 'white');
+      k.dataset.midi = m;
+      k.style.setProperty('--c', `var(--${name(m)})`);
+      if (black) {
+        const bw = W * 0.6;
+        k.style.left = `calc(${wi * W - bw / 2}% )`;
+        k.style.width = bw + '%';
+      } else {
+        k.style.left = `calc(${wi * W}% + 1px)`;
+        k.style.width = `calc(${W}% - 2px)`;
+        wi++;
+      }
+      if (marks.has(m)) {
+        const dot = document.createElement('div');
+        dot.className = 'mark';
+        if (page.letters !== false) dot.textContent = LABEL[name(m)];
+        k.appendChild(dot);
+      } else {
+        k.classList.add('played-only');
+      }
+      keys.appendChild(k);
+      page.keys.set(m, k);
+    }
+    page.kb = kb;
+    page.kbWrap = wrap;
+    attachPlaying(page, kb);
+    return wrap;
+  }
+
+  // ----- Touch playing: multi-touch chords and glissando -----
+  function keyAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el && el.closest ? el.closest('.key') : null;
+  }
+  function attachPlaying(page, kb) {
+    const held = new Map(); // pointerId -> { key, voice }
+    const start = (id, key) => {
+      if (!key) return;
+      const m = +key.dataset.midi;
+      const voice = playNote(m);
+      held.set(id, { key, voice });
+      press(page, m, true);
+      floaty(page, m);
+      reactArt(page, m);
+      userActive(page);
+    };
+    const stop = (id) => {
+      const h = held.get(id);
+      if (!h) return;
+      h.voice && h.voice.release();
+      press(page, +h.key.dataset.midi, false);
+      held.delete(id);
+    };
+    kb.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      unlockAudio();
+      try { kb.releasePointerCapture(e.pointerId); } catch (_) {}
+      start(e.pointerId, keyAt(e.clientX, e.clientY));
+    });
+    kb.addEventListener('pointermove', (e) => {
+      if (!held.has(e.pointerId)) return;
+      const k = keyAt(e.clientX, e.clientY);
+      if (k && k !== held.get(e.pointerId).key) { stop(e.pointerId); start(e.pointerId, k); }
+    });
+    for (const ev of ['pointerup', 'pointercancel']) kb.addEventListener(ev, (e) => stop(e.pointerId));
+    kb.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') stop(e.pointerId); });
+    kb.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  function press(page, m, on) {
+    const k = page.keys.get(m);
+    if (k) k.classList.toggle('down', on);
+  }
+
+  function floaty(page, m) {
+    const k = page.keys.get(m);
+    if (!k) return;
+    const r = k.getBoundingClientRect();
+    const host = page.kbWrap.getBoundingClientRect();
+    const f = document.createElement('div');
+    f.className = 'floaty';
+    f.textContent = Math.random() < 0.5 ? '♪' : '♫';
+    f.style.setProperty('--c', `var(--${name(m)})`);
+    f.style.setProperty('--dx', `${Math.round(Math.random() * 40 - 20)}px`);
+    f.style.left = (r.left - host.left + r.width / 2) + 'px';
+    f.style.top = (r.top - host.top - 20) + 'px';
+    page.kbWrap.appendChild(f);
+    f.addEventListener('animationend', () => f.remove());
+  }
+
+  function reactArt(page, m) {
+    const n = name(m);
+    page.art.querySelectorAll(`.react[data-note~="${n}"]`).forEach((el) => {
+      el.classList.remove('boing');
+      void el.getBoundingClientRect();
+      el.classList.add('boing');
+    });
+  }
+  document.addEventListener('animationend', (e) => { if (e.target.classList && e.target.classList.contains('boing')) e.target.classList.remove('boing'); });
+
+  function userNote(page, m, hold) {
+    const v = playNote(m);
+    press(page, m, true);
+    reactArt(page, m);
+    if (page.kbWrap) floaty(page, m);
+    userActive(page);
+    setTimeout(() => { press(page, m, false); v && v.release(); }, hold);
+  }
+
+  // ----- The ghost-hands loop: silent pictures of what to press -----
+  let current = 0;
+  let loopTimer = null, idleTimer = null, demoToken = 0;
+  let quietUntil = 0;
+
+  function clearPressed(page) { page.keys.forEach((k) => k.classList.remove('down')); }
+
+  function runLoop(page) {
+    stopLoop();
+    if (!page.steps) return;
+    let i = 0;
+    const tick = () => {
+      clearPressed(page);
+      if (Date.now() < quietUntil) { loopTimer = setTimeout(tick, 400); return; }
+      const [keys, dur] = page.steps[i];
+      keys.forEach((m) => press(page, m, true));
+      i = (i + 1) % page.steps.length;
+      const pause = i === 0 ? 1600 : 0;
+      loopTimer = setTimeout(() => { clearPressed(page); loopTimer = setTimeout(tick, 120 + pause); }, dur);
+    };
+    loopTimer = setTimeout(tick, 700);
+  }
+  function stopLoop() { clearTimeout(loopTimer); loopTimer = null; }
+
+  function userActive(page) {
+    // When she plays, the ghost hands step back and wait.
+    if (page.index !== current) return;
+    demoToken++;
+    quietUntil = Date.now() + 5000;
+    if (loopTimer) { stopLoop(); }
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (pages[current] === page) runLoop(page); }, 5000);
+  }
+
+  // Listen button: the same steps, once, with sound.
+  function demo(page) {
+    stopLoop();
+    clearTimeout(idleTimer);
+    clearPressed(page);
+    const token = ++demoToken;
+    quietUntil = 0;
+    let i = 0, t = 0;
+    const steps = page.steps;
+    const next = () => {
+      if (token !== demoToken || pages[current] !== page) return;
+      if (i >= steps.length) { idleTimer = setTimeout(() => runLoop(page), 2500); return; }
+      const [keys, dur] = steps[i++];
+      const voices = keys.map((m) => { press(page, m, true); reactArt(page, m); floaty(page, m); return playNote(m, 0.8); });
+      setTimeout(() => {
+        keys.forEach((m) => press(page, m, false));
+        voices.forEach((v) => v && v.release());
+        setTimeout(next, 120);
+      }, dur);
+    };
+    next();
+  }
+
+  // ----- Paging -----
+  const prev = document.getElementById('prev');
+  const next = document.getElementById('next');
+  function goTo(i) {
+    i = Math.max(0, Math.min(pages.length - 1, i));
+    book.scrollTo({ left: i * book.clientWidth, behavior: 'smooth' });
+  }
+  prev.addEventListener('click', () => goTo(current - 1));
+  next.addEventListener('click', () => goTo(current + 1));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') goTo(current + 1);
+    if (e.key === 'ArrowLeft') goTo(current - 1);
+  });
+
+  function setCurrent(i) {
+    if (i === current && loopTimer) return;
+    const old = pages[current];
+    if (old) { clearPressed(old); }
+    stopLoop();
+    clearTimeout(idleTimer);
+    demoToken++;
+    quietUntil = 0;
+    current = i;
+    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+    prev.classList.toggle('hide', i === 0);
+    next.classList.toggle('hide', i === pages.length - 1);
+    try { history.replaceState(null, '', '#' + pages[i].id); } catch (_) {}
+    runLoop(pages[i]);
+  }
+  let scrollRaf = 0;
+  book.addEventListener('scroll', () => {
+    cancelAnimationFrame(scrollRaf);
+    scrollRaf = requestAnimationFrame(() => {
+      const i = Math.round(book.scrollLeft / book.clientWidth);
+      if (i !== current) setCurrent(i);
+    });
+  }, { passive: true });
+  window.addEventListener('resize', () => { book.scrollLeft = current * book.clientWidth; });
+
+  const startAt = Math.max(0, pages.findIndex((p) => '#' + p.id === location.hash));
+  requestAnimationFrame(() => {
+    book.scrollLeft = startAt * book.clientWidth;
+    current = -1;
+    setCurrent(startAt);
+  });
+
+  // ----- Sound: a warm, soft electric-piano voice made in code -----
+  let ctx = null, master = null;
+  function unlockAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ctx = new AC();
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.ratio.value = 4;
+      master = ctx.createGain();
+      master.gain.value = 0.7;
+      // A small, soft room.
+      const verb = ctx.createConvolver();
+      const len = Math.floor(ctx.sampleRate * 1.6);
+      const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let c = 0; c < 2; c++) {
+        const d = ir.getChannelData(c);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      }
+      verb.buffer = ir;
+      const wet = ctx.createGain(); wet.gain.value = 0.22;
+      master.connect(comp);
+      master.connect(verb); verb.connect(wet); wet.connect(comp);
+      comp.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    wakeLock();
+  }
+
+  function playNote(m, vel = 0.85) {
+    if (!ctx) return null;
+    const t = ctx.currentTime + 0.005;
+    const f = 440 * Math.pow(2, (m - 69) / 12);
+    const out = ctx.createGain();
+    const peak = 0.22 * vel;
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(peak, t + 0.006);
+    out.gain.exponentialRampToValueAtTime(peak * 0.35, t + 0.5);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + 4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.min(9000, f * 10), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.min(4000, f * 3), t + 0.8);
+    lp.connect(out); out.connect(master);
+    const partials = [[1, 1], [2, 0.42], [3, 0.16], [4, 0.08], [7, 0.025]];
+    const oscs = partials.map(([h, a], j) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * h;
+      o.detune.value = j === 0 ? 0 : (Math.random() * 6 - 3);
+      const g = ctx.createGain();
+      g.gain.value = a;
+      if (h >= 3) { g.gain.setValueAtTime(a, t); g.gain.exponentialRampToValueAtTime(a * 0.05, t + 0.6); }
+      o.connect(g); g.connect(lp);
+      o.start(t); o.stop(t + 4.2);
+      return o;
+    });
+    let released = false;
+    return {
+      release() {
+        if (released) return;
+        released = true;
+        const now = ctx.currentTime;
+        out.gain.cancelScheduledValues(now);
+        out.gain.setValueAtTime(Math.max(out.gain.value, 0.0001), now);
+        out.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+        oscs.forEach((o) => { try { o.stop(now + 0.7); } catch (_) {} });
+      },
+    };
+  }
+
+  function sparkle() {
+    const cover = pages[0];
+    [60, 62, 64, 67, 69, 72, 74, 76, 79].forEach((m, i) => setTimeout(() => {
+      const v = playNote(m, 0.55);
+      setTimeout(() => v && v.release(), 700);
+    }, i * 90));
+    cover.art.querySelectorAll('.react').forEach((el) => el.classList.add('boing'));
+  }
+
+  // Keep the screen awake while the book is open on the music stand.
+  let lock = null;
+  async function wakeLock() {
+    try { if ('wakeLock' in navigator && !lock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } } catch (_) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ctx) wakeLock(); });
+})();
+</script>
+</body>
+</html>
